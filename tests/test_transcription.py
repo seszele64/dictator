@@ -113,3 +113,76 @@ class TestWhisperTranscriber:
 
             with pytest.raises(IOError, match="Cannot read file"):
                 transcriber.transcribe_audio(audio_file)
+
+
+class TestOpenAICompatibleProvider:
+    """Test silence detection integration in OpenAICompatibleProvider."""
+
+    def test_transcribe_audio_silent_skips_api(self, temp_audio_file):
+        """Test that silent audio skips API call entirely."""
+        from whisper_dictate.providers.openai_compatible import OpenAICompatibleProvider
+        
+        with patch("whisper_dictate.audio_analysis.is_audio_silent") as mock_silent:
+            mock_silent.return_value = True  # Audio is silent
+            
+            provider = OpenAICompatibleProvider(
+                api_key="test-key",
+                silence_threshold_dbfs=-50.0,
+            )
+            
+            result = provider.transcribe_audio(temp_audio_file)
+            
+            # Should NOT have called API
+            assert result.text == ""
+            assert result.silence_detected is True
+            assert result.provider == "openai"
+
+    def test_transcribe_audio_not_silent_calls_api(self, temp_audio_file, mock_openai_client):
+        """Test that non-silent audio proceeds with API call."""
+        from whisper_dictate.providers.openai_compatible import OpenAICompatibleProvider
+        
+        with patch("whisper_dictate.audio_analysis.is_audio_silent") as mock_silent:
+            mock_silent.return_value = False  # Audio is not silent
+            
+            provider = OpenAICompatibleProvider(
+                api_key="test-key",
+                silence_threshold_dbfs=-50.0,
+            )
+            
+            # Inject mock client (provider creates its own in __init__,
+            # so we replace it after construction)
+            provider._client = mock_openai_client
+            
+            # Mock the API call
+            mock_response = Mock()
+            mock_response.text = "Hello world"
+            mock_response.language = "en"
+            mock_openai_client.audio.transcriptions.create.return_value = mock_response
+            
+            result = provider.transcribe_audio(temp_audio_file)
+            
+            # Should have called API
+            assert result.text == "Hello world"
+            assert result.silence_detected is False
+
+    def test_silence_detection_disabled_when_none(self, temp_audio_file):
+        """Test that silence detection is disabled when threshold is None."""
+        from whisper_dictate.providers.openai_compatible import OpenAICompatibleProvider
+        
+        provider = OpenAICompatibleProvider(
+            api_key="test-key",
+            silence_threshold_dbfs=None,
+        )
+        
+        # Mock the API call to succeed
+        with patch.object(provider._client.audio.transcriptions, "create") as mock_create:
+            mock_response = Mock()
+            mock_response.text = "Hello world"
+            mock_response.language = "en"
+            mock_create.return_value = mock_response
+            
+            result = provider.transcribe_audio(temp_audio_file)
+            
+            # Should have called API (silence detection disabled)
+            mock_create.assert_called_once()
+            assert result.text == "Hello world"

@@ -48,11 +48,14 @@ class TranscriptionResult:
     language: Optional[str] = None
     duration: Optional[float] = None
     provider: Optional[str] = None
+    silence_detected: bool = False
 
     def __str__(self) -> str:
         return self.text
 
     def __repr__(self) -> str:
+        if self.silence_detected:
+            return f"TranscriptionResult(text='', silence_detected=True, provider={self.provider})"
         return (
             f"TranscriptionResult(text='{self.text[:50]}...', language={self.language})"
         )
@@ -218,4 +221,6 @@ def create_transcriber(config: "WhisperConfig") -> TranscriptionProvider:
         language=config.language,
         temperature=config.temperature,
         provider_name=config.provider,
+        silence_threshold_dbfs=config.silence_threshold_dbfs,
+        task=config.task,
     )

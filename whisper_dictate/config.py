@@ -198,6 +198,17 @@ class WhisperConfig(BaseModel):
         description="Sampling temperature (0.0 = deterministic, higher = more creative). "
         "For transcription, 0.0 is recommended.",
     )
+    silence_threshold_dbfs: Optional[float] = Field(
+        default=-50.0,
+        description="Pre-transcription silence detection threshold in dBFS. "
+        "Audio below this RMS energy level is considered silent and skipped "
+        "to prevent Whisper hallucinations. Set to None to disable silence detection.",
+    )
+    task: Optional[str] = Field(
+        default=None,
+        description="Whisper task to perform. None uses provider default ('transcribe'). "
+        "Allowed values: 'transcribe', 'translate'. Only affects providers that support this parameter (e.g., DeepInfra).",
+    )
 
 
 # Backward compatibility: OpenAIConfig is now an alias for WhisperConfig
@@ -215,10 +226,14 @@ def _load_whisper_config_from_env() -> WhisperConfig:
     - WHISPER_TIMEOUT: Request timeout in seconds. Default: 30.0
     - WHISPER_LANGUAGE: Language hint (ISO 639-1). Default: None (auto-detect)
     - WHISPER_TEMPERATURE: Sampling temperature. Default: 0.0
+    - WHISPER_TASK: Whisper task ('transcribe' or 'translate'). Default: None (provider default)
 
     Returns:
         WhisperConfig: Configuration loaded from environment variables.
     """
+    silence_threshold_env = os.getenv("WHISPER_SILENCE_THRESHOLD_DBFS")
+    silence_threshold = float(silence_threshold_env) if silence_threshold_env else -50.0
+    
     return WhisperConfig(
         provider=os.getenv("WHISPER_PROVIDER", "openai"),
         api_key=os.getenv("WHISPER_API_KEY", ""),
@@ -227,6 +242,8 @@ def _load_whisper_config_from_env() -> WhisperConfig:
         timeout=float(os.getenv("WHISPER_TIMEOUT", "30.0")),
         language=os.getenv("WHISPER_LANGUAGE") or None,
         temperature=float(os.getenv("WHISPER_TEMPERATURE", "0.0")),
+        silence_threshold_dbfs=silence_threshold,
+        task=os.getenv("WHISPER_TASK") or None,
     )
 
 

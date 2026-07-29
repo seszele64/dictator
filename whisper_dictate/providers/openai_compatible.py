@@ -56,6 +56,8 @@ class OpenAICompatibleProvider(TranscriptionProvider):
         language: Optional[str] = None,
         temperature: float = 0.0,
         provider_name: str = "openai",
+        silence_threshold_dbfs: Optional[float] = -50.0,
+        task: Optional[str] = None,
     ) -> None:
         """Initialize OpenAI-compatible transcription provider.
 
@@ -68,11 +70,17 @@ class OpenAICompatibleProvider(TranscriptionProvider):
                      None means auto-detect.
             temperature: Sampling temperature (0.0 = deterministic)
             provider_name: Human-readable provider name for logging
+            silence_threshold_dbfs: Pre-transcription silence detection threshold.
+                                   None disables silence detection.
+            task: Whisper task to perform (e.g., "transcribe", "translate").
+                  None uses provider default.
         """
         self._provider_name = provider_name
         self._model = model
         self._language = language
         self._temperature = temperature
+        self._silence_threshold_dbfs = silence_threshold_dbfs
+        self._task = task
 
         self._client = OpenAI(
             api_key=api_key,
@@ -112,6 +120,21 @@ class OpenAICompatibleProvider(TranscriptionProvider):
         if not audio_file.exists():
             raise IOError(f"Audio file not found: {audio_file}")
 
+        # Pre-transcription silence detection
+        if self._silence_threshold_dbfs is not None:
+            from whisper_dictate.audio_analysis import is_audio_silent
+            if is_audio_silent(audio_file, self._silence_threshold_dbfs):
+                logger.info(
+                    f"Silence detected in {audio_file.name} "
+                    f"(threshold={self._silence_threshold_dbfs} dBFS). "
+                    f"Skipping transcription to prevent hallucination."
+                )
+                return TranscriptionResult(
+                    text="",
+                    silence_detected=True,
+                    provider=self._provider_name,
+                )
+
         logger.info(
             f"Transcribing with {self._provider_name}: {audio_file} "
             f"(model={self._model})"
@@ -119,12 +142,18 @@ class OpenAICompatibleProvider(TranscriptionProvider):
 
         try:
             with open(audio_file, "rb") as file:
+                # Build extra parameters for providers like DeepInfra
+                extra_params = {}
+                if self._task:
+                    extra_params["task"] = self._task
+
                 response = self._client.audio.transcriptions.create(
                     model=self._model,
                     file=file,
                     response_format="json",
                     language=self._language,
                     temperature=self._temperature,
+                    extra_body=extra_params if extra_params else None,
                 )
 
             result = TranscriptionResult(

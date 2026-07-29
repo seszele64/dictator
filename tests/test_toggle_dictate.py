@@ -50,6 +50,7 @@ class TestTranscribeAudio:
         mock_transcription_result = MagicMock()
         mock_transcription_result.text = "This is a test transcription."
         mock_transcription_result.language = "en"
+        mock_transcription_result.silence_detected = False
 
         # Create mock Path object for AUDIO_FILE
         mock_audio_file = MagicMock(spec=Path)
@@ -108,3 +109,120 @@ class TestTranscribeAudio:
 
             # Verify soundfile.info was called
             mock_sf_info.assert_called_once()
+
+
+class TestTranscribeAudioSilenceDetection:
+    """Test silence detection behavior in toggle_dictate transcribe_audio."""
+
+    def test_transcribe_silent_skips_clipboard(self):
+        """Test that silent audio skips clipboard copy."""
+        mock_config = MagicMock()
+        mock_config.openai.model = "whisper-1"
+        
+        mock_db = MagicMock()
+        mock_db.path = Path("/tmp/test.db")
+        mock_db.initialize = Mock()
+        mock_db.get_state = Mock(return_value=42)
+        mock_db.create_recording = Mock(return_value=42)
+        mock_db.create_transcript = Mock(return_value=1)
+        mock_db.execute = Mock()
+        mock_db.create_log = Mock(return_value=1)
+        mock_db.connection = Mock()
+        mock_db.close = Mock()
+        mock_db.set_state = Mock()
+        mock_db.delete_state = Mock()
+        
+        mock_audio_storage = MagicMock()
+        mock_audio_storage.save_audio.return_value = (Path("/saved/test.wav"), "test.wav")
+        mock_audio_storage.recordings_path = Path("/recordings")
+        
+        mock_audio_info = Mock()
+        mock_audio_info.duration = 5.0
+        
+        # Create silent result
+        mock_silent_result = MagicMock()
+        mock_silent_result.text = ""
+        mock_silent_result.language = None
+        mock_silent_result.silence_detected = True
+        
+        mock_audio_file = MagicMock(spec=Path)
+        mock_audio_file.exists.return_value = True
+        mock_audio_file.unlink.return_value = None
+        
+        with (
+            patch.object(toggle_dictate, "get_db_and_storage") as mock_get_db_storage,
+            patch("toggle_dictate.sf.info", return_value=mock_audio_info),
+            patch("toggle_dictate.create_transcriber") as mock_create_transcriber,
+            patch("toggle_dictate.AUDIO_FILE", mock_audio_file),
+            patch("toggle_dictate.ClipboardManager") as mock_clipboard_class,
+        ):
+            mock_get_db_storage.return_value = (mock_db, mock_audio_storage)
+            mock_transcriber_instance = MagicMock()
+            mock_create_transcriber.return_value = mock_transcriber_instance
+            mock_transcriber_instance.transcribe_audio.return_value = mock_silent_result
+            mock_clipboard_instance = MagicMock()
+            mock_clipboard_class.return_value = mock_clipboard_instance
+            
+            result = toggle_dictate.transcribe_audio(mock_config, recording_id=42)
+            
+            # Should NOT copy to clipboard
+            mock_clipboard_instance.copy_to_clipboard.assert_not_called()
+            
+            # Should store empty transcript
+            mock_db.create_transcript.assert_called()
+            call_kwargs = mock_db.create_transcript.call_args.kwargs
+            assert call_kwargs["text"] == ""
+
+    def test_transcribe_non_silent_proceeds_normally(self):
+        """Test that non-silent audio proceeds with normal workflow."""
+        mock_config = MagicMock()
+        mock_config.openai.model = "whisper-1"
+        
+        mock_db = MagicMock()
+        mock_db.path = Path("/tmp/test.db")
+        mock_db.initialize = Mock()
+        mock_db.get_state = Mock(return_value=42)
+        mock_db.create_recording = Mock(return_value=42)
+        mock_db.create_transcript = Mock(return_value=1)
+        mock_db.execute = Mock()
+        mock_db.create_log = Mock(return_value=1)
+        mock_db.connection = Mock()
+        mock_db.close = Mock()
+        mock_db.set_state = Mock()
+        mock_db.delete_state = Mock()
+        
+        mock_audio_storage = MagicMock()
+        mock_audio_storage.save_audio.return_value = (Path("/saved/test.wav"), "test.wav")
+        mock_audio_storage.recordings_path = Path("/recordings")
+        
+        mock_audio_info = Mock()
+        mock_audio_info.duration = 5.0
+        
+        # Create normal result
+        mock_normal_result = MagicMock()
+        mock_normal_result.text = "Hello world"
+        mock_normal_result.language = "en"
+        mock_normal_result.silence_detected = False
+        
+        mock_audio_file = MagicMock(spec=Path)
+        mock_audio_file.exists.return_value = True
+        mock_audio_file.unlink.return_value = None
+        
+        with (
+            patch.object(toggle_dictate, "get_db_and_storage") as mock_get_db_storage,
+            patch("toggle_dictate.sf.info", return_value=mock_audio_info),
+            patch("toggle_dictate.create_transcriber") as mock_create_transcriber,
+            patch("toggle_dictate.AUDIO_FILE", mock_audio_file),
+            patch("toggle_dictate.ClipboardManager") as mock_clipboard_class,
+        ):
+            mock_get_db_storage.return_value = (mock_db, mock_audio_storage)
+            mock_transcriber_instance = MagicMock()
+            mock_create_transcriber.return_value = mock_transcriber_instance
+            mock_transcriber_instance.transcribe_audio.return_value = mock_normal_result
+            mock_clipboard_instance = MagicMock()
+            mock_clipboard_class.return_value = mock_clipboard_instance
+            
+            result = toggle_dictate.transcribe_audio(mock_config, recording_id=42)
+            
+            # Should copy to clipboard
+            mock_clipboard_instance.copy_to_clipboard.assert_called_once_with("Hello world")

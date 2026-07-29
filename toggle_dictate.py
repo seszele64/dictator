@@ -310,6 +310,28 @@ def transcribe_audio(config, recording_id=None):
 
         result = transcriber.transcribe_audio(audio_to_transcribe)
 
+        # Handle silence detection
+        if result.silence_detected:
+            logging.info("Silence detected - skipping clipboard copy and transcript storage")
+            
+            # Create empty transcript entry
+            if recording_id:
+                try:
+                    db.create_transcript(
+                        recording_id=recording_id,
+                        text="",
+                        language=result.language,
+                        model_used=config.openai.model,
+                        confidence=None,
+                    )
+                except Exception as e:
+                    logging.warning(f"Failed to create empty transcript entry: {e}")
+            
+            # Notify user
+            notify_recording_stopped("Silence detected - no speech")
+            
+            return ""  # Return empty string instead of None
+
         # Create transcript entry
         if recording_id:
             try:
@@ -324,9 +346,10 @@ def transcribe_audio(config, recording_id=None):
             except Exception as e:
                 logging.warning(f"Failed to create transcript entry: {e}")
 
-        # Copy to clipboard
-        clipboard = ClipboardManager()
-        clipboard.copy_to_clipboard(result.text)
+        # Copy to clipboard (only if not silence-detected)
+        if not result.silence_detected:
+            clipboard = ClipboardManager()
+            clipboard.copy_to_clipboard(result.text)
 
         logging.info(f"Transcription completed: {result.text}")
         notify_recording_stopped(result.text)

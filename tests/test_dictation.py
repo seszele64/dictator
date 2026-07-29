@@ -632,3 +632,137 @@ class TestDictationServiceMP3Integration:
                     assert call_kwargs["duration"] == 1.0
                     assert call_kwargs["sample_rate"] == 16000
                     assert call_kwargs["channels"] == 1
+
+
+class TestDictationServiceSilenceDetection:
+    """Test silence detection behavior in DictationService."""
+
+    def test_dictate_silent_skips_clipboard(self, mock_config, mock_silent_transcription_result):
+        """Test that silent audio skips clipboard copy."""
+        with DictationService(mock_config) as service:
+            with (
+                patch.object(service.audio_recorder, "record_to_file") as mock_record,
+                patch.object(service.transcriber, "transcribe_audio") as mock_transcribe,
+                patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
+            ):
+                mock_record.return_value = Path("/tmp/test.wav")
+                mock_transcribe.return_value = mock_silent_transcription_result
+                
+                result = service.dictate()
+                
+                # Should NOT copy to clipboard
+                mock_copy.assert_not_called()
+                assert result.silence_detected is True
+
+    def test_dictate_silent_stores_empty_transcript(self, mock_config, mock_silent_transcription_result):
+        """Test that silent audio stores empty transcript in database."""
+        mock_db = MagicMock()
+        mock_db.path = Path("/tmp/test.db")
+        mock_db.initialize = Mock()
+        mock_db.create_recording = Mock(return_value=1)
+        mock_db.create_transcript = Mock(return_value=1)
+        mock_db.execute = Mock()
+        mock_db.create_log = Mock(return_value=1)
+        mock_db.connection = Mock()
+        mock_db.close = Mock()
+        
+        mock_audio_storage = MagicMock()
+        mock_audio_storage.save_audio.return_value = (Path("/saved/test.wav"), "test.wav")
+        mock_audio_storage.recordings_path = Path("/recordings")
+        mock_audio_storage.check_disk_space.return_value = (True, 500)
+        
+        with (
+            patch("whisper_dictate.dictation.get_database", return_value=mock_db),
+            patch("whisper_dictate.dictation.get_audio_storage", return_value=mock_audio_storage),
+        ):
+            with DictationService(mock_config) as service:
+                with (
+                    patch.object(service.audio_recorder, "record_to_file") as mock_record,
+                    patch.object(service.transcriber, "transcribe_audio") as mock_transcribe,
+                    patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
+                ):
+                    mock_record.return_value = Path("/tmp/test.wav")
+                    mock_transcribe.return_value = mock_silent_transcription_result
+                    
+                    result = service.dictate()
+                    
+                    # Should store empty transcript
+                    mock_db.create_transcript.assert_called_once()
+                    call_kwargs = mock_db.create_transcript.call_args.kwargs
+                    assert call_kwargs["text"] == ""
+                    
+                    # Should NOT copy to clipboard
+                    mock_copy.assert_not_called()
+
+    def test_dictate_silent_logs_silence_detection(self, mock_config, mock_silent_transcription_result):
+        """Test that silence detection is logged to database."""
+        mock_db = MagicMock()
+        mock_db.path = Path("/tmp/test.db")
+        mock_db.initialize = Mock()
+        mock_db.create_recording = Mock(return_value=1)
+        mock_db.create_transcript = Mock(return_value=1)
+        mock_db.execute = Mock()
+        mock_db.create_log = Mock(return_value=1)
+        mock_db.connection = Mock()
+        mock_db.close = Mock()
+        
+        mock_audio_storage = MagicMock()
+        mock_audio_storage.save_audio.return_value = (Path("/saved/test.wav"), "test.wav")
+        mock_audio_storage.recordings_path = Path("/recordings")
+        mock_audio_storage.check_disk_space.return_value = (True, 500)
+        
+        with (
+            patch("whisper_dictate.dictation.get_database", return_value=mock_db),
+            patch("whisper_dictate.dictation.get_audio_storage", return_value=mock_audio_storage),
+        ):
+            with DictationService(mock_config) as service:
+                with (
+                    patch.object(service.audio_recorder, "record_to_file") as mock_record,
+                    patch.object(service.transcriber, "transcribe_audio") as mock_transcribe,
+                ):
+                    mock_record.return_value = Path("/tmp/test.wav")
+                    mock_transcribe.return_value = mock_silent_transcription_result
+                    
+                    result = service.dictate()
+                    
+                    # Should log silence detection
+                    mock_db.create_log.assert_called()
+                    log_call = mock_db.create_log.call_args
+                    assert "Silence detected" in log_call.kwargs["message"]
+
+    def test_dictate_non_silent_proceeds_normally(self, mock_config, mock_transcription_result):
+        """Test that non-silent audio proceeds with normal workflow."""
+        mock_db = MagicMock()
+        mock_db.path = Path("/tmp/test.db")
+        mock_db.initialize = Mock()
+        mock_db.create_recording = Mock(return_value=1)
+        mock_db.create_transcript = Mock(return_value=1)
+        mock_db.execute = Mock()
+        mock_db.create_log = Mock(return_value=1)
+        mock_db.connection = Mock()
+        mock_db.close = Mock()
+        
+        mock_audio_storage = MagicMock()
+        mock_audio_storage.save_audio.return_value = (Path("/saved/test.wav"), "test.wav")
+        mock_audio_storage.recordings_path = Path("/recordings")
+        mock_audio_storage.check_disk_space.return_value = (True, 500)
+        
+        with (
+            patch("whisper_dictate.dictation.get_database", return_value=mock_db),
+            patch("whisper_dictate.dictation.get_audio_storage", return_value=mock_audio_storage),
+        ):
+            with DictationService(mock_config) as service:
+                with (
+                    patch.object(service.audio_recorder, "record_to_file") as mock_record,
+                    patch.object(service.transcriber, "transcribe_audio") as mock_transcribe,
+                    patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
+                ):
+                    mock_record.return_value = Path("/tmp/test.wav")
+                    mock_transcribe.return_value = mock_transcription_result
+                    mock_copy.return_value = True
+                    
+                    result = service.dictate()
+                    
+                    # Should copy to clipboard
+                    mock_copy.assert_called_once_with("This is a test transcription.")
+                    assert result.silence_detected is False

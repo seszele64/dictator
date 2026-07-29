@@ -165,6 +165,39 @@ class DictationService:
             # Transcribe audio (may be WAV or MP3)
             result = self.transcriber.transcribe_audio(audio_file)
 
+            # Handle silence detection - skip clipboard, DB transcript, and log
+            if result.silence_detected:
+                logger.info("Silence detected - skipping clipboard copy and transcript storage")
+                
+                # Still store recording but with empty transcript
+                if recording_id is not None:
+                    try:
+                        self.database.create_transcript(
+                            recording_id=recording_id,
+                            text="",
+                            language=result.language,
+                            model_used=self.config.openai.model,
+                            confidence=None,
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to create empty transcript entry: {e}")
+                
+                # Log silence detection
+                try:
+                    self.database.create_log(
+                        level="INFO",
+                        message="Silence detected, transcription skipped",
+                        source="dictation",
+                        metadata={
+                            "recording_id": recording_id,
+                            "duration": actual_duration,
+                        },
+                    )
+                except Exception as e:
+                    logger.debug(f"Failed to log silence detection: {e}")
+                
+                return result  # Return early, skip clipboard copy
+
             # Save audio to persistent storage and update recording
             try:
                 # Move audio to persistent storage
@@ -214,8 +247,8 @@ class DictationService:
             except Exception as e:
                 logger.debug(f"Failed to log transcription event: {e}")
 
-            # Copy to clipboard if enabled
-            if self.config.copy_to_clipboard:
+            # Copy to clipboard if enabled (only if not silence-detected)
+            if self.config.copy_to_clipboard and not result.silence_detected:
                 success = self.clipboard.copy_to_clipboard(result.text)
                 if success:
                     logger.info("Transcription copied to clipboard")

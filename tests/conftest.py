@@ -49,11 +49,11 @@ def mock_cli_setup():
         yield
 
 
-# Session-scoped fixture to patch sounddevice/soundfile before any imports
+# Session-scoped fixture to patch sounddevice/soundfile/pydub before any imports
 # This must run BEFORE any other fixtures to prevent the real modules from loading
 @pytest.fixture(scope="session", autouse=True)
 def patch_audio_modules():
-    """Patch sounddevice and soundfile modules in sys.modules before any imports.
+    """Patch sounddevice, soundfile, and pydub modules in sys.modules before any imports.
 
     This prevents the real audio libraries from being loaded at module import time,
     which can cause hangs when no audio device is available.
@@ -61,6 +61,9 @@ def patch_audio_modules():
     # Create mock modules
     mock_sd = Mock()
     mock_sf = Mock()
+    mock_pydub = Mock()
+    mock_audio_segment = Mock()
+    mock_pydub.AudioSegment = mock_audio_segment
 
     # Configure mock sounddevice
     mock_sd.rec = Mock()
@@ -80,10 +83,12 @@ def patch_audio_modules():
     # Store original modules if they exist
     original_sd = sys.modules.get("sounddevice")
     original_sf = sys.modules.get("soundfile")
+    original_pydub = sys.modules.get("pydub")
 
     # Patch sys.modules
     sys.modules["sounddevice"] = mock_sd
     sys.modules["soundfile"] = mock_sf
+    sys.modules["pydub"] = mock_pydub
 
     yield
 
@@ -97,6 +102,11 @@ def patch_audio_modules():
         sys.modules["soundfile"] = original_sf
     else:
         sys.modules.pop("soundfile", None)
+
+    if original_pydub is not None:
+        sys.modules["pydub"] = original_pydub
+    else:
+        sys.modules.pop("pydub", None)
 
 
 # Ensure sounddevice cleanup on exit
@@ -168,7 +178,13 @@ def mock_config() -> AppConfig:
             mp3_bitrate="128k",
             keep_wav=False,
         ),
-        openai=OpenAIConfig(api_key="test-api-key", model="whisper-1", timeout=10.0),
+        openai=OpenAIConfig(
+            api_key="test-api-key",
+            model="whisper-1",
+            timeout=10.0,
+            silence_threshold_dbfs=-50.0,
+            task=None,
+        ),
         log_level="DEBUG",
         copy_to_clipboard=True,
     )
@@ -187,7 +203,13 @@ def mock_config_mp3_enabled() -> AppConfig:
             mp3_bitrate="128k",
             keep_wav=False,
         ),
-        openai=OpenAIConfig(api_key="test-api-key", model="whisper-1", timeout=10.0),
+        openai=OpenAIConfig(
+            api_key="test-api-key",
+            model="whisper-1",
+            timeout=10.0,
+            silence_threshold_dbfs=-50.0,
+            task=None,
+        ),
         log_level="DEBUG",
         copy_to_clipboard=True,
     )
@@ -206,7 +228,13 @@ def mock_config_mp3_keep_wav() -> AppConfig:
             mp3_bitrate="128k",
             keep_wav=True,
         ),
-        openai=OpenAIConfig(api_key="test-api-key", model="whisper-1", timeout=10.0),
+        openai=OpenAIConfig(
+            api_key="test-api-key",
+            model="whisper-1",
+            timeout=10.0,
+            silence_threshold_dbfs=-50.0,
+            task=None,
+        ),
         log_level="DEBUG",
         copy_to_clipboard=True,
     )
@@ -216,6 +244,12 @@ def mock_config_mp3_keep_wav() -> AppConfig:
 def mock_transcription_result() -> TranscriptionResult:
     """Create a mock transcription result for testing."""
     return TranscriptionResult(text="This is a test transcription.", language="en")
+
+
+@pytest.fixture
+def mock_silent_transcription_result() -> TranscriptionResult:
+    """Create a mock silent transcription result for testing."""
+    return TranscriptionResult(text="", silence_detected=True)
 
 
 @pytest.fixture
