@@ -18,7 +18,6 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-import openai
 from openai import OpenAI
 
 from whisper_dictate.transcription import (
@@ -142,19 +141,46 @@ class OpenAICompatibleProvider(TranscriptionProvider):
 
         try:
             with open(audio_file, "rb") as file:
-                # Build extra parameters for providers like DeepInfra
-                extra_params = {}
-                if self._task:
-                    extra_params["task"] = self._task
-
-                response = self._client.audio.transcriptions.create(
-                    model=self._model,
-                    file=file,
-                    response_format="json",
-                    language=self._language,
-                    temperature=self._temperature,
-                    extra_body=extra_params if extra_params else None,
-                )
+                if self._task == "translate":
+                    logger.debug(f"Using translation API for task: {self._task}")
+                    if self._language:
+                        logger.debug(
+                            f"Language explicitly set to '{self._language}' "
+                            f"(language auto-detection disabled)"
+                        )
+                    else:
+                        logger.debug(
+                            "No language specified — Whisper will auto-detect. "
+                            "Set WHISPER_LANGUAGE in .env for better accuracy "
+                            "with accented or short audio."
+                        )
+                    response = self._client.audio.translations.create(
+                        model=self._model,
+                        file=file,
+                        response_format="json",
+                        language=self._language,
+                        temperature=self._temperature,
+                    )
+                else:
+                    # Transcribe (default)
+                    if self._language:
+                        logger.debug(
+                            f"Language explicitly set to '{self._language}' "
+                            f"(language auto-detection disabled)"
+                        )
+                    else:
+                        logger.debug(
+                            "No language specified — Whisper will auto-detect. "
+                            "Set WHISPER_LANGUAGE in .env for better accuracy "
+                            "with accented or short audio."
+                        )
+                    response = self._client.audio.transcriptions.create(
+                        model=self._model,
+                        file=file,
+                        response_format="json",
+                        language=self._language,
+                        temperature=self._temperature,
+                    )
 
             result = TranscriptionResult(
                 text=response.text,
@@ -169,11 +195,11 @@ class OpenAICompatibleProvider(TranscriptionProvider):
 
             return result
 
-        except openai.APIError as e:
-            logger.error(f"{self._provider_name} API error: {e}")
-            raise TranscriptionError(str(e), provider=self._provider_name) from e
         except IOError:
             raise
         except Exception as e:
             logger.error(f"Unexpected transcription error: {e}")
-            raise
+            raise TranscriptionError(
+                f"{self._provider_name} API error: {e}",
+                provider=self._provider_name,
+            ) from e
