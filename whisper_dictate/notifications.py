@@ -434,7 +434,6 @@ class PersistentNotification:
             # T5b: Handle action callback
             # When user clicks action button, dunstify returns the action name
             # The output could be either notification ID or action name
-            output = result.stdout.strip().splitlines()[0]
 
             if result.returncode == 0 and output:
                 # Check if this is an action response (e.g., "stop")
