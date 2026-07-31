@@ -5,10 +5,8 @@ from unittest.mock import Mock, patch
 
 from whisper_dictate.notifications import (
     send_notification,
-    notify_recording_started,
     notify_recording_stopped,
     notify_error,
-    notify_info,
     notify_stopping_transcription,
     PersistentNotification,
     notify_recording_persistent_start,
@@ -134,21 +132,6 @@ class TestSendNotification(unittest.TestCase):
 class TestNotificationHelpers:
     """Test the notification helper functions."""
 
-    def test_notify_recording_started(self):
-        """Test recording started notification."""
-        with patch("whisper_dictate.notifications.send_notification") as mock_send:
-            mock_send.return_value = True
-
-            result = notify_recording_started()
-            assert result is True
-
-            mock_send.assert_called_once_with(
-                summary="Dictation",
-                body="Recording started... press again to stop",
-                urgency="normal",
-                timeout=3000,
-            )
-
     def test_notify_recording_stopped_without_preview(self):
         """Test recording stopped notification without text preview."""
         with patch("whisper_dictate.notifications.send_notification") as mock_send:
@@ -214,21 +197,6 @@ class TestNotificationHelpers:
                 timeout=10000,
             )
 
-    def test_notify_info(self):
-        """Test info notification."""
-        with patch("whisper_dictate.notifications.send_notification") as mock_send:
-            mock_send.return_value = True
-
-            result = notify_info("Information message")
-            assert result is True
-
-            mock_send.assert_called_once_with(
-                summary="Dictation",
-                body="Information message",
-                urgency="low",
-                timeout=3000,
-            )
-
     def test_notify_stopping_transcription(self):
         """Test stopping transcription notification."""
         with patch("whisper_dictate.notifications.send_notification") as mock_send:
@@ -249,10 +217,8 @@ class TestNotificationHelpers:
         with patch("whisper_dictate.notifications.send_notification") as mock_send:
             mock_send.return_value = False
 
-            assert notify_recording_started() is False
             assert notify_recording_stopped() is False
             assert notify_error("test") is False
-            assert notify_info("test") is False
             assert notify_stopping_transcription() is False
 
 

@@ -173,68 +173,6 @@ def is_dunstify_available() -> bool:
     return shutil.which("dunstify") is not None
 
 
-def send_dunstify(
-    summary: str,
-    body: str = "",
-    urgency: UrgencyLevel = "normal",
-    timeout: TimeoutMs = 0,
-) -> Optional[str]:
-    """
-    Send a notification using dunstify with fallback to notify-send.
-
-    RESPONSIBILITY: Send a desktop notification, preferring dunstify for
-    persistent notifications (timeout=0) but falling back to notify-send.
-
-    DOES:
-    - Use dunstify when available for better persistent notification support
-    - Fall back to notify-send if dunstify is not installed
-    - Return notification ID from dunstify if available
-
-    DOES NOT:
-    - Queue notifications
-    - Handle notification server unavailability
-
-    Args:
-        summary: The notification title/summary text
-        body: Optional detailed message body
-        urgency: Notification urgency level ("low", "normal", or "critical")
-        timeout: Display duration in milliseconds (0 for persistent)
-
-    Returns:
-        Optional[str]: Notification ID if dunstify was used and returned one,
-                       None otherwise or on error
-    """
-    try:
-        dunstify_available = is_dunstify_available()
-        if dunstify_available:
-            cmd = ["dunstify", "-u", urgency, "-t", str(timeout), summary, body]
-        else:
-            logger.warning("dunstify not available, falling back to notify-send")
-            cmd = ["notify-send", "-u", urgency, "-t", str(timeout), summary, body]
-
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-
-        if result.returncode != 0:
-            logger.error(
-                "Notification failed: %s",
-                result.stderr.strip() if result.stderr else "unknown error",
-            )
-            return None
-
-        # dunstify returns the notification ID in stdout
-        if dunstify_available and result.stdout.strip():
-            return result.stdout.strip()
-
-        return None
-
-    except FileNotFoundError as e:
-        logger.error("Notification command not found: %s", e)
-        return None
-    except Exception as e:
-        logger.error("Failed to send notification: %s", e)
-        return None
-
-
 def send_notification(
     summary: str,
     body: str = "",
@@ -298,23 +236,6 @@ def send_notification(
         return False
 
 
-def notify_recording_started() -> bool:
-    """
-    WHY THIS EXISTS: Standardized notification for when recording begins.
-
-    RESPONSIBILITY: Send a consistent "recording started" notification.
-
-    Returns:
-        bool: True if notification sent successfully
-    """
-    return send_notification(
-        summary="Dictation",
-        body="Recording started... press again to stop",
-        urgency="normal",
-        timeout=3000,
-    )
-
-
 def notify_recording_stopped(text_preview: str = "") -> bool:
     """
     WHY THIS EXISTS: Standardized notification for when recording stops.
@@ -355,23 +276,6 @@ def notify_error(error_message: str) -> bool:
     """
     return send_notification(
         summary="Dictation Error", body=error_message, urgency="critical", timeout=10000
-    )
-
-
-def notify_info(info_message: str) -> bool:
-    """
-    WHY THIS EXISTS: Standardized info notifications for non-critical feedback.
-
-    RESPONSIBILITY: Send a consistent informational notification.
-
-    Args:
-        info_message: The information message to display
-
-    Returns:
-        bool: True if notification sent successfully
-    """
-    return send_notification(
-        summary="Dictation", body=info_message, urgency="low", timeout=3000
     )
 
 
