@@ -43,7 +43,6 @@ import logging
 import shutil
 import subprocess
 import time
-from pathlib import Path
 from typing import Literal, Optional
 
 # Stack tag for recording notifications - replaces ID-based persistence
@@ -51,47 +50,8 @@ from typing import Literal, Optional
 # as it works across process invocations and avoids ID tracking issues
 RECORDING_STACK_TAG = "whisper-dictate-recording"
 
-# File to persist notification ID between script invocations (DEPRECATED)
-# NOTE: This is kept for backward compatibility but is no longer used.
-# Stack tags provide a more reliable solution that works across processes.
-NOTIFICATION_ID_FILE = Path.home() / ".whisper-dictate-notification-id"
-
 # Set up module-level logger
 logger = logging.getLogger(__name__)
-
-
-def _save_notification_id(notification_id: str) -> None:
-    """Save notification ID to file for persistence across script invocations."""
-    try:
-        NOTIFICATION_ID_FILE.write_text(notification_id)
-    except Exception as e:
-        logger.warning(f"Failed to save notification ID: {e}")
-
-
-def _load_notification_id() -> Optional[str]:
-    """Load notification ID from file."""
-    try:
-        if NOTIFICATION_ID_FILE.exists():
-            content = NOTIFICATION_ID_FILE.read_text().strip()
-            lines = content.splitlines()
-            if lines:
-                return lines[0]
-            else:
-                logger.warning(
-                    f"Notification ID file exists but is empty: {NOTIFICATION_ID_FILE}"
-                )
-    except Exception as e:
-        logger.warning(f"Failed to load notification ID: {e}")
-    return None
-
-
-def _clear_notification_id() -> None:
-    """Clear saved notification ID."""
-    try:
-        if NOTIFICATION_ID_FILE.exists():
-            NOTIFICATION_ID_FILE.unlink()
-    except Exception as e:
-        logger.warning(f"Failed to clear notification ID: {e}")
 
 
 def notify_recording_start() -> bool:
@@ -579,7 +539,6 @@ class PersistentNotification:
                     logger.info("User clicked Stop Recording action")
                     # Close the notification and signal stop
                     self.close()
-                    _clear_notification_id()
                     return "stop"
 
                 # Normal notification ID
@@ -728,8 +687,6 @@ def notify_recording_persistent_start() -> bool:
         body="Recording in progress... press again to stop\n"
         "Or use context menu (Ctrl+Shift+.) to stop",
     )
-    if result:
-        _save_notification_id(result)
     return result is not None
 
 
@@ -758,11 +715,8 @@ def notify_recording_persistent_start_blocking() -> Optional[str]:
     # If user clicked stop action, result will be "stop"
     if result == "stop":
         _recording_notification = None
-        _clear_notification_id()
         return "stop"
 
-    if result:
-        _save_notification_id(result)
     return result
 
 
@@ -783,25 +737,12 @@ def notify_recording_persistent_stop() -> bool:
         f"notify_recording_persistent_stop called: _recording_notification={_recording_notification}"
     )
 
-    # If no active notification object but we have a saved ID, try to close it
-    if not _recording_notification or not _recording_notification._is_active:
-        saved_id = _load_notification_id()
-        if saved_id:
-            logger.info(f"Found saved notification ID: {saved_id}, attempting to close")
-            # Create a temporary notification object to close it
-            temp_notification = PersistentNotification()
-            temp_notification.notification_id = saved_id
-            temp_notification._is_active = True
-            result = temp_notification.close()
-            _clear_notification_id()
-            return result
-
     if _recording_notification and _recording_notification._is_active:
         result = _recording_notification.close()
         _recording_notification = None
-        _clear_notification_id()
         return result
+
     logger.warning(
-        "No notification ID found - cannot close notification (may have already been dismissed)"
+        "No active notification to close (may have already been dismissed)"
     )
     return False
