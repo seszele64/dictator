@@ -339,6 +339,7 @@ def export_logs(
                     msg = log.get("message", "")
                     f.write(f"{timestamp} | {lvl:8} | {src:30} | {msg}\n")
 
+        click.echo("Warning: Exported logs may contain sensitive information. Handle with care.")
         click.echo(f"Exported {len(logs)} log entries to {export_path}")
 
     except Exception as e:
