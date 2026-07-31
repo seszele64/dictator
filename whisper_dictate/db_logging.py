@@ -5,7 +5,6 @@ in addition to file-based logging. This enables structured log querying and filt
 """
 
 import logging
-import sqlite3
 from typing import Any, Optional
 
 from whisper_dictate.database import Database, get_database
@@ -97,84 +96,6 @@ class DatabaseLogHandler(logging.Handler):
             self._database.close()
             self._database = None
             self._initialized = False
-
-
-class SyncDatabaseLogHandler:
-    """Synchronous wrapper for database logging.
-
-    This class provides a synchronous interface for use with logging.config
-    or other synchronous logging setup code. It buffers logs and writes
-    them to the database in batches.
-    """
-
-    def __init__(
-        self,
-        database_path: str,
-        source_prefix: str = "whisper_dictate",
-        retention_days: int = 30,
-    ):
-        """Initialize the synchronous handler.
-
-        Args:
-            database_path: Path to the SQLite database
-            source_prefix: Prefix for log source names
-            retention_days: Number of days to retain logs
-        """
-        from pathlib import Path
-
-        self._db_path = Path(database_path)
-        self._source_prefix = source_prefix
-        self._retention_days = retention_days
-        self._connection: Optional[sqlite3.Connection] = None
-
-    def _get_connection(self) -> sqlite3.Connection:
-        """Get or create database connection."""
-        if self._connection is None:
-            self._db_path.parent.mkdir(parents=True, exist_ok=True)
-            self._connection = sqlite3.connect(str(self._db_path))
-            self._connection.row_factory = sqlite3.Row
-        return self._connection
-
-    def emit(self, record: logging.LogRecord) -> None:
-        """Emit a log record to the database (synchronous).
-
-        Args:
-            record: Log record to emit
-        """
-        try:
-            conn = self._get_connection()
-            source = (
-                f"{self._source_prefix}.{record.module}"
-                if record.module
-                else self._source_prefix
-            )
-
-            # Extract metadata
-            metadata = None
-            if hasattr(record, "metadata"):
-                import json
-
-                metadata = json.dumps(record.metadata)
-
-            conn.execute(
-                "INSERT INTO logs (level, message, source, metadata_json) VALUES (?, ?, ?, ?)",
-                (record.levelname, record.getMessage(), source, metadata),
-            )
-            conn.commit()
-        except Exception:
-            # Silently ignore logging failures
-            pass
-
-    def flush(self) -> None:
-        """Flush any buffered logs."""
-        if self._connection:
-            self._connection.commit()
-
-    def close(self) -> None:
-        """Close the handler."""
-        if self._connection:
-            self._connection.close()
-            self._connection = None
 
 
 def setup_dual_logging(
