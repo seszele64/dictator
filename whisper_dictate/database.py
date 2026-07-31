@@ -985,7 +985,6 @@ class Database:
                 """,
                 (f"-{retention_days} days",),
             )
-            conn.commit()
             deleted = cursor.rowcount
 
         if deleted > 0:
