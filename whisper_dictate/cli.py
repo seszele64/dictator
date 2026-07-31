@@ -94,7 +94,7 @@ def cli(ctx: click.Context, log_level: str) -> None:
         ctx.obj["service"] = service
 
         # Register cleanup to close service after any command
-        ctx.call_on_close(service.close_sync)
+        ctx.call_on_close(service.close)
     except ValueError as e:
         click.echo(f"Configuration error: {e}", err=True)
         sys.exit(1)

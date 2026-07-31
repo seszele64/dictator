@@ -290,12 +290,6 @@ class DictationService:
             self._db.close()
             self._db = None
 
-    def close_sync(self) -> None:
-        """Synchronous wrapper for close()."""
-        if self._db:
-            self._db.close()
-            self._db = None
-
     def __enter__(self) -> "DictationService":
         """Enter context manager.
 
@@ -320,7 +314,7 @@ class DictationService:
         Returns:
             None: Exceptions are not suppressed
         """
-        self.close_sync()
+        self.close()
 
     def get_system_info(self) -> dict:
         """WHY THIS EXISTS: Users need diagnostic information to troubleshoot
