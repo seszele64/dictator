@@ -236,7 +236,7 @@ class DictationService:
             try:
                 self.database.create_log(
                     level="INFO",
-                    message=f"Transcription completed: {result.text[:100]}...",
+                    message="Transcription completed",
                     source="dictation",
                     metadata={
                         "recording_id": recording_id,
