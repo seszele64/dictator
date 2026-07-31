@@ -175,8 +175,7 @@ class TestFileSizeReductionIntegration:
         3. Run: pytest tests/test_audio_converter_integration.py::TestFileSizeReductionIntegration::test_live_transcription_quality_equivalence -v -s
         """
         from whisper_dictate.audio_converter import AudioConverter
-        from whisper_dictate.transcription import WhisperTranscriber
-        from whisper_dictate.config import OpenAIConfig
+        from whisper_dictate.providers.openai_compatible import OpenAICompatibleProvider
 
         # Check FFmpeg availability first
         try:

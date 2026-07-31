@@ -29,7 +29,7 @@ class DictationService:
     - DOES NOT: Handle user interface or command-line parsing
 
     RELATIONSHIPS:
-    - DEPENDS ON: AudioRecorder, WhisperTranscriber, ClipboardManager, Database, AudioStorage
+    - DEPENDS ON: AudioRecorder, TranscriptionProvider, ClipboardManager, Database, AudioStorage
     - USED BY: CLI interface for dictation operations
     """
 
