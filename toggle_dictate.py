@@ -13,9 +13,6 @@ import subprocess
 import soundfile as sf
 from pathlib import Path
 
-# Add current directory to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 from whisper_dictate.config import load_config, DatabaseConfig
 from whisper_dictate.transcription import create_transcriber
 from whisper_dictate.clipboard import ClipboardManager
