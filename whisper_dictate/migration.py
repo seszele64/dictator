@@ -17,7 +17,7 @@ import os
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from whisper_dictate.config import DatabaseConfig
 from whisper_dictate.database import get_database
@@ -54,7 +54,7 @@ class MigrationManager:
     - DOES NOT: Handle database schema creation or other migrations
     """
 
-    def __init__(self, db_config: Optional[DatabaseConfig] = None):
+    def __init__(self, db_config: DatabaseConfig | None = None):
         """Initialize migration manager.
 
         Args:
@@ -75,7 +75,7 @@ class MigrationManager:
             self._db.initialize()
             logger.info("Migration manager initialized")
         except Exception as e:
-            raise MigrationError(f"Failed to initialize database: {e}")
+            raise MigrationError(f"Failed to initialize database: {e}") from e
 
     def detect_legacy_files(self) -> dict[str, bool]:
         """Detect which legacy files exist.
@@ -196,9 +196,9 @@ class MigrationManager:
             self._rollback(backup_path, legacy_files)
 
             self._set_migration_status(MIGRATION_FAILED, error=str(e))
-            raise MigrationError(f"Migration failed: {e}")
+            raise MigrationError(f"Migration failed: {e}") from e
 
-    def _create_backup(self, legacy_files: dict[str, bool]) -> Optional[Path]:
+    def _create_backup(self, legacy_files: dict[str, bool]) -> Path | None:
         """Create backup of legacy files.
 
         Args:
@@ -283,7 +283,7 @@ class MigrationManager:
 
         try:
             # Read PID file
-            pid_value: Optional[int] = None
+            pid_value: int | None = None
             if LEGACY_PID_FILE.exists():
                 try:
                     content = LEGACY_PID_FILE.read_text().strip()
@@ -318,7 +318,7 @@ class MigrationManager:
             raise
 
     def _rollback(
-        self, backup_path: Optional[Path], legacy_files: dict[str, bool]
+        self, backup_path: Path | None, legacy_files: dict[str, bool]
     ) -> None:
         """Attempt to rollback migration.
 
@@ -340,7 +340,7 @@ class MigrationManager:
         if backup_path:
             self._log("INFO", f"Backup preserved at: {backup_path}")
 
-    def _set_migration_status(self, status: str, error: Optional[str] = None) -> None:
+    def _set_migration_status(self, status: str, error: str | None = None) -> None:
         """Set migration status in database.
 
         Args:
@@ -408,7 +408,7 @@ class MigrationManager:
         except MigrationError:
             raise
         except Exception as e:
-            raise MigrationError(f"Verification failed: {e}")
+            raise MigrationError(f"Verification failed: {e}") from e
 
     def _remove_legacy_files(self, legacy_files: dict[str, bool]) -> None:
         """Remove legacy files after successful migration.

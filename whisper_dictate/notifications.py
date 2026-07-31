@@ -43,7 +43,7 @@ import logging
 import shutil
 import subprocess
 import time
-from typing import Literal, Optional
+from typing import Literal
 
 # Stack tag for recording notifications - replaces ID-based persistence
 # Using stack tags is the recommended approach by dunst maintainers
@@ -251,10 +251,9 @@ def notify_recording_stopped(text_preview: str = "") -> bool:
     """
     body = "Recording stopped and processing..."
     if text_preview:
-        if len(text_preview) > 52:
-            preview = text_preview[:49] + "..."  # 49 + 3 = 52 total
-        else:
-            preview = text_preview
+        preview = (
+            text_preview[:49] + "..." if len(text_preview) > 52 else text_preview
+        )  # 49 + 3 = 52 total
         body = f"Transcription: {preview}"
 
     return send_notification(
@@ -339,7 +338,7 @@ class PersistentNotification:
     def __init__(self, stack_tag: str = "dictation-recording"):
         """Initialize the persistent notification manager."""
         self.stack_tag = stack_tag
-        self.notification_id: Optional[str] = None
+        self.notification_id: str | None = None
         self._is_active: bool = False
         self.summary: str = "Dictation"
         self.urgency: UrgencyLevel = "critical"
@@ -354,7 +353,7 @@ class PersistentNotification:
         body: str,
         urgency: UrgencyLevel = "critical",
         wait_for_action: bool = False,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Send a persistent notification with -t 0 for indefinite display.
 
         EDGE CASE 1: Multiple Rapid Start/Stop
@@ -468,7 +467,7 @@ class PersistentNotification:
             )
             return None
 
-    def update(self, body: str) -> Optional[str]:
+    def update(self, body: str) -> str | None:
         """Update the notification body using notification ID.
 
         EDGE CASE: Notification Daemon Crash During Recording
@@ -567,7 +566,7 @@ class PersistentNotification:
 
 
 # Module-level instance for recording notifications
-_recording_notification: Optional[PersistentNotification] = None
+_recording_notification: PersistentNotification | None = None
 
 
 def notify_recording_persistent_start() -> bool:
@@ -593,7 +592,7 @@ def notify_recording_persistent_start() -> bool:
     return result is not None
 
 
-def notify_recording_persistent_start_blocking() -> Optional[str]:
+def notify_recording_persistent_start_blocking() -> str | None:
     """Send a persistent notification and wait for user to click stop action.
 
     T5b IMPLEMENTATION: This function sends a persistent notification with

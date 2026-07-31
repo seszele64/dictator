@@ -1,16 +1,16 @@
 """Configuration management for whisper-dictate."""
 
 import os
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Optional
-from pydantic import BaseModel, Field
+
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
 
 load_dotenv()
 
 
-class WhisperProvider(str, Enum):
+class WhisperProvider(StrEnum):
     """WHY THIS EXISTS: Users need to select from known Whisper API providers
     (OpenAI, Groq, Together AI, local servers) with sensible defaults.
 
@@ -67,10 +67,10 @@ class DatabaseConfig(BaseModel):
     - DOES NOT: Handle actual database operations
     """
 
-    path: Optional[Path] = Field(
+    path: Path | None = Field(
         default=None, description="Database file path (defaults to XDG data directory)"
     )
-    recordings_path: Optional[Path] = Field(
+    recordings_path: Path | None = Field(
         default=None,
         description="Recordings directory path (defaults to XDG data directory)",
     )
@@ -131,7 +131,7 @@ class AudioConfig(BaseModel):
     duration: float = Field(
         default=5.0, description="Maximum recording duration in seconds"
     )
-    device: Optional[int | str] = Field(
+    device: int | str | None = Field(
         default=None, description="Audio input device index or name"
     )
     mp3_enabled: bool = Field(
@@ -176,7 +176,7 @@ class WhisperConfig(BaseModel):
         default="",
         description="API key. If empty, resolved from provider's default env var.",
     )
-    base_url: Optional[str] = Field(
+    base_url: str | None = Field(
         default=None,
         description="Custom API base URL. Overrides provider default.",
     )
@@ -188,7 +188,7 @@ class WhisperConfig(BaseModel):
         default=30.0,
         description="API request timeout in seconds",
     )
-    language: Optional[str] = Field(
+    language: str | None = Field(
         default=None,
         description="Language hint as ISO 639-1 code (e.g. 'en', 'de'). "
         "If None, Whisper auto-detects the language.",
@@ -198,16 +198,17 @@ class WhisperConfig(BaseModel):
         description="Sampling temperature (0.0 = deterministic, higher = more creative). "
         "For transcription, 0.0 is recommended.",
     )
-    silence_threshold_dbfs: Optional[float] = Field(
+    silence_threshold_dbfs: float | None = Field(
         default=-50.0,
         description="Pre-transcription silence detection threshold in dBFS. "
         "Audio below this RMS energy level is considered silent and skipped "
         "to prevent Whisper hallucinations. Set to None to disable silence detection.",
     )
-    task: Optional[str] = Field(
+    task: str | None = Field(
         default=None,
         description="Whisper task to perform. None uses provider default ('transcribe'). "
-        "Allowed values: 'transcribe', 'translate'. Only affects providers that support this parameter (e.g., DeepInfra).",
+        "Allowed values: 'transcribe', 'translate'. Only affects providers that support "
+        "this parameter (e.g., DeepInfra).",
     )
 
 
@@ -233,7 +234,7 @@ def _load_whisper_config_from_env() -> WhisperConfig:
     """
     silence_threshold_env = os.getenv("WHISPER_SILENCE_THRESHOLD_DBFS")
     silence_threshold = float(silence_threshold_env) if silence_threshold_env else -50.0
-    
+
     return WhisperConfig(
         provider=os.getenv("WHISPER_PROVIDER", "openai"),
         api_key=os.getenv("WHISPER_API_KEY", ""),

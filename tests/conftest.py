@@ -1,18 +1,18 @@
 """Test configuration and fixtures for whisper-dictate."""
 
 import atexit
+import contextlib
 import os
 import sys
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 from unittest.mock import Mock, patch
 
 import pytest
 
 from whisper_dictate.config import AppConfig, AudioConfig, OpenAIConfig  # noqa: E402
 from whisper_dictate.transcription import TranscriptionResult  # noqa: E402
-
 
 # Add project root to path for toggle_dictate module
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -159,10 +159,8 @@ def temp_audio_file() -> Generator[Path, None, None]:
         tmp.flush()
         yield Path(tmp.name)
     # Cleanup
-    try:
+    with contextlib.suppress(OSError):
         os.unlink(tmp.name)
-    except OSError:
-        pass
 
 
 @pytest.fixture

@@ -3,15 +3,14 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
 
 import click
 
-from whisper_dictate.config import load_config, DatabaseConfig
-from whisper_dictate.dictation import DictationService
-from whisper_dictate.database import get_database
-from whisper_dictate.cli_helpers import with_database
 from whisper_dictate.audio_storage import check_disk_space
+from whisper_dictate.cli_helpers import with_database
+from whisper_dictate.config import DatabaseConfig, load_config
+from whisper_dictate.database import get_database
+from whisper_dictate.dictation import DictationService
 
 
 def setup_logging(level: str, enable_db_logging: bool = True):
@@ -113,7 +112,7 @@ def cli(ctx: click.Context, log_level: str) -> None:
 @cli.command()
 @click.option("--duration", type=float, help="Recording duration in seconds")
 @click.pass_context
-def dictate(ctx: click.Context, duration: Optional[float]) -> None:
+def dictate(ctx: click.Context, duration: float | None) -> None:
     """Record audio and transcribe it to text."""
     service = ctx.obj["service"]
 
@@ -206,10 +205,10 @@ def logs() -> None:
 @with_database
 def list_logs(
     ctx: click.Context,
-    level: Optional[str],
-    source: Optional[str],
-    from_time: Optional[str],
-    to_time: Optional[str],
+    level: str | None,
+    source: str | None,
+    from_time: str | None,
+    to_time: str | None,
     limit: int,
 ) -> None:
     """List application logs with optional filters.
@@ -290,10 +289,10 @@ def list_logs(
 def export_logs(
     ctx: click.Context,
     filename: str,
-    level: Optional[str],
-    source: Optional[str],
-    from_time: Optional[str],
-    to_time: Optional[str],
+    level: str | None,
+    source: str | None,
+    from_time: str | None,
+    to_time: str | None,
     format: str,
 ) -> None:
     """Export logs to a file.
@@ -365,7 +364,7 @@ def export_logs(
     help="Delete logs older than N days (default: use configured retention)",
 )
 @with_database
-def cleanup_logs(ctx: click.Context, days: Optional[int]) -> None:
+def cleanup_logs(ctx: click.Context, days: int | None) -> None:
     """Clean up old logs based on retention policy.
 
     Examples:
@@ -377,10 +376,7 @@ def cleanup_logs(ctx: click.Context, days: Optional[int]) -> None:
 
     try:
         # Get retention days from config if not provided
-        if days is None:
-            retention_days = db_config.log_retention_days
-        else:
-            retention_days = days
+        retention_days = db_config.log_retention_days if days is None else days
 
         deleted = db.cleanup_old_logs(retention_days)
 
@@ -410,7 +406,7 @@ def history() -> None:
 )
 @click.option("--date", help="Filter by date (YYYY-MM-DD format)")
 @with_database
-def list_history(ctx: click.Context, limit: int, date: Optional[str]) -> None:
+def list_history(ctx: click.Context, limit: int, date: str | None) -> None:
     """List recent transcriptions with pagination.
 
     Examples:
@@ -638,12 +634,11 @@ def delete_history(ctx: click.Context, transcript_id: int, confirm_yes: bool) ->
         click.echo(f"  Preview: {text_preview}")
 
         # Confirm deletion
-        if not confirm_yes:
-            if not click.confirm(
-                "\nAre you sure you want to delete this transcription?"
-            ):
-                click.echo("Deletion cancelled.")
-                return
+        if not confirm_yes and not click.confirm(
+            "\nAre you sure you want to delete this transcription?"
+        ):
+            click.echo("Deletion cancelled.")
+            return
 
         # Delete the recording (cascades to transcript due to foreign key)
         audio_path = None
@@ -678,7 +673,7 @@ def delete_history(ctx: click.Context, transcript_id: int, confirm_yes: bool) ->
 @click.option("--language", default=None, help="New language code (optional)")
 @with_database
 def update_history(
-    ctx: click.Context, transcript_id: int, text: str, language: Optional[str]
+    ctx: click.Context, transcript_id: int, text: str, language: str | None
 ) -> None:
     """Update a transcription's text and optionally language.
 
@@ -702,7 +697,7 @@ def update_history(
         old_text = current.get("text", "")
         old_language = current.get("language")
 
-        click.echo("Updating transcription #{0}:".format(transcript_id))
+        click.echo(f"Updating transcription #{transcript_id}:")
         click.echo("")
         click.echo("--- Current Text ---")
         click.echo(old_text[:500] + ("..." if len(old_text) > 500 else ""))
@@ -712,9 +707,9 @@ def update_history(
         click.echo("")
 
         if old_language:
-            click.echo("Current language: {0}".format(old_language))
+            click.echo(f"Current language: {old_language}")
         if language:
-            click.echo("New language: {0}".format(language))
+            click.echo(f"New language: {language}")
         click.echo("")
 
         # Confirm the update
@@ -726,10 +721,10 @@ def update_history(
         success = db.update_transcript(transcript_id, text, language)
 
         if success:
-            click.echo("✅ Updated transcription #{0}".format(transcript_id))
+            click.echo(f"✅ Updated transcription #{transcript_id}")
         else:
             click.echo(
-                "Error: Failed to update transcription #{0}".format(transcript_id),
+                f"Error: Failed to update transcription #{transcript_id}",
                 err=True,
             )
             sys.exit(1)

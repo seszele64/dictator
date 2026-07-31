@@ -3,18 +3,17 @@
 import logging
 from pathlib import Path
 from types import TracebackType
-from typing import Optional, Tuple
 
-from whisper_dictate.config import AppConfig, DatabaseConfig
 from whisper_dictate.audio import AudioRecorder
-from whisper_dictate.transcription import (
-    create_transcriber,
-    TranscriptionResult,
-)
-from whisper_dictate.clipboard import ClipboardManager
-from whisper_dictate.database import Database, get_database
-from whisper_dictate.audio_storage import AudioStorage, get_audio_storage
 from whisper_dictate.audio_converter import AudioConverter
+from whisper_dictate.audio_storage import AudioStorage, get_audio_storage
+from whisper_dictate.clipboard import ClipboardManager
+from whisper_dictate.config import AppConfig, DatabaseConfig
+from whisper_dictate.database import Database, get_database
+from whisper_dictate.transcription import (
+    TranscriptionResult,
+    create_transcriber,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +49,8 @@ class DictationService:
         )
 
         # Initialize database and audio storage
-        self._db: Optional[Database] = None
-        self._audio_storage: Optional[AudioStorage] = None
+        self._db: Database | None = None
+        self._audio_storage: AudioStorage | None = None
 
     @property
     def database(self) -> Database:
@@ -79,7 +78,7 @@ class DictationService:
             self._audio_storage = get_audio_storage(db_config)
         return self._audio_storage
 
-    def check_disk_space(self) -> Tuple[bool, int]:
+    def check_disk_space(self) -> tuple[bool, int]:
         """Check if there's enough disk space for recording.
 
         Returns:
@@ -91,8 +90,8 @@ class DictationService:
         return self.audio_storage.check_disk_space(min_free_mb)
 
     def dictate(
-        self, duration: Optional[float] = None
-    ) -> Optional[TranscriptionResult]:
+        self, duration: float | None = None
+    ) -> TranscriptionResult | None:
         """WHY THIS EXISTS: Users need a single method to perform complete
         dictation workflow without managing individual components.
 
@@ -110,8 +109,8 @@ class DictationService:
         Raises:
             Exception: Re-raises any exceptions from underlying services
         """
-        audio_file: Optional[Path] = None
-        recording_id: Optional[int] = None
+        audio_file: Path | None = None
+        recording_id: int | None = None
 
         try:
             # Check disk space before recording
@@ -168,7 +167,7 @@ class DictationService:
             # Handle silence detection - skip clipboard, DB transcript, and log
             if result.silence_detected:
                 logger.info("Silence detected - skipping clipboard copy and transcript storage")
-                
+
                 # Still store recording but with empty transcript
                 if recording_id is not None:
                     try:
@@ -181,7 +180,7 @@ class DictationService:
                         )
                     except Exception as e:
                         logger.warning(f"Failed to create empty transcript entry: {e}")
-                
+
                 # Log silence detection
                 try:
                     self.database.create_log(
@@ -195,7 +194,7 @@ class DictationService:
                     )
                 except Exception as e:
                     logger.debug(f"Failed to log silence detection: {e}")
-                
+
                 return result  # Return early, skip clipboard copy
 
             # Save audio to persistent storage and update recording
@@ -300,9 +299,9 @@ class DictationService:
 
     def __exit__(
         self,
-        exc_type: Optional[type],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
+        exc_type: type | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
     ) -> None:
         """Exit context manager with proper cleanup.
 

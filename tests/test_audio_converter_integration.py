@@ -6,10 +6,12 @@ if FFmpeg is not available.
 Run with: pytest tests/test_audio_converter_integration.py -v
 """
 
+import contextlib
 import os
 import tempfile
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 class TestFileSizeReductionIntegration:
@@ -58,10 +60,8 @@ class TestFileSizeReductionIntegration:
             audio.export(tmp.name, format="wav")
             yield Path(tmp.name)
 
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp.name)
-        except OSError:
-            pass
 
     def test_real_file_size_reduction_128k(self, real_wav_file):
         """Test real WAV to MP3 conversion at 128k achieves expected reduction.
@@ -104,10 +104,8 @@ class TestFileSizeReductionIntegration:
             )
 
         # Cleanup
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(result)
-        except OSError:
-            pass
 
     def test_real_file_size_reduction_64k(self, real_wav_file):
         """Test real WAV to MP3 conversion at 64k achieves even greater reduction.
@@ -149,10 +147,8 @@ class TestFileSizeReductionIntegration:
             )
 
         # Cleanup
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(result)
-        except OSError:
-            pass
 
     @pytest.mark.integration
     @pytest.mark.skipif(
@@ -172,7 +168,8 @@ class TestFileSizeReductionIntegration:
         To run this test manually:
         1. Ensure FFmpeg is installed
         2. Set OPENAI_API_KEY environment variable
-        3. Run: pytest tests/test_audio_converter_integration.py::TestFileSizeReductionIntegration::test_live_transcription_quality_equivalence -v -s
+        3. Run: pytest tests/test_audio_converter_integration.py::\
+        TestFileSizeReductionIntegration::test_live_transcription_quality_equivalence -v -s
         """
         from whisper_dictate.audio_converter import AudioConverter
         from whisper_dictate.providers.openai_compatible import OpenAICompatibleProvider
@@ -201,8 +198,9 @@ class TestFileSizeReductionIntegration:
                 pytest.skip("FFmpeg not available, skipping live conversion test")
 
             # Transcribe both
-            config = OpenAIConfig(api_key=os.getenv("OPENAI_API_KEY"))
-            transcriber = WhisperTranscriber(config)
+            transcriber = OpenAICompatibleProvider(
+                api_key=os.getenv("OPENAI_API_KEY", ""), silence_threshold_dbfs=None
+            )
 
             wav_text = transcriber.transcribe_audio(wav_path).text
             mp3_text = transcriber.transcribe_audio(result).text
@@ -218,14 +216,10 @@ class TestFileSizeReductionIntegration:
 
         finally:
             # Cleanup
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(wav_path)
-            except OSError:
-                pass
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(result)
-            except OSError:
-                pass
 
 
 class TestTranscriptionQualityManual:

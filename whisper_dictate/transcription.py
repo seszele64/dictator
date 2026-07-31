@@ -5,7 +5,7 @@ import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from whisper_dictate.config import WhisperConfig
@@ -23,7 +23,7 @@ class TranscriptionError(Exception):
     - DOES NOT: Handle retry logic or error recovery
     """
 
-    def __init__(self, message: str, provider: Optional[str] = None) -> None:
+    def __init__(self, message: str, provider: str | None = None) -> None:
         self.provider = provider
         super().__init__(message)
 
@@ -40,9 +40,9 @@ class TranscriptionResult:
     """
 
     text: str
-    language: Optional[str] = None
-    duration: Optional[float] = None
-    provider: Optional[str] = None
+    language: str | None = None
+    duration: float | None = None
+    provider: str | None = None
     silence_detected: bool = False
 
     def __str__(self) -> str:

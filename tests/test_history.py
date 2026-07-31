@@ -7,6 +7,7 @@ to hang after execution because database connections weren't being closed.
 Fix: Added `db.close()` in `finally` blocks for all four history commands.
 """
 
+import contextlib
 import os
 import tempfile
 from pathlib import Path
@@ -38,10 +39,8 @@ def temp_db():
     yield db_path
 
     # Cleanup
-    try:
+    with contextlib.suppress(OSError):
         os.unlink(db_path)
-    except OSError:
-        pass
 
 
 @pytest.fixture

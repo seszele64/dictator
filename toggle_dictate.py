@@ -4,28 +4,29 @@ Fixed toggle dictation for i3 - proper real-time recording with immediate start/
 With database integration for persistence and state management.
 """
 
-import os
-import sys
-import time
 import logging
+import os
 import signal
 import subprocess
-import soundfile as sf
+import sys
+import time
 from pathlib import Path
 
-from whisper_dictate.config import load_config, DatabaseConfig
-from whisper_dictate.transcription import create_transcriber
+import soundfile as sf
+
+from whisper_dictate.audio_storage import get_audio_storage
 from whisper_dictate.clipboard import ClipboardManager
+from whisper_dictate.config import DatabaseConfig, load_config
+from whisper_dictate.database import get_database
+from whisper_dictate.dunst_monitor import ensure_dunst_running
 from whisper_dictate.notifications import (
+    notify_error,
     notify_recording_start,
     notify_recording_stop,
     notify_recording_stopped,
-    notify_error,
     notify_stopping_transcription,
 )
-from whisper_dictate.dunst_monitor import ensure_dunst_running
-from whisper_dictate.database import get_database
-from whisper_dictate.audio_storage import get_audio_storage
+from whisper_dictate.transcription import create_transcriber
 
 # State and process tracking
 # Note: Using database for state management (preferred), with file fallbacks for compatibility
@@ -310,7 +311,7 @@ def transcribe_audio(config, recording_id=None):
         # Handle silence detection
         if result.silence_detected:
             logging.info("Silence detected - skipping clipboard copy and transcript storage")
-            
+
             # Create empty transcript entry
             if recording_id:
                 try:
@@ -323,10 +324,10 @@ def transcribe_audio(config, recording_id=None):
                     )
                 except Exception as e:
                     logging.warning(f"Failed to create empty transcript entry: {e}")
-            
+
             # Notify user
             notify_recording_stopped("Silence detected - no speech")
-            
+
             return ""  # Return empty string instead of None
 
         # Create transcript entry

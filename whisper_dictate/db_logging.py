@@ -5,10 +5,10 @@ in addition to file-based logging. This enables structured log querying and filt
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
-from whisper_dictate.database import Database, get_database
 from whisper_dictate.config import DatabaseConfig
+from whisper_dictate.database import Database, get_database
 
 
 class DatabaseLogHandler(logging.Handler):
@@ -25,8 +25,8 @@ class DatabaseLogHandler(logging.Handler):
 
     def __init__(
         self,
-        database: Optional[Database] = None,
-        config: Optional[DatabaseConfig] = None,
+        database: Database | None = None,
+        config: DatabaseConfig | None = None,
         source_prefix: str = "whisper_dictate",
     ):
         """Initialize the database log handler.
@@ -69,7 +69,7 @@ class DatabaseLogHandler(logging.Handler):
             )
 
             # Extract metadata from record if present
-            metadata: Optional[dict[str, Any]] = None
+            metadata: dict[str, Any] | None = None
             if hasattr(record, "metadata"):
                 metadata = record.metadata
 
@@ -100,9 +100,9 @@ class DatabaseLogHandler(logging.Handler):
 
 def setup_dual_logging(
     level: str = "INFO",
-    database: Optional[Database] = None,
-    config: Optional[DatabaseConfig] = None,
-    log_file: Optional[str] = None,
+    database: Database | None = None,
+    config: DatabaseConfig | None = None,
+    log_file: str | None = None,
 ) -> logging.Logger:
     """Setup dual logging (file + database).
 

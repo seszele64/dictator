@@ -1,10 +1,10 @@
 """Audio recording functionality with strong typing."""
 
-import tempfile
 import logging
-from typing import Optional, Tuple
+import tempfile
 from pathlib import Path
 from types import ModuleType
+from typing import Optional
 
 from whisper_dictate.config import AudioConfig
 
@@ -69,7 +69,7 @@ class AudioRecorder:
         """
         self.config = config
 
-    def record_to_file(self, duration: Optional[float] = None) -> Path:
+    def record_to_file(self, duration: float | None = None) -> Path:
         """WHY THIS EXISTS: Recording audio directly to files prevents
         memory issues with large recordings and provides consistent file handling.
 
@@ -138,7 +138,7 @@ class AudioRecorder:
             logger.error(f"Unexpected error during recording: {e}")
             raise
 
-    def get_audio_devices(self) -> Tuple[str, ...]:
+    def get_audio_devices(self) -> tuple[str, ...]:
         """WHY THIS EXISTS: Users need to know available audio devices
         for configuration and troubleshooting.
 

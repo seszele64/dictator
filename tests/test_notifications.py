@@ -4,16 +4,16 @@ import unittest
 from unittest.mock import Mock, patch
 
 from whisper_dictate.notifications import (
-    send_notification,
-    notify_recording_stopped,
-    notify_error,
-    notify_stopping_transcription,
     PersistentNotification,
+    is_dunstify_available,
+    notify_error,
     notify_recording_persistent_start,
     notify_recording_persistent_start_blocking,
-    notify_recording_persistent_update,
     notify_recording_persistent_stop,
-    is_dunstify_available,
+    notify_recording_persistent_update,
+    notify_recording_stopped,
+    notify_stopping_transcription,
+    send_notification,
 )
 
 

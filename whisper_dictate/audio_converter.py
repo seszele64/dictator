@@ -20,7 +20,6 @@ GRACEFUL DEGRADATION:
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +54,7 @@ class AudioConverter:
         )
 
     def convert(
-        self, wav_path: Path | str, delete_source: Optional[bool] = None
+        self, wav_path: Path | str, delete_source: bool | None = None
     ) -> Path:
         """Convert a WAV file to MP3 format.
 
@@ -125,10 +124,7 @@ class AudioConverter:
             # delete_source=None means use keep_wav setting
             # delete_source=True means definitely delete
             # delete_source=False means definitely keep
-            if delete_source is None:
-                should_delete = not self.keep_wav
-            else:
-                should_delete = delete_source
+            should_delete = not self.keep_wav if delete_source is None else delete_source
 
             if should_delete and wav_path.exists():
                 wav_path.unlink()

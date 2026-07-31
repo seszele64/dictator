@@ -1,11 +1,13 @@
 """Tests for audio converter functionality."""
 
-import pytest
+import contextlib
+import os
 import sys
+import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
-import tempfile
-import os
+
+import pytest
 
 
 # Create mock pydub module for testing
@@ -213,14 +215,10 @@ class TestAudioConverter:
             assert result.exists()
         finally:
             # Cleanup
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(wav_path_str)
-            except OSError:
-                pass
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(mp3_path_str)
-            except OSError:
-                pass
 
     def test_convert_and_keep_wav_method(self, temp_audio_file):
         """Test convert_and_keep_wav convenience method."""
@@ -443,14 +441,10 @@ class TestFileSizeReduction:
                 MockAudioSegment.export = original_export
         finally:
             # Cleanup
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(wav_path)
-            except OSError:
-                pass
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(str(wav_path.with_suffix(".mp3")))
-            except OSError:
-                pass
 
     def test_lower_bitrate_produces_smaller_files(self):
         """Test that lower bitrate produces smaller MP3 files.
@@ -506,10 +500,8 @@ class TestFileSizeReduction:
             )
         finally:
             MockAudioSegment.export = original_export
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(wav_path)
-            except OSError:
-                pass
 
 
 class TestTranscriptionQualityEquivalence:
@@ -564,14 +556,10 @@ class TestTranscriptionQualityEquivalence:
                 assert mock_client.audio.transcriptions.create.call_count == 2
         finally:
             # Cleanup
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(wav_path)
-            except OSError:
-                pass
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(mp3_path)
-            except OSError:
-                pass
 
     def test_whisper_api_supports_mp3_natively(self):
         """Test that OpenAICompatibleProvider can accept MP3 files directly.
@@ -613,7 +601,5 @@ class TestTranscriptionQualityEquivalence:
                 call_kwargs = mock_client.audio.transcriptions.create.call_args
                 assert call_kwargs is not None
         finally:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(mp3_path)
-            except OSError:
-                pass
