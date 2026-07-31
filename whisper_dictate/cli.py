@@ -14,8 +14,12 @@ from whisper_dictate.cli_helpers import with_database
 from whisper_dictate.audio_storage import check_disk_space
 
 
-def setup_logging(level: str, enable_db_logging: bool = True) -> None:
-    """Configure application logging with file and optional database output."""
+def setup_logging(level: str, enable_db_logging: bool = True):
+    """Configure application logging with file and optional database output.
+
+    Returns:
+        The DatabaseLogHandler if database logging was enabled, otherwise None.
+    """
     from pathlib import Path
 
     # Create log directory
@@ -74,9 +78,13 @@ def setup_logging(level: str, enable_db_logging: bool = True) -> None:
             if deleted > 0:
                 root_logger.info(f"Cleaned up {deleted} old log entries")
 
+            return db_handler
+
         except Exception as e:
             # Database logging is optional - continue without it
             root_logger.debug(f"Database logging not available: {e}")
+
+    return None
 
 
 @click.group()
@@ -84,7 +92,9 @@ def setup_logging(level: str, enable_db_logging: bool = True) -> None:
 @click.pass_context
 def cli(ctx: click.Context, log_level: str) -> None:
     """Whisper-dictate: Voice-to-text dictation with clipboard integration."""
-    setup_logging(log_level)
+    db_log_handler = setup_logging(log_level)
+    if db_log_handler is not None:
+        ctx.call_on_close(db_log_handler.close)
     ctx.ensure_object(dict)
 
     try:
