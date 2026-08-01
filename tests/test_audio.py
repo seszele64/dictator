@@ -1,8 +1,9 @@
 """Tests for audio recording functionality."""
 
-import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch
+
+import pytest
 
 from whisper_dictate.audio import AudioRecorder
 from whisper_dictate.config import AudioConfig
@@ -142,7 +143,7 @@ class TestAudioRecorder:
             mock_temp_file.name = "/tmp/test.wav"
             mock_temp.return_value.__enter__.return_value = mock_temp_file
 
-            _mock_write.side_effect = IOError("Cannot write file")
+            _mock_write.side_effect = OSError("Cannot write file")
 
             with pytest.raises(IOError, match="Cannot write file"):
                 recorder.record_to_file()

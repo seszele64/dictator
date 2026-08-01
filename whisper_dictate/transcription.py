@@ -5,12 +5,7 @@ import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
-
-import openai
-from openai import OpenAI
-
-from whisper_dictate.config import OpenAIConfig
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from whisper_dictate.config import WhisperConfig
@@ -28,7 +23,7 @@ class TranscriptionError(Exception):
     - DOES NOT: Handle retry logic or error recovery
     """
 
-    def __init__(self, message: str, provider: Optional[str] = None) -> None:
+    def __init__(self, message: str, provider: str | None = None) -> None:
         self.provider = provider
         super().__init__(message)
 
@@ -45,9 +40,9 @@ class TranscriptionResult:
     """
 
     text: str
-    language: Optional[str] = None
-    duration: Optional[float] = None
-    provider: Optional[str] = None
+    language: str | None = None
+    duration: float | None = None
+    provider: str | None = None
     silence_detected: bool = False
 
     def __str__(self) -> str:
@@ -97,79 +92,6 @@ class TranscriptionProvider(ABC):
             TranscriptionError: If transcription fails.
         """
         ...
-
-
-class WhisperTranscriber:
-    """WHY THIS EXISTS: OpenAI Whisper API integration needs to be encapsulated
-    to provide consistent error handling and configuration management.
-
-    RESPONSIBILITY: Transcribe audio files using OpenAI Whisper API.
-    BOUNDARIES:
-    - DOES: Handle API calls to OpenAI Whisper
-    - DOES NOT: Handle audio recording, file management, or clipboard operations
-
-    RELATIONSHIPS:
-    - DEPENDS ON: OpenAIConfig for API settings
-    - USED BY: DictationService for transcription
-    """
-
-    def __init__(self, config: OpenAIConfig, client: Optional[OpenAI] = None) -> None:
-        """Initialize Whisper transcriber with configuration.
-
-        Args:
-            config: OpenAI API configuration
-            client: Optional OpenAI client for testing (defaults to new instance)
-        """
-        self.config = config
-        self.client = client or OpenAI(api_key=config.api_key)
-
-    def transcribe_audio(self, audio_file: Path) -> TranscriptionResult:
-        """WHY THIS EXISTS: Audio transcription needs to be handled consistently
-        with proper error handling and result formatting.
-
-        RESPONSIBILITY: Transcribe audio file using OpenAI Whisper API.
-        BOUNDARIES:
-        - DOES: Make API call and return structured result
-        - DOES NOT: Handle file validation or cleanup
-
-        Args:
-            audio_file: Path to audio file to transcribe
-
-        Returns:
-            TranscriptionResult: Structured transcription result
-
-        Raises:
-            openai.APIError: If API call fails
-            IOError: If audio file cannot be read
-        """
-        if not audio_file.exists():
-            raise IOError(f"Audio file not found: {audio_file}")
-
-        logger.info(f"Transcribing audio file: {audio_file}")
-
-        try:
-            with open(audio_file, "rb") as file:
-                response = self.client.audio.transcriptions.create(
-                    model=self.config.model, file=file, response_format="json"
-                )
-
-            result = TranscriptionResult(
-                text=response.text, language=getattr(response, "language", None)
-            )
-
-            logger.info(
-                f"Transcription completed: {len(result.text)} characters, "
-                f"language={result.language}"
-            )
-
-            return result
-
-        except openai.APIError as e:
-            logger.error(f"OpenAI API error: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error during transcription: {e}")
-            raise
 
 
 def create_transcriber(config: "WhisperConfig") -> TranscriptionProvider:

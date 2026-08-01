@@ -16,7 +16,6 @@ RELATIONSHIPS:
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 from openai import OpenAI
 
@@ -50,13 +49,13 @@ class OpenAICompatibleProvider(TranscriptionProvider):
         self,
         api_key: str,
         model: str = "whisper-1",
-        base_url: Optional[str] = None,
+        base_url: str | None = None,
         timeout: float = 30.0,
-        language: Optional[str] = None,
+        language: str | None = None,
         temperature: float = 0.0,
         provider_name: str = "openai",
-        silence_threshold_dbfs: Optional[float] = -50.0,
-        task: Optional[str] = None,
+        silence_threshold_dbfs: float | None = -50.0,
+        task: str | None = None,
     ) -> None:
         """Initialize OpenAI-compatible transcription provider.
 
@@ -117,7 +116,7 @@ class OpenAICompatibleProvider(TranscriptionProvider):
             TranscriptionError: If API call fails
         """
         if not audio_file.exists():
-            raise IOError(f"Audio file not found: {audio_file}")
+            raise OSError(f"Audio file not found: {audio_file}")
 
         # Pre-transcription silence detection
         if self._silence_threshold_dbfs is not None:
@@ -195,7 +194,7 @@ class OpenAICompatibleProvider(TranscriptionProvider):
 
             return result
 
-        except IOError:
+        except OSError:
             raise
         except Exception as e:
             logger.error(f"Unexpected transcription error: {e}")

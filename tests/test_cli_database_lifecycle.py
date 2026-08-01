@@ -15,6 +15,7 @@ Commands tested:
 - migrate (no database, but included for completeness)
 """
 
+import contextlib
 import os
 import tempfile
 from pathlib import Path
@@ -41,10 +42,8 @@ def temp_db():
     yield db_path
 
     # Cleanup
-    try:
+    with contextlib.suppress(OSError):
         os.unlink(db_path)
-    except OSError:
-        pass
 
 
 @pytest.fixture
@@ -253,10 +252,8 @@ class TestLogsCommandsDatabaseClose:
                     "Database close() was not called - this would cause connection leak"
                 )
             finally:
-                try:
+                with contextlib.suppress(OSError):
                     os.unlink(export_file)
-                except OSError:
-                    pass
 
     def test_logs_export_json_format_calls_db_close(
         self, cli_runner, mock_database_with_logs
@@ -278,10 +275,8 @@ class TestLogsCommandsDatabaseClose:
                 assert result.exit_code == 0
                 assert mock_database_with_logs.close.called
             finally:
-                try:
+                with contextlib.suppress(OSError):
                     os.unlink(export_file)
-                except OSError:
-                    pass
 
     def test_logs_cleanup_calls_db_close(self, cli_runner, mock_database_with_logs):
         """Verify logs cleanup command calls database close()."""
@@ -540,10 +535,8 @@ class TestAllCLICommandsDatabaseClose:
                 try:
                     cli_runner.invoke(cli, command)
                 finally:
-                    try:
+                    with contextlib.suppress(OSError):
                         os.unlink(export_file)
-                    except OSError:
-                        pass
             else:
                 cli_runner.invoke(cli, command)
 

@@ -1,8 +1,9 @@
 """Tests for dictation workflow integration."""
 
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock, PropertyMock, Mock
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
+
+import pytest
 
 from whisper_dictate.dictation import DictationService
 
@@ -20,7 +21,7 @@ class TestDictationService:
 
     def test_dictate_success(self, mock_config, mock_transcription_result):
         """Test successful dictation workflow."""
-        with DictationService(mock_config) as service:
+        with DictationService(mock_config) as service:  # noqa: SIM117
             with (
                 patch.object(service.audio_recorder, "record_to_file") as mock_record,
                 patch.object(
@@ -48,7 +49,7 @@ class TestDictationService:
     ):
         """Test dictation without clipboard copying."""
         mock_config.copy_to_clipboard = False
-        with DictationService(mock_config) as service:
+        with DictationService(mock_config) as service:  # noqa: SIM117
             with (
                 patch.object(service.audio_recorder, "record_to_file") as mock_record,
                 patch.object(
@@ -67,7 +68,7 @@ class TestDictationService:
 
     def test_dictate_with_custom_duration(self, mock_config, mock_transcription_result):
         """Test dictation with custom duration."""
-        with DictationService(mock_config) as service:
+        with DictationService(mock_config) as service:  # noqa: SIM117
             with (
                 patch.object(service.audio_recorder, "record_to_file") as mock_record,
                 patch.object(
@@ -86,7 +87,7 @@ class TestDictationService:
 
     def test_dictate_recording_failure(self, mock_config):
         """Test handling of recording failures."""
-        with DictationService(mock_config) as service:
+        with DictationService(mock_config) as service:  # noqa: SIM117
             with patch.object(service.audio_recorder, "record_to_file") as mock_record:
                 mock_record.side_effect = Exception("Recording failed")
 
@@ -95,7 +96,7 @@ class TestDictationService:
 
     def test_dictate_transcription_failure(self, mock_config):
         """Test handling of transcription failures."""
-        with DictationService(mock_config) as service:
+        with DictationService(mock_config) as service:  # noqa: SIM117
             with (
                 patch.object(service.audio_recorder, "record_to_file") as mock_record,
                 patch.object(
@@ -110,7 +111,7 @@ class TestDictationService:
 
     def test_dictate_clipboard_failure(self, mock_config, mock_transcription_result):
         """Test handling of clipboard failures (should not fail dictation)."""
-        with DictationService(mock_config) as service:
+        with DictationService(mock_config) as service:  # noqa: SIM117
             with (
                 patch.object(service.audio_recorder, "record_to_file") as mock_record,
                 patch.object(
@@ -171,9 +172,9 @@ class TestDictationService:
                 ) as mock_transcribe,
             ):
                 mock_record.return_value = mock_path
-                mock_transcribe.side_effect = Exception("Transcription failed")
+                mock_transcribe.side_effect = RuntimeError("Transcription failed")
 
-                with pytest.raises(Exception):
+                with pytest.raises(RuntimeError):
                     service.dictate()
 
                 mock_path.unlink.assert_called_once()
@@ -207,30 +208,29 @@ class TestDictationService:
 
     def test_get_system_info(self, mock_config):
         """Test system information gathering."""
-        with DictationService(mock_config) as service:
-            with (
-                patch.object(
-                    service.audio_recorder, "get_audio_devices"
-                ) as mock_devices,
-                patch.object(
-                    service.clipboard,
-                    "available_tools",
-                    new_callable=lambda: ["xclip", "xsel"],
-                ),
-            ):
-                mock_devices.return_value = ("default", "pulse")
+        with (
+            DictationService(mock_config) as service, patch.object(
+                service.audio_recorder, "get_audio_devices"
+            ) as mock_devices,
+            patch.object(
+                service.clipboard,
+                "available_tools",
+                new_callable=lambda: ["xclip", "xsel"],
+            ),
+        ):
+            mock_devices.return_value = ("default", "pulse")
 
-                info = service.get_system_info()
+            info = service.get_system_info()
 
-                assert "audio_devices" in info
-                assert "clipboard_tools" in info
-                assert "config" in info
+            assert "audio_devices" in info
+            assert "clipboard_tools" in info
+            assert "config" in info
 
-                assert info["audio_devices"] == ("default", "pulse")
-                assert info["clipboard_tools"] == ["xclip", "xsel"]
-                assert info["config"]["audio_sample_rate"] == 16000
-                assert info["config"]["copy_to_clipboard"] is True
-                assert info["config"]["openai_model"] == "whisper-1"
+            assert info["audio_devices"] == ("default", "pulse")
+            assert info["clipboard_tools"] == ["xclip", "xsel"]
+            assert info["config"]["audio_sample_rate"] == 16000
+            assert info["config"]["copy_to_clipboard"] is True
+            assert info["config"]["openai_model"] == "whisper-1"
 
     def test_transcript_saved_with_recording_id(
         self, mock_config, mock_transcription_result
@@ -270,45 +270,41 @@ class TestDictationService:
             patch(
                 "whisper_dictate.dictation.get_audio_storage",
                 return_value=mock_audio_storage,
-            ),
+            ),DictationService(mock_config) as service, patch.object(
+                service.audio_recorder, "record_to_file"
+            ) as mock_record,
+            patch.object(
+                service.transcriber, "transcribe_audio"
+            ) as mock_transcribe,
+            patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
         ):
-            with DictationService(mock_config) as service:
-                with (
-                    patch.object(
-                        service.audio_recorder, "record_to_file"
-                    ) as mock_record,
-                    patch.object(
-                        service.transcriber, "transcribe_audio"
-                    ) as mock_transcribe,
-                    patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
-                ):
-                    # Setup mocks
-                    mock_record.return_value = Path("/tmp/test.wav")
-                    mock_transcribe.return_value = mock_transcription_result
-                    mock_copy.return_value = True
+            # Setup mocks
+            mock_record.return_value = Path("/tmp/test.wav")
+            mock_transcribe.return_value = mock_transcription_result
+            mock_copy.return_value = True
 
-                    # Execute dictation workflow
-                    result = service.dictate()
+            # Execute dictation workflow
+            result = service.dictate()
 
-                    # Verify result
-                    assert result is not None
-                    assert result.text == "This is a test transcription."
+            # Verify result
+            assert result is not None
+            assert result.text == "This is a test transcription."
 
-                    # Verify create_recording was called
-                    mock_db.create_recording.assert_called_once()
+            # Verify create_recording was called
+            mock_db.create_recording.assert_called_once()
 
-                    # Verify create_transcript was called with the correct recording_id
-                    mock_db.create_transcript.assert_called_once_with(
-                        recording_id=42,
-                        text="This is a test transcription.",
-                        language="en",
-                        model_used="whisper-1",
-                        confidence=None,
-                    )
+            # Verify create_transcript was called with the correct recording_id
+            mock_db.create_transcript.assert_called_once_with(
+                recording_id=42,
+                text="This is a test transcription.",
+                language="en",
+                model_used="whisper-1",
+                confidence=None,
+            )
 
-                    # Verify the transcript is linked to the recording via recording_id
-                    call_args = mock_db.create_transcript.call_args
-                    assert call_args.kwargs["recording_id"] == 42
+            # Verify the transcript is linked to the recording via recording_id
+            call_args = mock_db.create_transcript.call_args
+            assert call_args.kwargs["recording_id"] == 42
 
 
 class TestDictationServiceMP3Integration:
@@ -348,42 +344,38 @@ class TestDictationServiceMP3Integration:
             patch(
                 "whisper_dictate.dictation.get_audio_storage",
                 return_value=mock_audio_storage,
-            ),
+            ),DictationService(mock_config_mp3_enabled) as service, patch.object(
+                service.audio_recorder, "record_to_file"
+            ) as mock_record,
+            patch.object(service.audio_converter, "convert") as mock_convert,
+            patch.object(
+                service.transcriber, "transcribe_audio"
+            ) as mock_transcribe,
+            patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
         ):
-            with DictationService(mock_config_mp3_enabled) as service:
-                with (
-                    patch.object(
-                        service.audio_recorder, "record_to_file"
-                    ) as mock_record,
-                    patch.object(service.audio_converter, "convert") as mock_convert,
-                    patch.object(
-                        service.transcriber, "transcribe_audio"
-                    ) as mock_transcribe,
-                    patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
-                ):
-                    # Setup mocks
-                    wav_path = Path("/tmp/test_recording.wav")
-                    mp3_path = Path("/tmp/test_recording.mp3")
-                    mock_record.return_value = wav_path
-                    mock_convert.return_value = mp3_path  # Conversion successful
-                    mock_transcribe.return_value = mock_transcription_result
-                    mock_copy.return_value = True
+            # Setup mocks
+            wav_path = Path("/tmp/test_recording.wav")
+            mp3_path = Path("/tmp/test_recording.mp3")
+            mock_record.return_value = wav_path
+            mock_convert.return_value = mp3_path  # Conversion successful
+            mock_transcribe.return_value = mock_transcription_result
+            mock_copy.return_value = True
 
-                    result = service.dictate()
+            result = service.dictate()
 
-                    # Verify result
-                    assert result is not None
-                    assert result.text == "This is a test transcription."
+            # Verify result
+            assert result is not None
+            assert result.text == "This is a test transcription."
 
-                    # Verify WAV was recorded
-                    mock_record.assert_called_once()
+            # Verify WAV was recorded
+            mock_record.assert_called_once()
 
-                    # Verify conversion was called with correct delete_source setting
-                    # keep_wav=False, so delete_source should be True
-                    mock_convert.assert_called_once_with(wav_path, delete_source=True)
+            # Verify conversion was called with correct delete_source setting
+            # keep_wav=False, so delete_source should be True
+            mock_convert.assert_called_once_with(wav_path, delete_source=True)
 
-                    # Verify MP3 was sent to transcription
-                    mock_transcribe.assert_called_once_with(mp3_path)
+            # Verify MP3 was sent to transcription
+            mock_transcribe.assert_called_once_with(mp3_path)
 
     def test_dictate_mp3_disabled_sends_wav_directly(
         self, mock_config, mock_transcription_result
@@ -413,40 +405,36 @@ class TestDictationServiceMP3Integration:
             patch(
                 "whisper_dictate.dictation.get_audio_storage",
                 return_value=mock_audio_storage,
-            ),
+            ),DictationService(mock_config) as service, patch.object(
+                service.audio_recorder, "record_to_file"
+            ) as mock_record,
+            patch.object(service.audio_converter, "convert") as mock_convert,
+            patch.object(
+                service.transcriber, "transcribe_audio"
+            ) as mock_transcribe,
+            patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
         ):
-            with DictationService(mock_config) as service:
-                with (
-                    patch.object(
-                        service.audio_recorder, "record_to_file"
-                    ) as mock_record,
-                    patch.object(service.audio_converter, "convert") as mock_convert,
-                    patch.object(
-                        service.transcriber, "transcribe_audio"
-                    ) as mock_transcribe,
-                    patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
-                ):
-                    # Setup mocks
-                    wav_path = Path("/tmp/test_recording.wav")
-                    mock_record.return_value = wav_path
-                    mock_convert.return_value = wav_path
-                    mock_transcribe.return_value = mock_transcription_result
-                    mock_copy.return_value = True
+            # Setup mocks
+            wav_path = Path("/tmp/test_recording.wav")
+            mock_record.return_value = wav_path
+            mock_convert.return_value = wav_path
+            mock_transcribe.return_value = mock_transcription_result
+            mock_copy.return_value = True
 
-                    result = service.dictate()
+            result = service.dictate()
 
-                    # Verify result
-                    assert result is not None
-                    assert result.text == "This is a test transcription."
+            # Verify result
+            assert result is not None
+            assert result.text == "This is a test transcription."
 
-                    # Verify WAV was recorded
-                    mock_record.assert_called_once()
+            # Verify WAV was recorded
+            mock_record.assert_called_once()
 
-                    # Verify conversion was NOT called (mp3_enabled=False)
-                    mock_convert.assert_not_called()
+            # Verify conversion was NOT called (mp3_enabled=False)
+            mock_convert.assert_not_called()
 
-                    # Verify WAV was sent directly to transcription
-                    mock_transcribe.assert_called_once_with(wav_path)
+            # Verify WAV was sent directly to transcription
+            mock_transcribe.assert_called_once_with(wav_path)
 
     def test_dictate_mp3_enabled_keep_wav_preserves_original(
         self, mock_config_mp3_keep_wav, mock_transcription_result
@@ -476,39 +464,35 @@ class TestDictationServiceMP3Integration:
             patch(
                 "whisper_dictate.dictation.get_audio_storage",
                 return_value=mock_audio_storage,
-            ),
+            ),DictationService(mock_config_mp3_keep_wav) as service, patch.object(
+                service.audio_recorder, "record_to_file"
+            ) as mock_record,
+            patch.object(service.audio_converter, "convert") as mock_convert,
+            patch.object(
+                service.transcriber, "transcribe_audio"
+            ) as mock_transcribe,
+            patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
         ):
-            with DictationService(mock_config_mp3_keep_wav) as service:
-                with (
-                    patch.object(
-                        service.audio_recorder, "record_to_file"
-                    ) as mock_record,
-                    patch.object(service.audio_converter, "convert") as mock_convert,
-                    patch.object(
-                        service.transcriber, "transcribe_audio"
-                    ) as mock_transcribe,
-                    patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
-                ):
-                    # Setup mocks
-                    wav_path = Path("/tmp/test_recording.wav")
-                    mp3_path = Path("/tmp/test_recording.mp3")
-                    mock_record.return_value = wav_path
-                    mock_convert.return_value = mp3_path
-                    mock_transcribe.return_value = mock_transcription_result
-                    mock_copy.return_value = True
+            # Setup mocks
+            wav_path = Path("/tmp/test_recording.wav")
+            mp3_path = Path("/tmp/test_recording.mp3")
+            mock_record.return_value = wav_path
+            mock_convert.return_value = mp3_path
+            mock_transcribe.return_value = mock_transcription_result
+            mock_copy.return_value = True
 
-                    result = service.dictate()
+            result = service.dictate()
 
-                    # Verify result
-                    assert result is not None
-                    assert result.text == "This is a test transcription."
+            # Verify result
+            assert result is not None
+            assert result.text == "This is a test transcription."
 
-                    # Verify conversion was called with delete_source=False
-                    # because keep_wav=True
-                    mock_convert.assert_called_once_with(wav_path, delete_source=False)
+            # Verify conversion was called with delete_source=False
+            # because keep_wav=True
+            mock_convert.assert_called_once_with(wav_path, delete_source=False)
 
-                    # Verify MP3 was sent to transcription
-                    mock_transcribe.assert_called_once_with(mp3_path)
+            # Verify MP3 was sent to transcription
+            mock_transcribe.assert_called_once_with(mp3_path)
 
     def test_dictate_mp3_fallback_to_wav_on_conversion_failure(
         self, mock_config_mp3_enabled, mock_transcription_result
@@ -538,38 +522,34 @@ class TestDictationServiceMP3Integration:
             patch(
                 "whisper_dictate.dictation.get_audio_storage",
                 return_value=mock_audio_storage,
-            ),
+            ),DictationService(mock_config_mp3_enabled) as service, patch.object(
+                service.audio_recorder, "record_to_file"
+            ) as mock_record,
+            patch.object(service.audio_converter, "convert") as mock_convert,
+            patch.object(
+                service.transcriber, "transcribe_audio"
+            ) as mock_transcribe,
+            patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
         ):
-            with DictationService(mock_config_mp3_enabled) as service:
-                with (
-                    patch.object(
-                        service.audio_recorder, "record_to_file"
-                    ) as mock_record,
-                    patch.object(service.audio_converter, "convert") as mock_convert,
-                    patch.object(
-                        service.transcriber, "transcribe_audio"
-                    ) as mock_transcribe,
-                    patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
-                ):
-                    # Setup mocks
-                    wav_path = Path("/tmp/test_recording.wav")
-                    mock_record.return_value = wav_path
-                    # Conversion returns WAV when it fails (graceful fallback)
-                    mock_convert.return_value = wav_path
-                    mock_transcribe.return_value = mock_transcription_result
-                    mock_copy.return_value = True
+            # Setup mocks
+            wav_path = Path("/tmp/test_recording.wav")
+            mock_record.return_value = wav_path
+            # Conversion returns WAV when it fails (graceful fallback)
+            mock_convert.return_value = wav_path
+            mock_transcribe.return_value = mock_transcription_result
+            mock_copy.return_value = True
 
-                    result = service.dictate()
+            result = service.dictate()
 
-                    # Verify result
-                    assert result is not None
-                    assert result.text == "This is a test transcription."
+            # Verify result
+            assert result is not None
+            assert result.text == "This is a test transcription."
 
-                    # Verify conversion was called
-                    mock_convert.assert_called_once()
+            # Verify conversion was called
+            mock_convert.assert_called_once()
 
-                    # Verify WAV was sent to transcription (fallback)
-                    mock_transcribe.assert_called_once_with(wav_path)
+            # Verify WAV was sent to transcription (fallback)
+            mock_transcribe.assert_called_once_with(wav_path)
 
     def test_dictate_records_correct_format_in_database(
         self, mock_config_mp3_enabled, mock_transcription_result
@@ -599,39 +579,35 @@ class TestDictationServiceMP3Integration:
             patch(
                 "whisper_dictate.dictation.get_audio_storage",
                 return_value=mock_audio_storage,
-            ),
+            ),DictationService(mock_config_mp3_enabled) as service, patch.object(
+                service.audio_recorder, "record_to_file"
+            ) as mock_record,
+            patch.object(service.audio_converter, "convert") as mock_convert,
+            patch.object(
+                service.transcriber, "transcribe_audio"
+            ) as mock_transcribe,
+            patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
         ):
-            with DictationService(mock_config_mp3_enabled) as service:
-                with (
-                    patch.object(
-                        service.audio_recorder, "record_to_file"
-                    ) as mock_record,
-                    patch.object(service.audio_converter, "convert") as mock_convert,
-                    patch.object(
-                        service.transcriber, "transcribe_audio"
-                    ) as mock_transcribe,
-                    patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
-                ):
-                    # Setup mocks
-                    wav_path = Path("/tmp/test_recording.wav")
-                    mp3_path = Path("/tmp/test_recording.mp3")
-                    mock_record.return_value = wav_path
-                    mock_convert.return_value = mp3_path
-                    mock_transcribe.return_value = mock_transcription_result
-                    mock_copy.return_value = True
+            # Setup mocks
+            wav_path = Path("/tmp/test_recording.wav")
+            mp3_path = Path("/tmp/test_recording.mp3")
+            mock_record.return_value = wav_path
+            mock_convert.return_value = mp3_path
+            mock_transcribe.return_value = mock_transcription_result
+            mock_copy.return_value = True
 
-                    result = service.dictate()
+            result = service.dictate()
 
-                    # Verify result
-                    assert result is not None
+            # Verify result
+            assert result is not None
 
-                    # Verify create_recording was called with format='mp3'
-                    mock_db.create_recording.assert_called_once()
-                    call_kwargs = mock_db.create_recording.call_args.kwargs
-                    assert call_kwargs["format"] == "mp3"
-                    assert call_kwargs["duration"] == 1.0
-                    assert call_kwargs["sample_rate"] == 16000
-                    assert call_kwargs["channels"] == 1
+            # Verify create_recording was called with format='mp3'
+            mock_db.create_recording.assert_called_once()
+            call_kwargs = mock_db.create_recording.call_args.kwargs
+            assert call_kwargs["format"] == "mp3"
+            assert call_kwargs["duration"] == 1.0
+            assert call_kwargs["sample_rate"] == 16000
+            assert call_kwargs["channels"] == 1
 
 
 class TestDictationServiceSilenceDetection:
@@ -639,7 +615,7 @@ class TestDictationServiceSilenceDetection:
 
     def test_dictate_silent_skips_clipboard(self, mock_config, mock_silent_transcription_result):
         """Test that silent audio skips clipboard copy."""
-        with DictationService(mock_config) as service:
+        with DictationService(mock_config) as service:  # noqa: SIM117
             with (
                 patch.object(service.audio_recorder, "record_to_file") as mock_record,
                 patch.object(service.transcriber, "transcribe_audio") as mock_transcribe,
@@ -647,9 +623,9 @@ class TestDictationServiceSilenceDetection:
             ):
                 mock_record.return_value = Path("/tmp/test.wav")
                 mock_transcribe.return_value = mock_silent_transcription_result
-                
+
                 result = service.dictate()
-                
+
                 # Should NOT copy to clipboard
                 mock_copy.assert_not_called()
                 assert result.silence_detected is True
@@ -665,13 +641,13 @@ class TestDictationServiceSilenceDetection:
         mock_db.create_log = Mock(return_value=1)
         mock_db.connection = Mock()
         mock_db.close = Mock()
-        
+
         mock_audio_storage = MagicMock()
         mock_audio_storage.save_audio.return_value = (Path("/saved/test.wav"), "test.wav")
         mock_audio_storage.recordings_path = Path("/recordings")
         mock_audio_storage.check_disk_space.return_value = (True, 500)
-        
-        with (
+
+        with (  # noqa: SIM117
             patch("whisper_dictate.dictation.get_database", return_value=mock_db),
             patch("whisper_dictate.dictation.get_audio_storage", return_value=mock_audio_storage),
         ):
@@ -683,14 +659,14 @@ class TestDictationServiceSilenceDetection:
                 ):
                     mock_record.return_value = Path("/tmp/test.wav")
                     mock_transcribe.return_value = mock_silent_transcription_result
-                    
-                    result = service.dictate()
-                    
+
+                    service.dictate()
+
                     # Should store empty transcript
                     mock_db.create_transcript.assert_called_once()
                     call_kwargs = mock_db.create_transcript.call_args.kwargs
                     assert call_kwargs["text"] == ""
-                    
+
                     # Should NOT copy to clipboard
                     mock_copy.assert_not_called()
 
@@ -705,13 +681,13 @@ class TestDictationServiceSilenceDetection:
         mock_db.create_log = Mock(return_value=1)
         mock_db.connection = Mock()
         mock_db.close = Mock()
-        
+
         mock_audio_storage = MagicMock()
         mock_audio_storage.save_audio.return_value = (Path("/saved/test.wav"), "test.wav")
         mock_audio_storage.recordings_path = Path("/recordings")
         mock_audio_storage.check_disk_space.return_value = (True, 500)
-        
-        with (
+
+        with (  # noqa: SIM117
             patch("whisper_dictate.dictation.get_database", return_value=mock_db),
             patch("whisper_dictate.dictation.get_audio_storage", return_value=mock_audio_storage),
         ):
@@ -722,9 +698,9 @@ class TestDictationServiceSilenceDetection:
                 ):
                     mock_record.return_value = Path("/tmp/test.wav")
                     mock_transcribe.return_value = mock_silent_transcription_result
-                    
-                    result = service.dictate()
-                    
+
+                    service.dictate()
+
                     # Should log silence detection
                     mock_db.create_log.assert_called()
                     log_call = mock_db.create_log.call_args
@@ -741,13 +717,13 @@ class TestDictationServiceSilenceDetection:
         mock_db.create_log = Mock(return_value=1)
         mock_db.connection = Mock()
         mock_db.close = Mock()
-        
+
         mock_audio_storage = MagicMock()
         mock_audio_storage.save_audio.return_value = (Path("/saved/test.wav"), "test.wav")
         mock_audio_storage.recordings_path = Path("/recordings")
         mock_audio_storage.check_disk_space.return_value = (True, 500)
-        
-        with (
+
+        with (  # noqa: SIM117
             patch("whisper_dictate.dictation.get_database", return_value=mock_db),
             patch("whisper_dictate.dictation.get_audio_storage", return_value=mock_audio_storage),
         ):
@@ -760,9 +736,9 @@ class TestDictationServiceSilenceDetection:
                     mock_record.return_value = Path("/tmp/test.wav")
                     mock_transcribe.return_value = mock_transcription_result
                     mock_copy.return_value = True
-                    
+
                     result = service.dictate()
-                    
+
                     # Should copy to clipboard
                     mock_copy.assert_called_once_with("This is a test transcription.")
                     assert result.silence_detected is False

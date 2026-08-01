@@ -682,9 +682,9 @@ whisper-dictate migrate --force
    - `transcription.py` - Whisper API abstraction and provider implementations
   - `notifications.py` - System notifications
   - `clipboard.py` - Clipboard integration
-- **`setup.py`** - Package installation configuration
-- **`main.py`** - CLI entry point script
-- **`.env`** - Environment configuration
+  - `__main__.py` - CLI entry point (invoked via `python -m whisper_dictate`)
+- **`pyproject.toml`** - Package installation and build configuration
+- **`.env.example`** - Environment configuration template
 
 ---
 

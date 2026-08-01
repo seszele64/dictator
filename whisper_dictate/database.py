@@ -9,12 +9,12 @@ Provides SQLite database operations using sqlite3 with:
 
 import json
 import logging
+import sqlite3
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, Optional
-
-import sqlite3
+from typing import Any
 
 from whisper_dictate.config import DatabaseConfig
 
@@ -39,7 +39,7 @@ class Database:
         """
         self._config = config
         self._db_path = config.get_database_path()
-        self._connection: Optional[sqlite3.Connection] = None
+        self._connection: sqlite3.Connection | None = None
         self._lock = threading.Lock()
         self._initialized: bool = False  # Track initialization state
 
@@ -175,7 +175,7 @@ class Database:
         with self.connection() as conn:
             conn.executemany(query, parameters)
 
-    def fetchone(self, query: str, parameters: tuple = ()) -> Optional[tuple]:
+    def fetchone(self, query: str, parameters: tuple = ()) -> tuple | None:
         """Execute a query and fetch one result.
 
         Args:
@@ -444,10 +444,10 @@ class Database:
     def create_recording(
         self,
         file_path: str,
-        duration: Optional[float] = None,
+        duration: float | None = None,
         format: str = "wav",
-        sample_rate: Optional[int] = None,
-        channels: Optional[int] = None,
+        sample_rate: int | None = None,
+        channels: int | None = None,
     ) -> int:
         """Create a new recording entry.
 
@@ -471,7 +471,7 @@ class Database:
             )
             return cursor.lastrowid or 0
 
-    def get_recording(self, recording_id: int) -> Optional[dict[str, Any]]:
+    def get_recording(self, recording_id: int) -> dict[str, Any] | None:
         """Get a recording by ID.
 
         Args:
@@ -500,7 +500,7 @@ class Database:
 
     def get_recording_with_audio_path(
         self, recording_id: int, verify_exists: bool = False
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get a recording by ID with resolved absolute audio path.
 
         Args:
@@ -536,8 +536,8 @@ class Database:
         """
         rows = self.fetchall(
             """
-            SELECT * FROM recordings 
-            ORDER BY timestamp DESC 
+            SELECT * FROM recordings
+            ORDER BY timestamp DESC
             LIMIT ? OFFSET ?
             """,
             (limit, offset),
@@ -578,9 +578,9 @@ class Database:
         self,
         recording_id: int,
         text: str,
-        language: Optional[str] = None,
+        language: str | None = None,
         model_used: str = "whisper-1",
-        confidence: Optional[float] = None,
+        confidence: float | None = None,
     ) -> int:
         """Create a new transcript entry.
 
@@ -597,7 +597,7 @@ class Database:
         with self.connection() as conn:
             cursor = conn.execute(
                 """
-                INSERT INTO transcripts 
+                INSERT INTO transcripts
                 (recording_id, text, language, model_used, confidence)
                 VALUES (?, ?, ?, ?, ?)
                 """,
@@ -605,7 +605,7 @@ class Database:
             )
             return cursor.lastrowid or 0
 
-    def get_transcript(self, transcript_id: int) -> Optional[dict[str, Any]]:
+    def get_transcript(self, transcript_id: int) -> dict[str, Any] | None:
         """Get a transcript by ID.
 
         Args:
@@ -634,7 +634,7 @@ class Database:
 
     def get_transcript_by_recording(
         self, recording_id: int
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get transcript for a recording.
 
         Args:
@@ -707,7 +707,7 @@ class Database:
         ]
 
     def list_transcriptions(
-        self, limit: int = 50, date: Optional[str] = None
+        self, limit: int = 50, date: str | None = None
     ) -> list[dict[str, Any]]:
         """List transcriptions with optional date filtering and pagination.
 
@@ -765,7 +765,7 @@ class Database:
 
     def get_transcription_with_recording(
         self, transcript_id: int
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get a transcript with full recording details by transcript ID.
 
         Args:
@@ -807,7 +807,7 @@ class Database:
         self,
         transcript_id: int,
         text: str,
-        language: Optional[str] = None,
+        language: str | None = None,
     ) -> bool:
         """Update a transcript's text and optionally language.
 
@@ -844,8 +844,8 @@ class Database:
         self,
         level: str,
         message: str,
-        source: Optional[str] = None,
-        metadata: Optional[dict] = None,
+        source: str | None = None,
+        metadata: dict | None = None,
     ) -> int:
         """Create a new log entry.
 
@@ -872,10 +872,10 @@ class Database:
 
     def query_logs(
         self,
-        level: Optional[str] = None,
-        source: Optional[str] = None,
-        from_time: Optional[str] = None,
-        to_time: Optional[str] = None,
+        level: str | None = None,
+        source: str | None = None,
+        from_time: str | None = None,
+        to_time: str | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         """Query logs with filters.
@@ -933,14 +933,14 @@ class Database:
                 """
                 INSERT INTO state (key, value_json, updated_at)
                 VALUES (?, ?, datetime('now'))
-                ON CONFLICT(key) DO UPDATE SET 
+                ON CONFLICT(key) DO UPDATE SET
                     value_json = excluded.value_json,
                     updated_at = datetime('now')
                 """,
                 (key, value_json),
             )
 
-    def get_state(self, key: str) -> Optional[Any]:
+    def get_state(self, key: str) -> Any | None:
         """Get a state value.
 
         Args:
@@ -980,12 +980,11 @@ class Database:
         with self.connection() as conn:
             cursor = conn.execute(
                 """
-                DELETE FROM logs 
+                DELETE FROM logs
                 WHERE timestamp < datetime('now', ?)
                 """,
                 (f"-{retention_days} days",),
             )
-            conn.commit()
             deleted = cursor.rowcount
 
         if deleted > 0:
@@ -1008,14 +1007,14 @@ class Database:
         Returns:
             dict: Row as dictionary
         """
-        return dict(zip(columns, row))
+        return dict(zip(columns, row, strict=False))
 
 
 # Global database instance
-_database: Optional[Database] = None
+_database: Database | None = None
 
 
-def get_database(config: Optional[DatabaseConfig] = None) -> Database:
+def get_database(config: DatabaseConfig | None = None) -> Database:
     """Get or create the global database instance.
 
     Args:
@@ -1034,7 +1033,7 @@ def get_database(config: Optional[DatabaseConfig] = None) -> Database:
     return _database
 
 
-def initialize_database(config: Optional[DatabaseConfig] = None) -> Database:
+def initialize_database(config: DatabaseConfig | None = None) -> Database:
     """Initialize the database.
 
     Args:

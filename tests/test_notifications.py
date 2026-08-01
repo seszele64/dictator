@@ -1,24 +1,19 @@
 """Tests for notification functionality."""
 
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 from whisper_dictate.notifications import (
-    _load_notification_id,
-    send_notification,
-    notify_recording_started,
-    notify_recording_stopped,
-    notify_error,
-    notify_info,
-    notify_stopping_transcription,
     PersistentNotification,
+    is_dunstify_available,
+    notify_error,
     notify_recording_persistent_start,
     notify_recording_persistent_start_blocking,
-    notify_recording_persistent_update,
     notify_recording_persistent_stop,
-    is_dunstify_available,
+    notify_recording_persistent_update,
+    notify_recording_stopped,
+    notify_stopping_transcription,
+    send_notification,
 )
 
 
@@ -137,21 +132,6 @@ class TestSendNotification(unittest.TestCase):
 class TestNotificationHelpers:
     """Test the notification helper functions."""
 
-    def test_notify_recording_started(self):
-        """Test recording started notification."""
-        with patch("whisper_dictate.notifications.send_notification") as mock_send:
-            mock_send.return_value = True
-
-            result = notify_recording_started()
-            assert result is True
-
-            mock_send.assert_called_once_with(
-                summary="Dictation",
-                body="Recording started... press again to stop",
-                urgency="normal",
-                timeout=3000,
-            )
-
     def test_notify_recording_stopped_without_preview(self):
         """Test recording stopped notification without text preview."""
         with patch("whisper_dictate.notifications.send_notification") as mock_send:
@@ -217,21 +197,6 @@ class TestNotificationHelpers:
                 timeout=10000,
             )
 
-    def test_notify_info(self):
-        """Test info notification."""
-        with patch("whisper_dictate.notifications.send_notification") as mock_send:
-            mock_send.return_value = True
-
-            result = notify_info("Information message")
-            assert result is True
-
-            mock_send.assert_called_once_with(
-                summary="Dictation",
-                body="Information message",
-                urgency="low",
-                timeout=3000,
-            )
-
     def test_notify_stopping_transcription(self):
         """Test stopping transcription notification."""
         with patch("whisper_dictate.notifications.send_notification") as mock_send:
@@ -252,10 +217,8 @@ class TestNotificationHelpers:
         with patch("whisper_dictate.notifications.send_notification") as mock_send:
             mock_send.return_value = False
 
-            assert notify_recording_started() is False
             assert notify_recording_stopped() is False
             assert notify_error("test") is False
-            assert notify_info("test") is False
             assert notify_stopping_transcription() is False
 
 
@@ -643,59 +606,6 @@ class TestPersistentNotification(unittest.TestCase):
         assert result is None
         assert notification._consecutive_failures == 1
         assert "empty" in cm.output[0].lower()
-
-
-class TestLoadNotificationId(unittest.TestCase):
-    """Test the _load_notification_id function."""
-
-    def test_load_notification_id_empty_file(self):
-        """Test loading notification ID when file exists but is empty."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix="_notification_id", delete=False
-        ) as f:
-            f.write("")
-            empty_file = f.name
-
-        try:
-            with patch(
-                "whisper_dictate.notifications.NOTIFICATION_ID_FILE", Path(empty_file)
-            ):
-                with self.assertLogs(
-                    "whisper_dictate.notifications", level="WARNING"
-                ) as cm:
-                    result = _load_notification_id()
-
-            assert result is None
-            assert any("empty" in log.lower() for log in cm.output)
-        finally:
-            import os
-
-            os.unlink(empty_file)
-
-    def test_load_notification_id_file_with_only_whitespace(self):
-        """Test loading notification ID when file contains only whitespace."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix="_notification_id", delete=False
-        ) as f:
-            f.write("   \n   ")
-            whitespace_file = f.name
-
-        try:
-            with patch(
-                "whisper_dictate.notifications.NOTIFICATION_ID_FILE",
-                Path(whitespace_file),
-            ):
-                with self.assertLogs(
-                    "whisper_dictate.notifications", level="WARNING"
-                ) as cm:
-                    result = _load_notification_id()
-
-            assert result is None
-            assert any("empty" in log.lower() for log in cm.output)
-        finally:
-            import os
-
-            os.unlink(whitespace_file)
 
 
 class TestPersistentNotificationHelpers:

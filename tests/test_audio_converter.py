@@ -1,11 +1,13 @@
 """Tests for audio converter functionality."""
 
-import pytest
+import contextlib
+import os
 import sys
+import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
-import tempfile
-import os
+
+import pytest
 
 
 # Create mock pydub module for testing
@@ -213,14 +215,10 @@ class TestAudioConverter:
             assert result.exists()
         finally:
             # Cleanup
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(wav_path_str)
-            except OSError:
-                pass
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(mp3_path_str)
-            except OSError:
-                pass
 
     def test_convert_and_keep_wav_method(self, temp_audio_file):
         """Test convert_and_keep_wav convenience method."""
@@ -443,14 +441,10 @@ class TestFileSizeReduction:
                 MockAudioSegment.export = original_export
         finally:
             # Cleanup
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(wav_path)
-            except OSError:
-                pass
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(str(wav_path.with_suffix(".mp3")))
-            except OSError:
-                pass
 
     def test_lower_bitrate_produces_smaller_files(self):
         """Test that lower bitrate produces smaller MP3 files.
@@ -506,10 +500,8 @@ class TestFileSizeReduction:
             )
         finally:
             MockAudioSegment.export = original_export
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(wav_path)
-            except OSError:
-                pass
 
 
 class TestTranscriptionQualityEquivalence:
@@ -525,8 +517,7 @@ class TestTranscriptionQualityEquivalence:
         This is a unit test that mocks the OpenAI API to verify
         that both formats are processed identically.
         """
-        from whisper_dictate.transcription import WhisperTranscriber
-        from whisper_dictate.config import OpenAIConfig
+        from whisper_dictate.providers.openai_compatible import OpenAICompatibleProvider
 
         # Create test audio files
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as wav_tmp:
@@ -547,8 +538,8 @@ class TestTranscriptionQualityEquivalence:
                 mock_client_class.return_value = mock_client
                 mock_client.audio.transcriptions.create.return_value = mock_response
 
-                config = OpenAIConfig(api_key="test-key")
-                transcriber = WhisperTranscriber(config, client=mock_client)
+                transcriber = OpenAICompatibleProvider(api_key="test-key", silence_threshold_dbfs=None)
+                transcriber._client = mock_client
 
                 # Transcribe both WAV and MP3
                 wav_result = transcriber.transcribe_audio(wav_path)
@@ -565,23 +556,18 @@ class TestTranscriptionQualityEquivalence:
                 assert mock_client.audio.transcriptions.create.call_count == 2
         finally:
             # Cleanup
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(wav_path)
-            except OSError:
-                pass
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(mp3_path)
-            except OSError:
-                pass
 
     def test_whisper_api_supports_mp3_natively(self):
-        """Test that WhisperTranscriber can accept MP3 files directly.
+        """Test that OpenAICompatibleProvider can accept MP3 files directly.
 
         This verifies that the transcribe_audio method doesn't require
         any format conversion before sending to the API.
         """
-        from whisper_dictate.transcription import WhisperTranscriber
-        from whisper_dictate.config import OpenAIConfig
+        from whisper_dictate.providers.openai_compatible import OpenAICompatibleProvider
 
         # Create a fake MP3 file
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as mp3_tmp:
@@ -600,8 +586,8 @@ class TestTranscriptionQualityEquivalence:
                 mock_client_class.return_value = mock_client
                 mock_client.audio.transcriptions.create.return_value = mock_response
 
-                config = OpenAIConfig(api_key="test-key")
-                transcriber = WhisperTranscriber(config, client=mock_client)
+                transcriber = OpenAICompatibleProvider(api_key="test-key", silence_threshold_dbfs=None)
+                transcriber._client = mock_client
 
                 # Should not raise any error - MP3 should be supported directly
                 result = transcriber.transcribe_audio(mp3_path)
@@ -615,7 +601,5 @@ class TestTranscriptionQualityEquivalence:
                 call_kwargs = mock_client.audio.transcriptions.create.call_args
                 assert call_kwargs is not None
         finally:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(mp3_path)
-            except OSError:
-                pass

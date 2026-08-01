@@ -24,11 +24,16 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "sounddevice>=0.4.6",
     "soundfile>=0.12.1",
-    "pytest-timeout>=2.2.0",
 ]
 
 [project.scripts]
 whisper-dictate = "whisper_dictate.cli:cli"
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6.0",
+    "pytest-timeout>=2.2.0",
+]
 
 [tool.pytest.ini_options]
 timeout = 30
@@ -51,3 +56,10 @@ exclude_lines = [
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]

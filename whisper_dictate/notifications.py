@@ -43,55 +43,15 @@ import logging
 import shutil
 import subprocess
 import time
-from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 # Stack tag for recording notifications - replaces ID-based persistence
 # Using stack tags is the recommended approach by dunst maintainers
 # as it works across process invocations and avoids ID tracking issues
 RECORDING_STACK_TAG = "whisper-dictate-recording"
 
-# File to persist notification ID between script invocations (DEPRECATED)
-# NOTE: This is kept for backward compatibility but is no longer used.
-# Stack tags provide a more reliable solution that works across processes.
-NOTIFICATION_ID_FILE = Path.home() / ".whisper-dictate-notification-id"
-
 # Set up module-level logger
 logger = logging.getLogger(__name__)
-
-
-def _save_notification_id(notification_id: str) -> None:
-    """Save notification ID to file for persistence across script invocations."""
-    try:
-        NOTIFICATION_ID_FILE.write_text(notification_id)
-    except Exception as e:
-        logger.warning(f"Failed to save notification ID: {e}")
-
-
-def _load_notification_id() -> Optional[str]:
-    """Load notification ID from file."""
-    try:
-        if NOTIFICATION_ID_FILE.exists():
-            content = NOTIFICATION_ID_FILE.read_text().strip()
-            lines = content.splitlines()
-            if lines:
-                return lines[0]
-            else:
-                logger.warning(
-                    f"Notification ID file exists but is empty: {NOTIFICATION_ID_FILE}"
-                )
-    except Exception as e:
-        logger.warning(f"Failed to load notification ID: {e}")
-    return None
-
-
-def _clear_notification_id() -> None:
-    """Clear saved notification ID."""
-    try:
-        if NOTIFICATION_ID_FILE.exists():
-            NOTIFICATION_ID_FILE.unlink()
-    except Exception as e:
-        logger.warning(f"Failed to clear notification ID: {e}")
 
 
 def notify_recording_start() -> bool:
@@ -213,68 +173,6 @@ def is_dunstify_available() -> bool:
     return shutil.which("dunstify") is not None
 
 
-def send_dunstify(
-    summary: str,
-    body: str = "",
-    urgency: UrgencyLevel = "normal",
-    timeout: TimeoutMs = 0,
-) -> Optional[str]:
-    """
-    Send a notification using dunstify with fallback to notify-send.
-
-    RESPONSIBILITY: Send a desktop notification, preferring dunstify for
-    persistent notifications (timeout=0) but falling back to notify-send.
-
-    DOES:
-    - Use dunstify when available for better persistent notification support
-    - Fall back to notify-send if dunstify is not installed
-    - Return notification ID from dunstify if available
-
-    DOES NOT:
-    - Queue notifications
-    - Handle notification server unavailability
-
-    Args:
-        summary: The notification title/summary text
-        body: Optional detailed message body
-        urgency: Notification urgency level ("low", "normal", or "critical")
-        timeout: Display duration in milliseconds (0 for persistent)
-
-    Returns:
-        Optional[str]: Notification ID if dunstify was used and returned one,
-                       None otherwise or on error
-    """
-    try:
-        dunstify_available = is_dunstify_available()
-        if dunstify_available:
-            cmd = ["dunstify", "-u", urgency, "-t", str(timeout), summary, body]
-        else:
-            logger.warning("dunstify not available, falling back to notify-send")
-            cmd = ["notify-send", "-u", urgency, "-t", str(timeout), summary, body]
-
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-
-        if result.returncode != 0:
-            logger.error(
-                "Notification failed: %s",
-                result.stderr.strip() if result.stderr else "unknown error",
-            )
-            return None
-
-        # dunstify returns the notification ID in stdout
-        if dunstify_available and result.stdout.strip():
-            return result.stdout.strip()
-
-        return None
-
-    except FileNotFoundError as e:
-        logger.error("Notification command not found: %s", e)
-        return None
-    except Exception as e:
-        logger.error("Failed to send notification: %s", e)
-        return None
-
-
 def send_notification(
     summary: str,
     body: str = "",
@@ -338,23 +236,6 @@ def send_notification(
         return False
 
 
-def notify_recording_started() -> bool:
-    """
-    WHY THIS EXISTS: Standardized notification for when recording begins.
-
-    RESPONSIBILITY: Send a consistent "recording started" notification.
-
-    Returns:
-        bool: True if notification sent successfully
-    """
-    return send_notification(
-        summary="Dictation",
-        body="Recording started... press again to stop",
-        urgency="normal",
-        timeout=3000,
-    )
-
-
 def notify_recording_stopped(text_preview: str = "") -> bool:
     """
     WHY THIS EXISTS: Standardized notification for when recording stops.
@@ -370,10 +251,9 @@ def notify_recording_stopped(text_preview: str = "") -> bool:
     """
     body = "Recording stopped and processing..."
     if text_preview:
-        if len(text_preview) > 52:
-            preview = text_preview[:49] + "..."  # 49 + 3 = 52 total
-        else:
-            preview = text_preview
+        preview = (
+            text_preview[:49] + "..." if len(text_preview) > 52 else text_preview
+        )  # 49 + 3 = 52 total
         body = f"Transcription: {preview}"
 
     return send_notification(
@@ -395,23 +275,6 @@ def notify_error(error_message: str) -> bool:
     """
     return send_notification(
         summary="Dictation Error", body=error_message, urgency="critical", timeout=10000
-    )
-
-
-def notify_info(info_message: str) -> bool:
-    """
-    WHY THIS EXISTS: Standardized info notifications for non-critical feedback.
-
-    RESPONSIBILITY: Send a consistent informational notification.
-
-    Args:
-        info_message: The information message to display
-
-    Returns:
-        bool: True if notification sent successfully
-    """
-    return send_notification(
-        summary="Dictation", body=info_message, urgency="low", timeout=3000
     )
 
 
@@ -475,7 +338,7 @@ class PersistentNotification:
     def __init__(self, stack_tag: str = "dictation-recording"):
         """Initialize the persistent notification manager."""
         self.stack_tag = stack_tag
-        self.notification_id: Optional[str] = None
+        self.notification_id: str | None = None
         self._is_active: bool = False
         self.summary: str = "Dictation"
         self.urgency: UrgencyLevel = "critical"
@@ -490,7 +353,7 @@ class PersistentNotification:
         body: str,
         urgency: UrgencyLevel = "critical",
         wait_for_action: bool = False,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Send a persistent notification with -t 0 for indefinite display.
 
         EDGE CASE 1: Multiple Rapid Start/Stop
@@ -570,7 +433,6 @@ class PersistentNotification:
             # T5b: Handle action callback
             # When user clicks action button, dunstify returns the action name
             # The output could be either notification ID or action name
-            output = result.stdout.strip().splitlines()[0]
 
             if result.returncode == 0 and output:
                 # Check if this is an action response (e.g., "stop")
@@ -579,7 +441,6 @@ class PersistentNotification:
                     logger.info("User clicked Stop Recording action")
                     # Close the notification and signal stop
                     self.close()
-                    _clear_notification_id()
                     return "stop"
 
                 # Normal notification ID
@@ -606,7 +467,7 @@ class PersistentNotification:
             )
             return None
 
-    def update(self, body: str) -> Optional[str]:
+    def update(self, body: str) -> str | None:
         """Update the notification body using notification ID.
 
         EDGE CASE: Notification Daemon Crash During Recording
@@ -705,7 +566,7 @@ class PersistentNotification:
 
 
 # Module-level instance for recording notifications
-_recording_notification: Optional[PersistentNotification] = None
+_recording_notification: PersistentNotification | None = None
 
 
 def notify_recording_persistent_start() -> bool:
@@ -728,12 +589,10 @@ def notify_recording_persistent_start() -> bool:
         body="Recording in progress... press again to stop\n"
         "Or use context menu (Ctrl+Shift+.) to stop",
     )
-    if result:
-        _save_notification_id(result)
     return result is not None
 
 
-def notify_recording_persistent_start_blocking() -> Optional[str]:
+def notify_recording_persistent_start_blocking() -> str | None:
     """Send a persistent notification and wait for user to click stop action.
 
     T5b IMPLEMENTATION: This function sends a persistent notification with
@@ -758,11 +617,8 @@ def notify_recording_persistent_start_blocking() -> Optional[str]:
     # If user clicked stop action, result will be "stop"
     if result == "stop":
         _recording_notification = None
-        _clear_notification_id()
         return "stop"
 
-    if result:
-        _save_notification_id(result)
     return result
 
 
@@ -783,25 +639,12 @@ def notify_recording_persistent_stop() -> bool:
         f"notify_recording_persistent_stop called: _recording_notification={_recording_notification}"
     )
 
-    # If no active notification object but we have a saved ID, try to close it
-    if not _recording_notification or not _recording_notification._is_active:
-        saved_id = _load_notification_id()
-        if saved_id:
-            logger.info(f"Found saved notification ID: {saved_id}, attempting to close")
-            # Create a temporary notification object to close it
-            temp_notification = PersistentNotification()
-            temp_notification.notification_id = saved_id
-            temp_notification._is_active = True
-            result = temp_notification.close()
-            _clear_notification_id()
-            return result
-
     if _recording_notification and _recording_notification._is_active:
         result = _recording_notification.close()
         _recording_notification = None
-        _clear_notification_id()
         return result
+
     logger.warning(
-        "No notification ID found - cannot close notification (may have already been dismissed)"
+        "No active notification to close (may have already been dismissed)"
     )
     return False

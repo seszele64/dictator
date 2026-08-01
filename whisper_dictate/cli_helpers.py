@@ -1,8 +1,9 @@
 """Helper functions and decorators for CLI commands."""
 
 import click
-from whisper_dictate.database import get_database
+
 from whisper_dictate.config import DatabaseConfig
+from whisper_dictate.database import get_database
 
 
 def with_database(f):

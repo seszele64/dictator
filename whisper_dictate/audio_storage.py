@@ -15,7 +15,6 @@ import shutil
 import string
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple
 
 from whisper_dictate.config import DatabaseConfig
 
@@ -30,7 +29,7 @@ DEFAULT_MIN_FREE_SPACE_MB = 100
 
 def check_disk_space(
     path: Path, min_free_mb: int = DEFAULT_MIN_FREE_SPACE_MB
-) -> Tuple[bool, int]:
+) -> tuple[bool, int]:
     """Check available disk space on the filesystem containing the given path.
 
     Args:
@@ -81,7 +80,7 @@ def _generate_random_suffix(length: int = RANDOM_SUFFIX_LENGTH) -> str:
 
 
 def _generate_unique_filename(
-    timestamp: Optional[datetime] = None, suffix: str = "wav"
+    timestamp: datetime | None = None, suffix: str = "wav"
 ) -> str:
     """Generate a unique filename with timestamp and random suffix.
 
@@ -101,7 +100,7 @@ def _generate_unique_filename(
     return f"{date_part}_{random_part}.{suffix}"
 
 
-def _get_date_based_path(base_path: Path, timestamp: Optional[datetime] = None) -> Path:
+def _get_date_based_path(base_path: Path, timestamp: datetime | None = None) -> Path:
     """Get the date-based directory path for a recording.
 
     Creates directory structure: base_path/YYYY/MM/DD/
@@ -136,7 +135,7 @@ class AudioStorage:
     - DOES NOT: Handle transcription, database operations, or audio recording
     """
 
-    def __init__(self, config: Optional[DatabaseConfig] = None):
+    def __init__(self, config: DatabaseConfig | None = None):
         """Initialize audio storage with configuration.
 
         Args:
@@ -160,7 +159,7 @@ class AudioStorage:
 
     def check_disk_space(
         self, min_free_mb: int = DEFAULT_MIN_FREE_SPACE_MB
-    ) -> Tuple[bool, int]:
+    ) -> tuple[bool, int]:
         """Check available disk space for the recordings directory.
 
         Args:
@@ -203,7 +202,7 @@ class AudioStorage:
                 "recordings_path": str(self._recordings_path),
             }
 
-    def get_recording_path(self, recording_id: int) -> Optional[Path]:
+    def get_recording_path(self, recording_id: int) -> Path | None:
         """Get the absolute path for a recording by ID.
 
         Args:
@@ -226,7 +225,7 @@ class AudioStorage:
         logger.debug(f"Ensured directory exists: {directory}")
 
     def get_date_directory(
-        self, timestamp: Optional[datetime] = None, create: bool = True
+        self, timestamp: datetime | None = None, create: bool = True
     ) -> Path:
         """Get the date-based directory for a recording.
 
@@ -245,7 +244,7 @@ class AudioStorage:
         return directory
 
     def generate_storage_path(
-        self, timestamp: Optional[datetime] = None, suffix: str = "wav"
+        self, timestamp: datetime | None = None, suffix: str = "wav"
     ) -> tuple[Path, str]:
         """Generate a unique storage path for a new recording.
 
@@ -268,7 +267,7 @@ class AudioStorage:
     def save_audio(
         self,
         source_path: Path,
-        timestamp: Optional[datetime] = None,
+        timestamp: datetime | None = None,
         suffix: str = "wav",
     ) -> tuple[Path, str]:
         """Save an audio file from temporary storage to persistent storage.
@@ -303,7 +302,7 @@ class AudioStorage:
             logger.info(f"Audio saved to: {dest_path}")
         except Exception as e:
             logger.error(f"Failed to save audio file: {e}")
-            raise IOError(f"Failed to move audio file: {e}") from e
+            raise OSError(f"Failed to move audio file: {e}") from e
 
         # Return full path and relative path from recordings root
         relative_path = dest_path.relative_to(self._recordings_path)
@@ -312,7 +311,7 @@ class AudioStorage:
     def copy_audio(
         self,
         source_path: Path,
-        timestamp: Optional[datetime] = None,
+        timestamp: datetime | None = None,
         suffix: str = "wav",
     ) -> tuple[Path, str]:
         """Copy an audio file to persistent storage (keeps original).
@@ -344,7 +343,7 @@ class AudioStorage:
             logger.info(f"Audio copied to: {dest_path}")
         except Exception as e:
             logger.error(f"Failed to copy audio file: {e}")
-            raise IOError(f"Failed to copy audio file: {e}") from e
+            raise OSError(f"Failed to copy audio file: {e}") from e
 
         # Return full path and relative path from recordings root
         relative_path = dest_path.relative_to(self._recordings_path)
@@ -385,7 +384,7 @@ class AudioStorage:
         """
         return self.get_audio_path(relative_path, verify_exists=True)
 
-    def get_audio(self, relative_path: str) -> Optional[bytes]:
+    def get_audio(self, relative_path: str) -> bytes | None:
         """Read audio file contents.
 
         Args:
@@ -429,7 +428,7 @@ class AudioStorage:
             logger.error(f"Failed to delete audio file: {e}")
             return False
 
-    def cleanup_empty_directories(self, base_path: Optional[Path] = None) -> int:
+    def cleanup_empty_directories(self, base_path: Path | None = None) -> int:
         """Remove empty date-based directories.
 
         Args:
@@ -512,10 +511,10 @@ class AudioStorage:
 
 
 # Global audio storage instance
-_audio_storage: Optional[AudioStorage] = None
+_audio_storage: AudioStorage | None = None
 
 
-def get_audio_storage(config: Optional[DatabaseConfig] = None) -> AudioStorage:
+def get_audio_storage(config: DatabaseConfig | None = None) -> AudioStorage:
     """Get or create the global audio storage instance.
 
     Args:
