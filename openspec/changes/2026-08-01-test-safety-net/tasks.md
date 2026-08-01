@@ -30,7 +30,7 @@
 - [x] Write migration.py tests (detect/run/rollback/verify; patch module constants LEGACY_*, not Path.home())
 
 ## G. End-to-End Test
-- [ ] Write E2E dictation pipeline test (real SQLite + storage, mocked audio/API/clipboard)
+- [x] Write E2E dictation pipeline test (real SQLite + storage, mocked audio/API/clipboard)
 
 ## H. Coverage Gate and Finalization
 - [ ] Add per-module coverage thresholds to CI
