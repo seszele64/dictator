@@ -32,6 +32,7 @@ whisper-dictate = "whisper_dictate.cli:cli"
 [project.optional-dependencies]
 dev = [
     "ruff>=0.6.0",
+    "pytest-cov>=4.0.0",
     "pytest-timeout>=2.2.0",
 ]
 
@@ -48,6 +49,7 @@ markers = [
 
 [tool.coverage.run]
 source = ["whisper_dictate"]
+branch = true
 
 [tool.coverage.report]
 exclude_lines = [
