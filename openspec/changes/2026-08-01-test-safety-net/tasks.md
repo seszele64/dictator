@@ -6,9 +6,9 @@
 - [x] Add coverage collection step to CI (no threshold yet)
 
 ## B. Test Infrastructure
-- [ ] Reorganize tests into unit/, integration/, contract/, e2e/ directories
-- [ ] Harden conftest.py with real_db, real_db_config, db_singleton_reset, env_isolator, tmp_recordings_dir fixtures
-- [ ] Deduplicate test_history.py and test_cli_database_lifecycle.py
+- [x] Reorganize tests into unit/, integration/, contract/, e2e/ directories
+- [x] Harden conftest.py with real_db, real_db_config, db_singleton_reset, env_isolator, tmp_recordings_dir fixtures
+- [x] Deduplicate test_history.py and test_cli_database_lifecycle.py
 
 ## C. Database Integration Tests
 - [ ] Write DB schema/migration/init tests (fresh schema, v1→v2 migration, PRAGMAs, idempotent init, integrity)
