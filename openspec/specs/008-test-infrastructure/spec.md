@@ -2,109 +2,155 @@
 
 ## Purpose
 
-This specification defines the test infrastructure and async testing patterns for the i3-arch-whisper-dictate project. The test infrastructure ensures reliable, non-hanging test execution through proper pytest-asyncio configuration, function-scoped cleanup, and comprehensive state isolation between tests.
+This specification defines the test infrastructure for the whisper-dictate project. The test infrastructure ensures reliable, non-hanging test execution through proper test organization, real-database integration testing, comprehensive state isolation, coverage collection, and per-module coverage gates.
 
 ### Background
 
-The project uses Python's asyncio for concurrent operations, particularly for audio processing and notification handling. Testing async code requires careful management of event loops to prevent conflicts that can cause the test suite to hang indefinitely. This specification establishes standardized patterns for writing and running async tests that are reliable and maintainable.
+The project uses Python's `sqlite3` for persistence, `soundfile` for audio handling, and subprocess-based audio capture. Testing requires careful management of database singletons, filesystem paths, and module-level state to prevent test interference. This specification establishes standardized patterns for writing and running tests that are reliable, maintainable, and verifiable through coverage gates.
 
 ### Scope
 
 This specification covers:
-- pytest-asyncio configuration and strict mode enforcement
-- Event loop scope management
-- Async fixture patterns
-- Timeout configuration to prevent hanging tests
-- Module mocking strategies compatible with async code
-- Global state isolation between tests
+- Test directory organization (unit/, integration/, contract/, e2e/)
+- Shared real-database test fixtures with automatic cleanup
+- Environment isolation (XDG directories, API keys, config paths)
+- Coverage collection in CI using pytest-cov
+- Per-module coverage thresholds enforced in CI
+- Real SQLite integration tests (schema, CRUD, transactions, FK cascade, maintenance)
+- Provider contract tests (ABC conformance, error wrapping, parameter forwarding)
+- Audio storage filesystem tests (real FS operations in temp directories)
+- Database logging tests (DatabaseLogHandler with real database)
+- Migration tests (detect, run, rollback, verify)
+- End-to-end dictation pipeline tests (real SQLite + storage, mocked audio/API/clipboard)
 
 ## Requirements
 
-### Requirement: pytest-asyncio strict mode configuration
+### Requirement: Coverage Collection in CI
+**SHALL** collect test coverage using pytest-cov on every CI run and report per-module coverage without enforcing thresholds initially.
 
-The system SHALL configure pytest-asyncio in strict mode with function-scoped event loop scope to prevent event loop conflicts during test execution.
+#### Scenario: CI runs coverage
+- Given: a pull request is opened against main
+- When: the CI test job runs
+- Then: pytest executes with `--cov=whisper_dictate --cov-report=term-missing` and coverage data is collected
 
-#### Scenario: pytest-asyncio operates in strict mode
-- **WHEN** pytest-asyncio plugin is loaded
-- **THEN** it SHALL operate in strict mode requiring explicit async markers on all async tests
-- **AND** event loops SHALL be function-scoped, creating a new loop for each test function
+#### Scenario: Coverage dependency declared
+- Given: the project dev dependencies are installed
+- When: `uv sync --extra dev` is executed
+- Then: pytest-cov is available as a development dependency
 
-#### Scenario: Async tests without explicit markers fail in strict mode
-- **WHEN** an async test function lacks `@pytest.mark.asyncio` marker
-- **THEN** the test SHALL fail with an error indicating strict mode requires explicit markers
-- **AND** the test suite SHALL NOT hang due to implicit event loop handling
+### Requirement: Test Directory Organization
+**SHALL** organize tests into unit/, integration/, contract/, and e2e/ subdirectories reflecting test scope and boundary.
 
-### Requirement: Session-scoped autouse fixtures removed
+#### Scenario: Flat tests reorganized
+- Given: the existing flat tests/ directory with all test files at root
+- When: the reorganization is complete
+- Then: unit tests are in tests/unit/, integration tests in tests/integration/, contract tests in tests/contract/, and e2e tests in tests/e2e/
 
-The system SHALL remove session-scoped autouse fixtures (`cleanup_sounddevice`, `cleanup_aiosqlite`) from conftest.py that attempt to manage event loops after tests complete, as these fixtures cause hanging when combined with pytest-asyncio event loop handling.
+#### Scenario: All tests still pass after reorganization
+- Given: the test directory has been reorganized
+- When: `uv run pytest` is executed
+- Then: all 258 previously passing tests still pass with no collection errors
 
-#### Scenario: Conflicting fixtures removed from conftest.py
-- **WHEN** conftest.py is loaded
-- **THEN** it SHALL NOT contain session-scoped autouse fixtures that call `loop.run_until_complete()` or `asyncio.run()` after test completion
-- **AND** existing tests that rely on cleanup SHALL use function-scoped fixtures instead
+### Requirement: Shared Real-Database Test Fixtures
+**SHALL** provide function-scoped fixtures that create real SQLite databases in temporary directories for integration tests, with automatic cleanup.
 
-### Requirement: Function-scoped async cleanup fixture
+#### Scenario: Real database fixture
+- Given: a test requests the real_db fixture
+- When: the fixture is activated
+- Then: a real Database instance is created with a temp-dir SQLite file and is automatically closed and cleaned up after the test
 
-The system SHALL provide a function-scoped async cleanup fixture that replaces the removed session-scoped cleanup fixtures, ensuring proper resource cleanup within each test's event loop scope.
+#### Scenario: Environment isolation
+- Given: a test requests the env_isolator fixture
+- When: the fixture is activated
+- Then: XDG directories, API keys, and config paths are redirected to temp directories and restored after the test
 
-#### Scenario: Function-scoped cleanup replaces session-scoped cleanup
-- **WHEN** a test requires async resource cleanup
-- **THEN** a function-scoped fixture with proper async cleanup SHALL be available
-- **AND** the fixture SHALL use `request.addfinalizer()` for cleanup within the same event loop
+### Requirement: Per-Module Coverage Gates
+**SHALL** enforce minimum coverage thresholds per module in CI after all tests are written.
 
-### Requirement: asyncio.run() calls converted to pytest-asyncio patterns
+#### Scenario: Coverage gate enforced
+- Given: all Phase 2 tests are written and committed
+- When: CI runs the coverage check
+- Then: database.py coverage MUST be >= 70%, config.py >= 80%, db_logging.py >= 60%, migration.py >= 50%, audio_storage.py >= 80%, providers/openai_compatible.py >= 80%
 
-The system SHALL convert direct `asyncio.run()` calls in test files to use `@pytest.mark.asyncio` decorated test functions with `async`/`await` patterns.
+### Requirement: Real SQLite Integration Tests
+**SHALL** test database.py against a real SQLite database (not mocks) covering schema initialization, migrations, CRUD operations, transactions, FK cascade, and maintenance.
 
-#### Scenario: test_database_update.py uses pytest-asyncio markers
-- **WHEN** test_database_update.py is executed
-- **THEN** all async tests SHALL use `@pytest.mark.asyncio` decorator
-- **AND** tests SHALL NOT call `asyncio.run()` directly
-- **AND** tests SHALL use `await` for async operations within the test function
+#### Scenario: Schema initialization
+- Given: a fresh temporary directory
+- When: Database.initialize() is called
+- Then: the schema is created with the correct version, PRAGMAs are set, and tables exist
 
-### Requirement: pytest-timeout configuration
+#### Scenario: CRUD operations
+- Given: an initialized real database
+- When: recordings, transcripts, and logs are created, queried, updated, and deleted
+- Then: all operations succeed with correct data round-trip including JSON fields
 
-The system SHALL configure pytest-timeout with a 30-second default timeout to prevent hanging tests from blocking the full test suite.
+#### Scenario: Transaction rollback
+- Given: an initialized real database with existing data
+- When: a transaction raises an exception mid-operation
+- Then: all changes within that transaction are rolled back
 
-#### Scenario: Default timeout prevents hanging tests
-- **WHEN** a test takes longer than 30 seconds to complete
-- **THEN** pytest SHALL terminate the test with a timeout error
-- **AND** the test suite SHALL continue executing remaining tests
+#### Scenario: Foreign key cascade
+- Given: a recording with associated transcripts and logs
+- When: the recording is deleted
+- Then: associated transcripts and logs are cascade-deleted per FK constraints
 
-#### Scenario: Slow tests have tiered timeout overrides
-- **WHEN** specific tests require longer execution time
-- **THEN** those tests MAY use `@pytest.mark.timeout(seconds)` to override the default
-- **AND** the override SHALL be set to an appropriate value for the specific test
+### Requirement: Provider Contract Tests
+**SHALL** test the openai_compatible.py provider against its ABC contract, verifying conformance, error wrapping, and parameter forwarding.
 
-### Requirement: Module mocking uses patch.dict()
+#### Scenario: ABC conformance
+- Given: the OpenAICompatibleProvider class
+- When: it is instantiated
+- Then: it implements all abstract methods defined in the TranscriptionProvider ABC
 
-The system SHALL fix module mocking in test_audio_converter.py to use `patch.dict()` instead of direct module replacement, preventing event loop conflicts during mock operations.
+#### Scenario: Error wrapping
+- Given: a provider instance with a mocked OpenAI client that raises an API error
+- When: transcribe() is called
+- Then: the error is wrapped in the appropriate domain exception type
 
-#### Scenario: test_audio_converter.py uses patch.dict for module mocks
-- **WHEN** test_audio_converter.py mocks module-level objects
-- **THEN** it SHALL use `patch.dict()` to modify module dictionaries
-- **AND** the mock SHALL NOT replace the entire module or interfere with event loop state
+### Requirement: Audio Storage Filesystem Tests
+**SHALL** test audio_storage.py with real filesystem operations in temporary directories.
 
-### Requirement: Global state reset includes _recording_notification
+#### Scenario: Save and retrieve audio file
+- Given: a real temporary audio storage directory
+- When: an audio file is saved and then retrieved
+- Then: the file exists at the expected path and its contents match
 
-The system SHALL enhance the global state reset fixture to include `_recording_notification` in addition to existing state variables, ensuring complete state isolation between tests.
+#### Scenario: Cleanup old recordings
+- Given: a storage directory with recordings of varying ages
+- When: cleanup is called with a retention threshold
+- Then: only recordings older than the threshold are deleted
 
-#### Scenario: Global state fixture resets all test state
-- **WHEN** a test requires clean global state
-- **THEN** the reset fixture SHALL clear `_recording_notification` along with other global state
-- **AND** the fixture SHALL be function-scoped to ensure isolation
+### Requirement: Database Logging Tests
+**SHALL** test db_logging.py DatabaseLogHandler with a real database and temporary log files.
 
-## Acceptance Criteria
+#### Scenario: Log handler emits to database
+- Given: a DatabaseLogHandler connected to a real database
+- When: a log record is emitted
+- Then: the record is persisted in the logs table with correct level, message, and timestamp
 
-| # | Criterion | Verification |
-|---|-----------|--------------|
-| 1 | Full test suite completes without hanging | Run `pytest` on entire test suite and confirm all tests complete |
-| 2 | Individual test files pass independently | Run each test file separately and verify all pass |
-| 3 | pytest-asyncio strict mode is enforced | Tests without `@pytest.mark.asyncio` fail with proper error |
-| 4 | Session-scoped autouse fixtures are removed | conftest.py does not contain `cleanup_sounddevice` or `cleanup_aiosqlite` as autouse fixtures |
-| 5 | Function-scoped cleanup fixture is available | Tests requiring async cleanup can use a function-scoped fixture |
-| 6 | asyncio.run() is not used in test files | No `asyncio.run()` calls remain in test_database_update.py |
-| 7 | pytest-timeout is configured with 30s default | pytest.ini or pyproject.toml contains timeout configuration |
-| 8 | test_audio_converter.py uses patch.dict() | Mock operations use `patch.dict()` instead of module replacement |
-| 9 | Global state fixture includes _recording_notification | Reset fixture clears `_recording_notification` between tests |
-| 10 | No event loop conflicts during test execution | Tests run with function-scoped event loops without conflicts |
+#### Scenario: Dual logging setup
+- Given: a temporary log file path and real database
+- When: setup_dual_logging() is called
+- Then: both file and database handlers are attached to the root logger
+
+### Requirement: Migration Tests
+**SHALL** test migration.py detect, run, rollback, and verify operations using module-constant patching for legacy paths.
+
+#### Scenario: Detect legacy data
+- Given: a temporary directory with legacy JSON files
+- When: migration detect is called with patched LEGACY_* constants
+- Then: legacy recordings and transcripts are correctly identified
+
+#### Scenario: Migration rollback
+- Given: a completed migration
+- When: rollback is called
+- Then: the database is restored from backup and legacy files are restored
+
+### Requirement: E2E Dictation Pipeline Test
+**SHALL** test the full dictation pipeline with real SQLite and audio storage, mocking only audio capture, API calls, and clipboard.
+
+#### Scenario: Full dictation cycle
+- Given: a real SQLite database and audio storage in temp directories
+- When: a dictation cycle runs with mocked audio input and API response
+- Then: the recording, transcript, and log are persisted, and clipboard receives the transcription text
