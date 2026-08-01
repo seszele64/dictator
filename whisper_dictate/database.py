@@ -40,7 +40,7 @@ class Database:
         self._config = config
         self._db_path = config.get_database_path()
         self._connection: sqlite3.Connection | None = None
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._initialized: bool = False  # Track initialization state
 
     @property
@@ -59,43 +59,45 @@ class Database:
         connection, and runs migrations if needed. Safe to call multiple
         times - subsequent calls are no-ops.
         """
-        # Guard: Already initialized
-        if self._initialized:
-            logger.debug("Database already initialized, skipping initialization")
-            return
+        with self._lock:
+            # Guard: Already initialized
+            if self._initialized:
+                logger.debug("Database already initialized, skipping initialization")
+                return
 
-        # Create database directory if it doesn't exist
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+            # Create database directory if it doesn't exist
+            self._db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Initializing database at {self._db_path}")
+            logger.info(f"Initializing database at {self._db_path}")
 
-        # Connect and configure database
-        self._connect()
+            # Connect and configure database
+            self._connect()
 
-        # Mark as initialized before _configure to prevent recursion
-        # (connection() auto-initializes and _configure uses connection())
-        self._initialized = True
+            # Mark as initialized before _configure to prevent recursion
+            # (connection() auto-initializes and _configure uses connection())
+            self._initialized = True
 
-        self._configure()
+            self._configure()
 
-        # Run migrations
-        self._migrate()
+            # Run migrations
+            self._migrate()
 
-        # Verify integrity
-        self._check_integrity()
+            # Verify integrity
+            self._check_integrity()
 
-        logger.info("Database initialized successfully")
+            logger.info("Database initialized successfully")
 
     def close(self) -> None:
         """Close the database connection.
 
         Resets initialization state to allow re-initialization if needed.
         """
-        if self._connection:
-            self._connection.close()
-            self._connection = None
-            self._initialized = False  # Reset state
-            logger.debug("Database connection closed")
+        with self._lock:
+            if self._connection:
+                self._connection.close()
+                self._connection = None
+                self._initialized = False  # Reset state
+                logger.debug("Database connection closed")
 
     def _ensure_initialized(self) -> None:
         """Ensure database is initialized, auto-initializing if needed.
@@ -123,9 +125,8 @@ class Database:
         Raises:
             RuntimeError: If database connection is not available after initialization.
         """
-        self._ensure_initialized()
-
         with self._lock:
+            self._ensure_initialized()
             yield self._connection
 
     @contextmanager
@@ -141,9 +142,8 @@ class Database:
         Raises:
             RuntimeError: If database connection is not available after initialization.
         """
-        self._ensure_initialized()
-
         with self._lock:
+            self._ensure_initialized()
             self._connection.execute("BEGIN IMMEDIATE")
             try:
                 yield self._connection
@@ -220,6 +220,7 @@ class Database:
         self._connection = sqlite3.connect(
             self._db_path,
             isolation_level=None,  # Autocommit mode
+            check_same_thread=False,
         )
         self._connection.execute("PRAGMA journal_mode=WAL")
         self._connection.execute("PRAGMA foreign_keys=ON")

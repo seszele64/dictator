@@ -16,9 +16,9 @@
 - [x] Write DB transactions + FK cascade tests (rollback, nested, FK enforcement, cascade delete)
 
 ## D. Database Maintenance and Concurrency
-- [ ] Write DB maintenance tests (cleanup_old_logs with real timestamps)
-- [ ] Write concurrency probe test (document thread-bound sqlite3.Connection behavior)
-- [ ] Apply minimal testability fix if concurrency defect confirmed (requires explicit approval)
+- [x] Write DB maintenance tests (cleanup_old_logs with real timestamps)
+- [x] Write concurrency probe test (document thread-bound sqlite3.Connection behavior)
+- [x] Apply minimal testability fix if concurrency defect confirmed (requires explicit approval)
 
 ## E. Module-Specific Tests
 - [ ] Write config.py tests (load_config, provider enum, API key fallback, XDG paths, validation errors)
