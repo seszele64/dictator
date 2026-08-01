@@ -21,9 +21,9 @@
 - [x] Apply minimal testability fix if concurrency defect confirmed (requires explicit approval)
 
 ## E. Module-Specific Tests
-- [ ] Write config.py tests (load_config, provider enum, API key fallback, XDG paths, validation errors)
-- [ ] Write provider contract tests (ABC conformance, TranscriptionResult, error wrapping, translate branch, param forwarding)
-- [ ] Write audio_storage.py filesystem tests (save/copy/delete/cleanup/stats/get — real FS ops)
+- [x] Write config.py tests (load_config, provider enum, API key fallback, XDG paths, validation errors)
+- [x] Write provider contract tests (ABC conformance, TranscriptionResult, error wrapping, translate branch, param forwarding)
+- [x] Write audio_storage.py filesystem tests (save/copy/delete/cleanup/stats/get — real FS ops)
 
 ## F. Logging and Migration Tests
 - [ ] Write db_logging.py tests (DatabaseLogHandler.emit, close, connection lifecycle, setup_dual_logging)
