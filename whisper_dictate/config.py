@@ -283,21 +283,24 @@ def load_config() -> AppConfig:
         ValueError: If required configuration is missing
     """
     config = AppConfig()
+    api_key = config.openai.api_key
+
+    # Resolve provider enum once (unknown providers fall back to CUSTOM, as before)
+    try:
+        provider_enum = WhisperProvider(config.openai.provider)
+    except ValueError:
+        provider_enum = WhisperProvider.CUSTOM
 
     # Resolve API key: explicit config > provider env var
-    api_key = config.openai.api_key
     if not api_key:
-        from whisper_dictate.config import PROVIDER_DEFAULTS, WhisperProvider
-
-        try:
-            provider_enum = WhisperProvider(config.openai.provider)
-        except ValueError:
-            provider_enum = WhisperProvider.CUSTOM
         defaults = PROVIDER_DEFAULTS.get(provider_enum, {})
-        env_var = defaults.get("env_var", "OPENAI_API_KEY")
-        api_key = os.getenv(env_var, "")
+        env_var = defaults.get("env_var")
+        if env_var:  # LOCAL/CUSTOM declare env_var=None → nothing to resolve
+            api_key = os.getenv(env_var, "")
 
-    if not api_key:
+    # LOCAL (auth-free local server) and CUSTOM (user-configured endpoint, possibly
+    # local/auth-free) never require a key. Explicit keys still pass through.
+    if not api_key and provider_enum not in (WhisperProvider.LOCAL, WhisperProvider.CUSTOM):
         raise ValueError(
             "API key not found. Set the appropriate environment variable "
             "(OPENAI_API_KEY, GROQ_API_KEY, etc.) or configure api_key explicitly."

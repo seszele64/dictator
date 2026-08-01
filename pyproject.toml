@@ -32,11 +32,13 @@ whisper-dictate = "whisper_dictate.cli:cli"
 [project.optional-dependencies]
 dev = [
     "ruff>=0.6.0",
+    "pytest-cov>=4.0.0",
     "pytest-timeout>=2.2.0",
 ]
 
 [tool.pytest.ini_options]
 timeout = 30
+addopts = "--import-mode=importlib"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
@@ -48,6 +50,8 @@ markers = [
 
 [tool.coverage.run]
 source = ["whisper_dictate"]
+branch = true
+relative_files = true
 
 [tool.coverage.report]
 exclude_lines = [

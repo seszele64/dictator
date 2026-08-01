@@ -1,29 +1,6 @@
-# Test Infrastructure Specification
+# Delta for test-infrastructure
 
-## Purpose
-
-This specification defines the test infrastructure for the whisper-dictate project. The test infrastructure ensures reliable, non-hanging test execution through proper test organization, real-database integration testing, comprehensive state isolation, coverage collection, and per-module coverage gates.
-
-### Background
-
-The project uses Python's `sqlite3` for persistence, `soundfile` for audio handling, and subprocess-based audio capture. Testing requires careful management of database singletons, filesystem paths, and module-level state to prevent test interference. This specification establishes standardized patterns for writing and running tests that are reliable, maintainable, and verifiable through coverage gates.
-
-### Scope
-
-This specification covers:
-- Test directory organization (unit/, integration/, contract/, e2e/)
-- Shared real-database test fixtures with automatic cleanup
-- Environment isolation (XDG directories, API keys, config paths)
-- Coverage collection in CI using pytest-cov
-- Per-module coverage thresholds enforced in CI
-- Real SQLite integration tests (schema, CRUD, transactions, FK cascade, maintenance)
-- Provider contract tests (ABC conformance, error wrapping, parameter forwarding)
-- Audio storage filesystem tests (real FS operations in temp directories)
-- Database logging tests (DatabaseLogHandler with real database)
-- Migration tests (detect, run, rollback, verify)
-- End-to-end dictation pipeline tests (real SQLite + storage, mocked audio/API/clipboard)
-
-## Requirements
+## ADDED Requirements
 
 ### Requirement: Coverage Collection in CI
 **SHALL** collect test coverage using pytest-cov on every CI run and report per-module coverage without enforcing thresholds initially.

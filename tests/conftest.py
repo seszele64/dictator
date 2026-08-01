@@ -11,7 +11,12 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from whisper_dictate.config import AppConfig, AudioConfig, OpenAIConfig  # noqa: E402
+from whisper_dictate.config import (  # noqa: E402
+    AppConfig,
+    AudioConfig,
+    DatabaseConfig,
+    OpenAIConfig,
+)
 from whisper_dictate.transcription import TranscriptionResult  # noqa: E402
 
 # Add project root to path for toggle_dictate module
@@ -341,3 +346,65 @@ def database():
     mock_db.delete_recording = Mock(return_value=False)
     mock_db.update_transcript = Mock(return_value=False)
     return mock_db
+
+
+@pytest.fixture
+def db_singleton_reset():
+    """Reset module-level Database and AudioStorage singletons before and after test."""
+    import whisper_dictate.audio_storage as storage_mod
+    import whisper_dictate.database as db_mod
+
+    # Reset before
+    db_mod._database = None
+    storage_mod._audio_storage = None
+
+    yield
+
+    # Clean up any instances created during the test
+    if db_mod._database is not None:
+        with contextlib.suppress(Exception):
+            db_mod._database.close()
+        db_mod._database = None
+    if storage_mod._audio_storage is not None:
+        storage_mod._audio_storage = None
+
+
+@pytest.fixture
+def real_db_config(tmp_path) -> DatabaseConfig:
+    """Create a DatabaseConfig pointing to temp directories."""
+    return DatabaseConfig(
+        path=tmp_path / "test.db",
+        recordings_path=tmp_path / "recordings",
+    )
+
+
+@pytest.fixture
+def real_db(real_db_config, db_singleton_reset):
+    """Create a real Database instance with a temp SQLite file, auto-initialized and closed."""
+    from whisper_dictate.database import Database
+
+    db = Database(real_db_config)
+    db.initialize()
+    yield db
+    with contextlib.suppress(Exception):
+        db.close()
+
+
+@pytest.fixture
+def env_isolator(tmp_path, monkeypatch):
+    """Isolate environment variables: redirect XDG dirs, set test API key, clear WHISPER_* vars."""
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    monkeypatch.setenv("OPENAI_API_KEY", "test-api-key")
+    # Clear any WHISPER_* env vars that might affect config loading
+    for key in list(os.environ.keys()):
+        if key.startswith("WHISPER_"):
+            monkeypatch.delenv(key, raising=False)
+    yield tmp_path
+
+
+@pytest.fixture
+def tmp_recordings_dir(tmp_path):
+    """Create a temporary recordings directory."""
+    recordings = tmp_path / "recordings"
+    recordings.mkdir(parents=True, exist_ok=True)
+    yield recordings

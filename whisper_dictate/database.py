@@ -24,6 +24,46 @@ logger = logging.getLogger(__name__)
 CURRENT_SCHEMA_VERSION = 2
 
 
+class CursorResult:
+    """Materialized result of Database.execute().
+
+    Rows, rowcount and lastrowid are captured *under the database lock*
+    inside execute(). The object holds no live sqlite3 cursor, so it is
+    safe to consume after execute() returns, from any thread.
+    """
+
+    def __init__(self, cursor: sqlite3.Cursor) -> None:
+        self._rows = cursor.fetchall()  # [] for UPDATE/DELETE/INSERT
+        self._index = 0
+        self.rowcount = cursor.rowcount
+        self.lastrowid = cursor.lastrowid
+        self.description = cursor.description
+
+    def fetchone(self) -> tuple | None:
+        """Fetch the next result row, or None if all rows are consumed."""
+        if self._index >= len(self._rows):
+            return None
+        row = self._rows[self._index]
+        self._index += 1
+        return row
+
+    def fetchall(self) -> list[tuple]:
+        """Fetch all remaining result rows."""
+        rows = self._rows[self._index:]
+        self._index = len(self._rows)
+        return rows
+
+    def __iter__(self) -> "CursorResult":
+        return self
+
+    def __next__(self) -> tuple:
+        if self._index >= len(self._rows):
+            raise StopIteration
+        row = self._rows[self._index]
+        self._index += 1
+        return row
+
+
 class Database:
     """SQLite database manager for whisper-dictate.
 
@@ -40,7 +80,7 @@ class Database:
         self._config = config
         self._db_path = config.get_database_path()
         self._connection: sqlite3.Connection | None = None
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._initialized: bool = False  # Track initialization state
 
     @property
@@ -59,43 +99,45 @@ class Database:
         connection, and runs migrations if needed. Safe to call multiple
         times - subsequent calls are no-ops.
         """
-        # Guard: Already initialized
-        if self._initialized:
-            logger.debug("Database already initialized, skipping initialization")
-            return
+        with self._lock:
+            # Guard: Already initialized
+            if self._initialized:
+                logger.debug("Database already initialized, skipping initialization")
+                return
 
-        # Create database directory if it doesn't exist
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+            # Create database directory if it doesn't exist
+            self._db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Initializing database at {self._db_path}")
+            logger.info(f"Initializing database at {self._db_path}")
 
-        # Connect and configure database
-        self._connect()
+            # Connect and configure database
+            self._connect()
 
-        # Mark as initialized before _configure to prevent recursion
-        # (connection() auto-initializes and _configure uses connection())
-        self._initialized = True
+            # Mark as initialized before _configure to prevent recursion
+            # (connection() auto-initializes and _configure uses connection())
+            self._initialized = True
 
-        self._configure()
+            self._configure()
 
-        # Run migrations
-        self._migrate()
+            # Run migrations
+            self._migrate()
 
-        # Verify integrity
-        self._check_integrity()
+            # Verify integrity
+            self._check_integrity()
 
-        logger.info("Database initialized successfully")
+            logger.info("Database initialized successfully")
 
     def close(self) -> None:
         """Close the database connection.
 
         Resets initialization state to allow re-initialization if needed.
         """
-        if self._connection:
-            self._connection.close()
-            self._connection = None
-            self._initialized = False  # Reset state
-            logger.debug("Database connection closed")
+        with self._lock:
+            if self._connection:
+                self._connection.close()
+                self._connection = None
+                self._initialized = False  # Reset state
+                logger.debug("Database connection closed")
 
     def _ensure_initialized(self) -> None:
         """Ensure database is initialized, auto-initializing if needed.
@@ -123,9 +165,8 @@ class Database:
         Raises:
             RuntimeError: If database connection is not available after initialization.
         """
-        self._ensure_initialized()
-
         with self._lock:
+            self._ensure_initialized()
             yield self._connection
 
     @contextmanager
@@ -141,9 +182,8 @@ class Database:
         Raises:
             RuntimeError: If database connection is not available after initialization.
         """
-        self._ensure_initialized()
-
         with self._lock:
+            self._ensure_initialized()
             self._connection.execute("BEGIN IMMEDIATE")
             try:
                 yield self._connection
@@ -152,18 +192,24 @@ class Database:
                 self._connection.rollback()
                 raise
 
-    def execute(self, query: str, parameters: tuple = ()) -> sqlite3.Cursor:
-        """Execute a query and return the cursor.
+    def execute(self, query: str, parameters: tuple = ()) -> CursorResult:
+        """Execute a query and return a materialized result.
+
+        The result is fully materialized (all rows fetched) *under the
+        database lock*, so it holds no live sqlite3 cursor. The returned
+        CursorResult is therefore safe to consume from any thread after
+        execute() returns, even after other statements run or the
+        database is closed.
 
         Args:
             query: SQL query to execute
             parameters: Query parameters
 
         Returns:
-            sqlite3.Cursor: Result cursor
+            CursorResult: Materialized result (rows, rowcount, lastrowid)
         """
         with self.connection() as conn:
-            return conn.execute(query, parameters)
+            return CursorResult(conn.execute(query, parameters))
 
     def executemany(self, query: str, parameters: list) -> None:
         """Execute a query with multiple parameter sets.
@@ -220,6 +266,7 @@ class Database:
         self._connection = sqlite3.connect(
             self._db_path,
             isolation_level=None,  # Autocommit mode
+            check_same_thread=False,
         )
         self._connection.execute("PRAGMA journal_mode=WAL")
         self._connection.execute("PRAGMA foreign_keys=ON")
