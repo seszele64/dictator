@@ -11,9 +11,9 @@
 - [x] Deduplicate test_history.py and test_cli_database_lifecycle.py
 
 ## C. Database Integration Tests
-- [ ] Write DB schema/migration/init tests (fresh schema, v1→v2 migration, PRAGMAs, idempotent init, integrity)
-- [ ] Write DB CRUD tests (recordings, transcripts, logs, state — all filters, JOINs, JSON round-trip)
-- [ ] Write DB transactions + FK cascade tests (rollback, nested, FK enforcement, cascade delete)
+- [x] Write DB schema/migration/init tests (fresh schema, v1→v2 migration, PRAGMAs, idempotent init, integrity)
+- [x] Write DB CRUD tests (recordings, transcripts, logs, state — all filters, JOINs, JSON round-trip)
+- [x] Write DB transactions + FK cascade tests (rollback, nested, FK enforcement, cascade delete)
 
 ## D. Database Maintenance and Concurrency
 - [ ] Write DB maintenance tests (cleanup_old_logs with real timestamps)
