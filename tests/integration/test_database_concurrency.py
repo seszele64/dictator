@@ -143,3 +143,23 @@ class TestThreadSafeDatabase:
             assert db.get_recording(recording_id) is None
         finally:
             db.close()
+
+    def test_execute_result_survives_later_statements_and_close(
+        self, real_db_config, db_singleton_reset
+    ):
+        """CursorResult from execute() remains valid after later statements and close().
+
+        This verifies the materialized-result fix: the result holds no live
+        sqlite3 cursor, so it can be consumed after the lock is released,
+        after other statements run, and even after the database is closed.
+        """
+        db = Database(real_db_config)
+        db.initialize()
+        result = db.execute("SELECT 1")
+        # Run another statement (would interleave with a live cursor)
+        db.execute("SELECT 2")
+        # The first result is still valid
+        assert result.fetchone() == (1,)
+        db.close()
+        # Even after close(), the materialized result is readable
+        assert result.fetchone() is None  # already consumed, returns None

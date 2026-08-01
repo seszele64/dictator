@@ -350,33 +350,42 @@ class TestLoadConfig:
         monkeypatch.setenv("GROQ_API_KEY", "test-key")
         load_config()  # should not raise
 
-    def test_load_config_local_provider_raises_without_key(self, monkeypatch):
-        """load_config fails for the local provider without a key.
+    def test_load_config_local_provider_succeeds_without_key(self, monkeypatch):
+        """load_config succeeds for the local provider without a key.
 
-        NOTE: PROVIDER_DEFAULTS[LOCAL]["env_var"] is None, so key resolution
-        reaches os.getenv(None, "") which raises TypeError in CPython 3.11
-        (the spec assumed it returns ""). Either error means config loading
-        fails without a key, so both are accepted here.
+        LOCAL declares env_var=None in PROVIDER_DEFAULTS, so no key is
+        resolved from the environment and no key is required.
         """
         self._delete_api_key_env(monkeypatch)
         self._delete_whisper_env(monkeypatch)
         monkeypatch.setenv("WHISPER_PROVIDER", "local")
-        with pytest.raises((ValueError, TypeError)):
-            load_config()
+        config = load_config()
+        assert config.openai.api_key == ""
 
     def test_load_config_invalid_provider_falls_back_to_custom(self, monkeypatch):
-        """Invalid provider falls back to CUSTOM key resolution.
+        """Invalid provider falls back to CUSTOM and succeeds without a key.
 
-        NOTE: CUSTOM also has env_var=None, so os.getenv(None, "") raises
-        TypeError in CPython 3.11 rather than returning "" as the spec
-        assumed. The fallback to CUSTOM still occurs; config loading fails
-        at key resolution instead of silently succeeding.
+        CUSTOM declares env_var=None in PROVIDER_DEFAULTS, so the fallback
+        never consults OPENAI_API_KEY; config loading succeeds with no key.
         """
         self._delete_whisper_env(monkeypatch)
         monkeypatch.setenv("WHISPER_PROVIDER", "invalid")
         monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-        with pytest.raises((ValueError, TypeError)):
-            load_config()
+        config = load_config()
+        assert config.openai.api_key == ""
+
+    def test_load_config_custom_provider_no_key_succeeds(self, monkeypatch):
+        """load_config succeeds for the custom provider without any API key.
+
+        CUSTOM is a user-configured endpoint (possibly local/auth-free) and
+        declares env_var=None, so no provider env var is consulted and no
+        key is required.
+        """
+        self._delete_api_key_env(monkeypatch)
+        self._delete_whisper_env(monkeypatch)
+        monkeypatch.setenv("WHISPER_PROVIDER", "custom")
+        config = load_config()
+        assert config.openai.api_key == ""
 
     def test_load_config_whisper_api_key_takes_priority(self, monkeypatch):
         """WHISPER_API_KEY is checked before the provider env var."""

@@ -24,6 +24,46 @@ logger = logging.getLogger(__name__)
 CURRENT_SCHEMA_VERSION = 2
 
 
+class CursorResult:
+    """Materialized result of Database.execute().
+
+    Rows, rowcount and lastrowid are captured *under the database lock*
+    inside execute(). The object holds no live sqlite3 cursor, so it is
+    safe to consume after execute() returns, from any thread.
+    """
+
+    def __init__(self, cursor: sqlite3.Cursor) -> None:
+        self._rows = cursor.fetchall()  # [] for UPDATE/DELETE/INSERT
+        self._index = 0
+        self.rowcount = cursor.rowcount
+        self.lastrowid = cursor.lastrowid
+        self.description = cursor.description
+
+    def fetchone(self) -> tuple | None:
+        """Fetch the next result row, or None if all rows are consumed."""
+        if self._index >= len(self._rows):
+            return None
+        row = self._rows[self._index]
+        self._index += 1
+        return row
+
+    def fetchall(self) -> list[tuple]:
+        """Fetch all remaining result rows."""
+        rows = self._rows[self._index:]
+        self._index = len(self._rows)
+        return rows
+
+    def __iter__(self) -> "CursorResult":
+        return self
+
+    def __next__(self) -> tuple:
+        if self._index >= len(self._rows):
+            raise StopIteration
+        row = self._rows[self._index]
+        self._index += 1
+        return row
+
+
 class Database:
     """SQLite database manager for whisper-dictate.
 
@@ -152,18 +192,24 @@ class Database:
                 self._connection.rollback()
                 raise
 
-    def execute(self, query: str, parameters: tuple = ()) -> sqlite3.Cursor:
-        """Execute a query and return the cursor.
+    def execute(self, query: str, parameters: tuple = ()) -> CursorResult:
+        """Execute a query and return a materialized result.
+
+        The result is fully materialized (all rows fetched) *under the
+        database lock*, so it holds no live sqlite3 cursor. The returned
+        CursorResult is therefore safe to consume from any thread after
+        execute() returns, even after other statements run or the
+        database is closed.
 
         Args:
             query: SQL query to execute
             parameters: Query parameters
 
         Returns:
-            sqlite3.Cursor: Result cursor
+            CursorResult: Materialized result (rows, rowcount, lastrowid)
         """
         with self.connection() as conn:
-            return conn.execute(query, parameters)
+            return CursorResult(conn.execute(query, parameters))
 
     def executemany(self, query: str, parameters: list) -> None:
         """Execute a query with multiple parameter sets.

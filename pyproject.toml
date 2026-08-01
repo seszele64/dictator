@@ -51,6 +51,7 @@ markers = [
 [tool.coverage.run]
 source = ["whisper_dictate"]
 branch = true
+relative_files = true
 
 [tool.coverage.report]
 exclude_lines = [

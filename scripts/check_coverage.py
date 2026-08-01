@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -22,6 +23,22 @@ COVERAGE_THRESHOLDS: dict[str, float] = {
     "whisper_dictate/audio_storage.py": 80.0,
     "whisper_dictate/providers/openai_compatible.py": 80.0,
 }
+
+
+def _find_file_data(files: dict, module: str) -> dict | None:
+    """Look up a module's coverage entry, tolerating relative OR absolute keys.
+
+    coverage.json keys are relative when generated from the project root, but
+    absolute when generated from another working directory (the JSON reporter
+    relativizes against the report-time CWD). Match on the path suffix.
+    """
+    if module in files:
+        return files[module]
+    norm = module.replace(os.sep, "/")
+    for key, data in files.items():
+        if key.replace(os.sep, "/").endswith("/" + norm):
+            return data
+    return None
 
 
 def _print_table(rows: list[tuple[str, float, float, str]]) -> None:
@@ -54,7 +71,7 @@ def check_coverage(coverage_file: Path) -> int:
     failed: list[tuple[str, float, float]] = []
 
     for module, target in COVERAGE_THRESHOLDS.items():
-        file_data = files.get(module)
+        file_data = _find_file_data(files, module)
         if file_data is None:
             missing.append(module)
             rows.append((module, 0.0, target, "MISSING"))
