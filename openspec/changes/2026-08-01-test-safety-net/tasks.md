@@ -26,8 +26,8 @@
 - [x] Write audio_storage.py filesystem tests (save/copy/delete/cleanup/stats/get — real FS ops)
 
 ## F. Logging and Migration Tests
-- [ ] Write db_logging.py tests (DatabaseLogHandler.emit, close, connection lifecycle, setup_dual_logging)
-- [ ] Write migration.py tests (detect/run/rollback/verify with module-constant patching)
+- [x] Write db_logging.py tests (DatabaseLogHandler.emit, close, connection lifecycle, setup_dual_logging)
+- [x] Write migration.py tests (detect/run/rollback/verify; patch module constants LEGACY_*, not Path.home())
 
 ## G. End-to-End Test
 - [ ] Write E2E dictation pipeline test (real SQLite + storage, mocked audio/API/clipboard)
