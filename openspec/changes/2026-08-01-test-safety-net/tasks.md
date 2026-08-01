@@ -33,6 +33,6 @@
 - [x] Write E2E dictation pipeline test (real SQLite + storage, mocked audio/API/clipboard)
 
 ## H. Coverage Gate and Finalization
-- [ ] Add per-module coverage thresholds to CI
-- [ ] Run full test suite and verify all coverage targets met
-- [ ] Validate OpenSpec change with `openspec validate 2026-08-01-test-safety-net`
+- [x] Add per-module coverage thresholds to CI
+- [x] Run full test suite and verify all coverage targets met
+- [x] Validate OpenSpec change with `openspec validate 2026-08-01-test-safety-net`
