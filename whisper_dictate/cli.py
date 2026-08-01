@@ -1,5 +1,6 @@
 """Command-line interface for whisper-dictate."""
 
+import contextlib
 import logging
 import sys
 from pathlib import Path
@@ -55,6 +56,7 @@ def setup_logging(level: str, enable_db_logging: bool = True):
 
     # Add database logging handler if enabled
     if enable_db_logging:
+        db_handler = None
         try:
             from whisper_dictate.db_logging import DatabaseLogHandler
 
@@ -82,6 +84,15 @@ def setup_logging(level: str, enable_db_logging: bool = True):
         except Exception as e:
             # Database logging is optional - continue without it
             root_logger.debug(f"Database logging not available: {e}")
+
+            # If the handler was attached to the root logger before the
+            # failure, detach it and close its connection. Otherwise it stays
+            # registered with an open SQLite connection that the caller never
+            # closes, because the except path returns None.
+            if db_handler is not None:
+                with contextlib.suppress(Exception):
+                    root_logger.removeHandler(db_handler)
+                    db_handler.close()
 
     return None
 
