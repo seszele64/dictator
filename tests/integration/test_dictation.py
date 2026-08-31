@@ -742,3 +742,246 @@ class TestDictationServiceSilenceDetection:
                     # Should copy to clipboard
                     mock_copy.assert_called_once_with("This is a test transcription.")
                     assert result.silence_detected is False
+
+
+class TestDictationFailureCleanup:
+    """Failed/interrupted dictations must not leave ghost recording rows."""
+
+    def _mock_db(self):
+        mock_db = MagicMock()
+        mock_db.path = Path("/tmp/test.db")
+        mock_db.initialize = Mock()
+        mock_db.create_recording = Mock(return_value=42)
+        mock_db.create_transcript = Mock(return_value=1)
+        mock_db.execute = Mock()
+        mock_db.create_log = Mock(return_value=1)
+        mock_db.delete_recording = Mock(return_value=True)
+        mock_db.close = Mock()
+        return mock_db
+
+    def _run_service(self, mock_config, mock_db, transcribe_side_effect):
+
+        mock_audio_storage = MagicMock()
+        mock_audio_storage.save_audio.return_value = (Path("/saved/test.wav"), "test.wav")
+        mock_audio_storage.recordings_path = Path("/recordings")
+        mock_audio_storage.check_disk_space.return_value = (True, 500)
+
+        result_holder = {}
+
+        with (
+            patch("whisper_dictate.dictation.get_database", return_value=mock_db),
+            patch(
+                "whisper_dictate.dictation.get_audio_storage",
+                return_value=mock_audio_storage,
+            ),
+            DictationService(mock_config) as service,
+            patch.object(service.audio_recorder, "record_to_file") as mock_record,
+            patch.object(service.transcriber, "transcribe_audio") as mock_transcribe,
+        ):
+            mock_record.return_value = Path("/tmp/test.wav")
+            mock_transcribe.side_effect = transcribe_side_effect
+            try:
+                result_holder["result"] = service.dictate()
+            except BaseException as e:  # noqa: BLE001 - test re-raises below
+                result_holder["raised"] = e
+
+        return result_holder, mock_db
+
+    def test_transcription_exception_removes_in_progress_row(self, mock_config):
+        result, mock_db = self._run_service(
+            mock_config, self._mock_db(), RuntimeError("Transcription failed")
+        )
+        assert isinstance(result.get("raised"), RuntimeError)
+        mock_db.delete_recording.assert_called_once_with(42)
+
+    def test_keyboard_interrupt_removes_in_progress_row(self, mock_config):
+        result, mock_db = self._run_service(
+            mock_config, self._mock_db(), KeyboardInterrupt()
+        )
+        assert isinstance(result.get("raised"), KeyboardInterrupt)
+        mock_db.delete_recording.assert_called_once_with(42)
+
+    def test_success_keeps_row(self, mock_config, mock_transcription_result):
+        result, mock_db = self._run_service(
+            mock_config,
+            self._mock_db(),
+            lambda *a, **kw: mock_transcription_result,
+        )
+        assert result["result"] is not None
+        mock_db.delete_recording.assert_not_called()
+
+    def test_saved_recording_row_is_kept_on_late_failure(self, mock_config):
+        """Once audio is persisted the row is kept (deleting would orphan the file)."""
+        mock_db = MagicMock()
+        mock_db.delete_recording = Mock(return_value=True)
+        with (
+            patch("whisper_dictate.dictation.get_database", return_value=mock_db),
+            DictationService(mock_config) as service,
+        ):
+            service._cleanup_failed_recording(42, recording_saved=True)
+            assert mock_db.delete_recording.assert_not_called() is None
+            service._cleanup_failed_recording(42, recording_saved=False)
+            mock_db.delete_recording.assert_called_once_with(42)
+
+
+class TestClaimFirstSaveOrdering:
+    def test_file_path_claimed_before_finalize(self, mock_config, mock_transcription_result):
+        mock_db = MagicMock()
+        mock_db.path = Path("/tmp/test.db")
+        mock_db.initialize = Mock()
+        mock_db.create_recording = Mock(return_value=42)
+        mock_db.create_transcript = Mock(return_value=1)
+        mock_db.create_log = Mock(return_value=1)
+        mock_db.close = Mock()
+
+        order = []
+
+        def db_execute(query, params=()):
+            if "UPDATE recordings" in query:
+                order.append("claim")
+            return Mock()
+
+        mock_db.execute = Mock(side_effect=db_execute)
+
+        mock_audio_storage = MagicMock()
+        mock_audio_storage.check_disk_space.return_value = (True, 500)
+
+        def fake_finalize(staged):
+            order.append("finalize")
+            return Path("/saved/test.wav")
+
+        mock_audio_storage.finalize_audio = Mock(side_effect=fake_finalize)
+
+        with (
+            patch("whisper_dictate.dictation.get_database", return_value=mock_db),
+            patch(
+                "whisper_dictate.dictation.get_audio_storage",
+                return_value=mock_audio_storage,
+            ),
+            DictationService(mock_config) as service,
+            patch.object(service.audio_recorder, "record_to_file") as mock_record,
+            patch.object(service.transcriber, "transcribe_audio") as mock_transcribe,
+            patch.object(service.clipboard, "copy_to_clipboard"),
+        ):
+            mock_record.return_value = Path("/tmp/test.wav")
+            mock_transcribe.return_value = mock_transcription_result
+            service.dictate()
+
+        assert "claim" in order and "finalize" in order
+        assert order.index("claim") < order.index("finalize")
+
+
+class TestKeepWavPersistence:
+    """keep_wav=True must persist the WAV as the canonical file, never leak /tmp."""
+
+    def test_keep_wav_persists_wav_and_unlinks_both_temps(
+        self, mock_config_mp3_keep_wav, mock_transcription_result, tmp_path
+    ):
+        from whisper_dictate.config import DatabaseConfig
+
+        recordings_root = tmp_path / "recordings"
+        mock_config_mp3_keep_wav.database = DatabaseConfig(
+            recordings_path=recordings_root
+        )
+
+        mock_db = MagicMock()
+        mock_db.path = Path("/tmp/test.db")
+        mock_db.initialize = Mock()
+        mock_db.create_recording = Mock(return_value=42)
+        mock_db.create_transcript = Mock(return_value=1)
+        mock_db.execute = Mock()
+        mock_db.create_log = Mock(return_value=1)
+        mock_db.close = Mock()
+
+        wav_tmp = tmp_path / "session.wav"
+        wav_tmp.write_bytes(b"wav data")
+
+        def fake_convert(wav_path, delete_source=None):
+            mp3_path = wav_path.with_suffix(".mp3")
+            mp3_path.write_bytes(b"mp3 data")
+            assert delete_source is False  # keep_wav=True keeps the source
+            return mp3_path
+
+        with (
+            DictationService(mock_config_mp3_keep_wav) as service, patch(
+                "whisper_dictate.dictation.get_database", return_value=mock_db
+            ),
+            patch.object(service.audio_recorder, "record_to_file") as mock_record,
+            patch.object(
+                service.audio_converter, "convert", side_effect=fake_convert
+            ),
+            patch.object(service.transcriber, "transcribe_audio") as mock_transcribe,
+        ):
+            mock_record.return_value = wav_tmp
+            mock_transcribe.return_value = mock_transcription_result
+
+            result = service.dictate()
+
+        assert result is not None
+
+        # Exactly one persisted audio file, and it is the WAV
+        persisted = [p for p in recordings_root.rglob("*") if p.is_file()]
+        assert len(persisted) == 1
+        assert persisted[0].suffix == ".wav"
+        assert persisted[0].read_bytes() == b"wav data"
+
+        # Row records the WAV format and the claimed relative path
+        create_kwargs = mock_db.create_recording.call_args.kwargs
+        assert create_kwargs["format"] == "wav"
+        claim_calls = [
+            c for c in mock_db.execute.call_args_list if "UPDATE recordings" in c.args[0]
+        ]
+        assert any(
+            str(c.args[1][0]).endswith(".wav") for c in claim_calls
+        ), f"expected WAV relative path claim, got {claim_calls}"
+
+        # No temp files leaked: both the WAV and the transient MP3 are gone
+        assert not wav_tmp.exists()
+        assert not wav_tmp.with_suffix(".mp3").exists()
+        assert not any(tmp_path.rglob(".staging-*"))
+
+    def test_keep_wav_failure_leaves_no_temp_files(
+        self, mock_config_mp3_keep_wav, tmp_path
+    ):
+        from whisper_dictate.config import DatabaseConfig
+
+        recordings_root = tmp_path / "recordings"
+        mock_config_mp3_keep_wav.database = DatabaseConfig(
+            recordings_path=recordings_root
+        )
+
+        mock_db = MagicMock()
+        mock_db.path = Path("/tmp/test.db")
+        mock_db.initialize = Mock()
+        mock_db.create_recording = Mock(return_value=42)
+        mock_db.execute = Mock()
+        mock_db.delete_recording = Mock(return_value=True)
+        mock_db.close = Mock()
+
+        wav_tmp = tmp_path / "session.wav"
+        wav_tmp.write_bytes(b"wav data")
+
+        with (
+            DictationService(mock_config_mp3_keep_wav) as service, patch(
+                "whisper_dictate.dictation.get_database", return_value=mock_db
+            ),
+            patch.object(service.audio_recorder, "record_to_file") as mock_record,
+            patch.object(service.audio_converter, "convert") as mock_convert,
+            patch.object(service.transcriber, "transcribe_audio") as mock_transcribe,
+        ):
+            mock_record.return_value = wav_tmp
+            mp3_tmp = wav_tmp.with_suffix(".mp3")
+            mp3_tmp.write_bytes(b"mp3 data")
+            mock_convert.return_value = mp3_tmp
+            mock_transcribe.side_effect = RuntimeError("API down")
+
+            with pytest.raises(RuntimeError):
+                service.dictate()
+
+        # Row cleaned up, nothing persisted, no temp files left behind
+        mock_db.delete_recording.assert_called_once_with(42)
+        assert not any(recordings_root.rglob("*")) or all(
+            not p.is_file() for p in recordings_root.rglob("*")
+        )
+        assert not wav_tmp.exists()
+        assert not mp3_tmp.exists()

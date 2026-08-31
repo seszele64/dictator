@@ -426,3 +426,78 @@ def tmp_recordings_dir(tmp_path):
     recordings = tmp_path / "recordings"
     recordings.mkdir(parents=True, exist_ok=True)
     yield recordings
+# ============ Legacy Database Fixture ============
+# The pre-versioning schema is exactly version 1: all current tables except
+# schema_versions, with transcripts lacking the updated_at column.
+
+
+LEGACY_SCHEMA_SQL = """
+CREATE TABLE recordings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_path TEXT NOT NULL,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+    duration REAL,
+    format TEXT NOT NULL DEFAULT 'mp3',
+    sample_rate INTEGER,
+    channels INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE transcripts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recording_id INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    language TEXT,
+    model_used TEXT NOT NULL DEFAULT 'whisper-1',
+    confidence REAL,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (recording_id) REFERENCES recordings(id) ON DELETE CASCADE
+);
+
+CREATE TABLE logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    level TEXT NOT NULL,
+    message TEXT NOT NULL,
+    source TEXT,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+    metadata_json TEXT
+);
+
+CREATE TABLE state (
+    key TEXT PRIMARY KEY,
+    value_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_recordings_timestamp ON recordings(timestamp);
+CREATE INDEX idx_transcripts_recording_id ON transcripts(recording_id);
+"""
+
+
+@pytest.fixture
+def legacy_db_path(tmp_path):
+    """Build a legacy (pre-schema-versioning) database with seeded rows.
+
+    Creates the old v1 schema directly with sqlite3 - no schema_versions table
+    and no transcripts.updated_at column - plus one recording and one
+    transcript, so migration and update tests can exercise real data.
+    """
+    import sqlite3
+
+    db_path = tmp_path / "legacy-whisper-dictate.db"
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.executescript(LEGACY_SCHEMA_SQL)
+        conn.execute(
+            "INSERT INTO recordings (file_path, duration, format) "
+            "VALUES ('2024/01/01/legacy.wav', 3.5, 'wav')"
+        )
+        conn.execute(
+            "INSERT INTO transcripts (recording_id, text, language) "
+            "VALUES (1, 'legacy transcription text', 'en')"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return db_path
