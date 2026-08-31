@@ -8,11 +8,14 @@ Provides audio file storage with:
 - Disk space checking for safe recording
 """
 
+import contextlib
 import logging
 import os
 import random
 import shutil
 import string
+import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -25,6 +28,47 @@ RANDOM_SUFFIX_LENGTH = 8
 
 # Default minimum free space threshold in MB
 DEFAULT_MIN_FREE_SPACE_MB = 100
+
+# Prefix for staged (in-progress) audio files inside the destination directory.
+# Files are staged under this name and atomically renamed into place, so the
+# final path never contains a partial file.
+STAGING_PREFIX = ".staging-"
+
+# Age (seconds) after which a leftover staging file is treated as an orphan by
+# the cleanup scan. Younger files may belong to a save currently in progress.
+STAGING_RETENTION_SECONDS = 3600
+
+
+class AudioPathError(Exception):
+    """Base error for audio path resolution failures."""
+
+
+class NoAudioFileError(AudioPathError):
+    """The recording has no audio file stored (empty file_path sentinel)."""
+
+
+class UnsafeAudioPathError(AudioPathError):
+    """A stored path resolves outside the recordings root and is never accessed.
+
+    Raised for absolute paths outside the recordings directory, ``..`` traversal,
+    and symlinks that escape the root. Files outside the root must never be read
+    or unlinked based on database contents.
+    """
+
+
+@dataclass(frozen=True)
+class StagedAudio:
+    """A staged audio file awaiting atomic finalization into storage.
+
+    Attributes:
+        staged_path: Temporary copy of the audio inside the destination directory
+        final_path: Final absolute path the file will occupy after finalization
+        relative_path: Final path relative to the recordings root (stored in the DB)
+    """
+
+    staged_path: Path
+    final_path: Path
+    relative_path: str
 
 
 def check_disk_space(
@@ -264,6 +308,87 @@ class AudioStorage:
         # Return full path
         return directory / filename, filename
 
+    def stage_audio(
+        self,
+        source_path: Path,
+        timestamp: datetime | None = None,
+        suffix: str = "wav",
+    ) -> StagedAudio:
+        """Stage an audio file for atomic persistence.
+
+        Copies the source into a temporary staging file inside the destination
+        directory. The caller should claim the final path in the database
+        (claim-first) and then call ``finalize_audio()`` so the final path only
+        ever appears with complete content.
+
+        Args:
+            source_path: Path to the source audio file (e.g., temp file)
+            timestamp: Datetime for the filename (defaults to now)
+            suffix: File extension (without dot)
+
+        Returns:
+            StagedAudio: Staging details (staged path, final path, relative path)
+
+        Raises:
+            FileNotFoundError: If source file doesn't exist
+            OSError: If staging the file fails
+        """
+        if not source_path.exists():
+            raise FileNotFoundError(f"Source file not found: {source_path}")
+
+        # Generate unique storage path
+        dest_path, filename = self.generate_storage_path(timestamp, suffix)
+
+        # Ensure destination directory exists
+        self.ensure_directory_exists(dest_path.parent)
+
+        staged_path = (
+            dest_path.parent
+            / f"{STAGING_PREFIX}{filename}.{_generate_random_suffix(6)}.part"
+        )
+
+        try:
+            shutil.copy2(str(source_path), str(staged_path))
+        except Exception as e:
+            with contextlib.suppress(OSError):
+                staged_path.unlink(missing_ok=True)
+            logger.error(f"Failed to stage audio file: {e}")
+            raise OSError(f"Failed to stage audio file: {e}") from e
+
+        relative_path = dest_path.relative_to(self._recordings_path)
+        return StagedAudio(
+            staged_path=staged_path,
+            final_path=dest_path,
+            relative_path=str(relative_path),
+        )
+
+    def finalize_audio(self, staged: StagedAudio) -> Path:
+        """Atomically move a staged audio file into its final location.
+
+        Uses ``os.replace()`` within the destination directory so the final
+        path never contains a partial file and concurrent readers observe
+        either the old state or the complete new file.
+
+        Args:
+            staged: Staging details returned by ``stage_audio()``
+
+        Returns:
+            Path: Final path of the saved file
+
+        Raises:
+            OSError: If the replace step fails (staging file is cleaned up)
+        """
+        try:
+            os.replace(staged.staged_path, staged.final_path)
+        except Exception as e:
+            with contextlib.suppress(OSError):
+                staged.staged_path.unlink(missing_ok=True)
+            logger.error(f"Failed to finalize audio file: {e}")
+            raise OSError(f"Failed to finalize audio file: {e}") from e
+
+        logger.info(f"Audio saved to: {staged.final_path}")
+        return staged.final_path
+
     def save_audio(
         self,
         source_path: Path,
@@ -272,8 +397,12 @@ class AudioStorage:
     ) -> tuple[Path, str]:
         """Save an audio file from temporary storage to persistent storage.
 
-        Uses shutil.move() to atomically move the file from temp to
-        persistent storage.
+        Stages the file inside the destination directory and atomically
+        finalizes it with ``os.replace()``, so the final path never contains a
+        partial file. Note: this convenience wrapper does not claim the path in
+        the database; callers that track recordings in the database should use
+        ``stage_audio()``/``finalize_audio()`` and update the row's ``file_path``
+        between the two steps (claim-first ordering).
 
         Args:
             source_path: Path to the source audio file (e.g., temp file)
@@ -285,28 +414,16 @@ class AudioStorage:
 
         Raises:
             FileNotFoundError: If source file doesn't exist
-            IOError: If file move fails
+            OSError: If staging or finalizing fails
         """
-        if not source_path.exists():
-            raise FileNotFoundError(f"Source file not found: {source_path}")
-
-        # Generate unique storage path
-        dest_path, filename = self.generate_storage_path(timestamp, suffix)
-
-        # Ensure destination directory exists
-        self.ensure_directory_exists(dest_path.parent)
-
-        # Move file to persistent storage
-        try:
-            shutil.move(str(source_path), str(dest_path))
-            logger.info(f"Audio saved to: {dest_path}")
-        except Exception as e:
-            logger.error(f"Failed to save audio file: {e}")
-            raise OSError(f"Failed to move audio file: {e}") from e
-
-        # Return full path and relative path from recordings root
-        relative_path = dest_path.relative_to(self._recordings_path)
-        return dest_path, str(relative_path)
+        staged = self.stage_audio(source_path, timestamp, suffix)
+        final_path = self.finalize_audio(staged)
+        # Preserve save_audio's historical move semantics: stage_audio copies,
+        # so the source would survive. Callers of this convenience wrapper
+        # expect the source to be consumed, so remove it only after the
+        # atomic replace succeeded.
+        source_path.unlink()
+        return final_path, staged.relative_path
 
     def copy_audio(
         self,
@@ -349,8 +466,51 @@ class AudioStorage:
         relative_path = dest_path.relative_to(self._recordings_path)
         return dest_path, str(relative_path)
 
+    def _resolve_contained(self, relative_path: str) -> Path:
+        """Resolve a stored path against the recordings root, enforcing containment.
+
+        Empty paths are the explicit "no file" sentinel. Absolute paths and
+        ``..`` traversal are accepted only when they resolve inside the
+        recordings root (legacy absolute in-root paths keep working); anything
+        else is rejected and never accessed.
+
+        Args:
+            relative_path: Stored path (relative to the recordings root, or a
+                legacy absolute path that resolves inside the root)
+
+        Returns:
+            Path: Fully resolved path inside the recordings root
+
+        Raises:
+            NoAudioFileError: If the stored path is empty (no file stored)
+            UnsafeAudioPathError: If the path escapes the recordings root
+        """
+        if not relative_path or not relative_path.strip():
+            raise NoAudioFileError(
+                "Recording has no audio file stored (empty file path)"
+            )
+
+        root = self._recordings_path.resolve()
+        candidate = (self._recordings_path / relative_path).resolve()
+
+        if candidate == root or not candidate.is_relative_to(root):
+            logger.warning(
+                f"Refusing unsafe audio path {relative_path!r}: resolves to "
+                f"{candidate}, which is outside the recordings root {root}"
+            )
+            raise UnsafeAudioPathError(
+                f"Stored path {relative_path!r} escapes the recordings root "
+                f"({root}); the file will not be accessed."
+            )
+
+        return candidate
+
     def get_audio_path(self, relative_path: str, verify_exists: bool = False) -> Path:
-        """Resolve a relative path to absolute path in recordings directory.
+        """Resolve a stored path to an absolute path inside the recordings directory.
+
+        The stored path is resolved and containment-checked: absolute paths and
+        ``..`` traversal are rejected unless they resolve inside the recordings
+        root, and an empty path is the "no file" sentinel.
 
         Args:
             relative_path: Relative path from recordings root
@@ -360,9 +520,11 @@ class AudioStorage:
             Path: Absolute path to the audio file
 
         Raises:
+            NoAudioFileError: If the stored path is empty (no file stored)
+            UnsafeAudioPathError: If the path escapes the recordings root
             FileNotFoundError: If verify_exists is True and file doesn't exist
         """
-        path = self._recordings_path / relative_path
+        path = self._resolve_contained(relative_path)
         if verify_exists and not path.exists():
             raise FileNotFoundError(
                 f"Audio file not found: {path}\n"
@@ -393,7 +555,11 @@ class AudioStorage:
         Returns:
             Optional[bytes]: Audio file contents, or None if not found
         """
-        full_path = self.get_audio_path(relative_path)
+        try:
+            full_path = self.get_audio_path(relative_path)
+        except AudioPathError as e:
+            logger.warning(f"Cannot read audio file: {e}")
+            return None
 
         if not full_path.exists():
             logger.warning(f"Audio file not found: {full_path}")
@@ -408,13 +574,22 @@ class AudioStorage:
     def delete_audio(self, relative_path: str) -> bool:
         """Delete an audio file.
 
+        Files outside the recordings root are never deleted; rows without a
+        stored file are a no-op.
+
         Args:
             relative_path: Relative path from recordings root
 
         Returns:
             bool: True if deleted, False if not found
         """
-        full_path = self.get_audio_path(relative_path)
+        try:
+            full_path = self.get_audio_path(relative_path)
+        except NoAudioFileError:
+            return False
+        except UnsafeAudioPathError as e:
+            logger.warning(f"Refusing to delete audio file outside recordings root: {e}")
+            return False
 
         if not full_path.exists():
             logger.warning(f"Audio file not found for deletion: {full_path}")
@@ -563,23 +738,50 @@ def get_orphaned_files(db) -> list[dict]:
     orphaned_files = []
 
     if recordings_path.exists():
+        now = time.time()
         for path in recordings_path.rglob("*"):
-            if path.is_file():
+            if not path.is_file():
+                continue
+            # Skip staging files from saves that may still be in progress;
+            # older leftovers are treated as orphans and cleaned up.
+            if path.name.startswith(STAGING_PREFIX):
                 try:
-                    relative = str(path.relative_to(recordings_path))
-                    filesystem_files.add(relative)
-                except ValueError:
-                    logger.warning(f"Could not compute relative path for: {path}")
+                    age = now - path.stat().st_mtime
+                except OSError:
+                    continue
+                if age < STAGING_RETENTION_SECONDS:
+                    logger.debug(f"Skipping in-progress staging file: {path}")
+                    continue
+            try:
+                relative = str(path.relative_to(recordings_path))
+                filesystem_files.add(relative)
+            except ValueError:
+                logger.warning(f"Could not compute relative path for: {path}")
 
-    # Get all file paths from the database
+    # Get all file paths from the database, normalized through the containment
+    # check so empty/unsafe stored paths reference nothing inside the tree and
+    # legacy absolute in-root paths match their relative form.
     db_files: set[str] = set()
     try:
         # Use a high limit to get all recordings
         recordings = db.list_recordings(limit=100000, offset=0)
         for recording in recordings:
             file_path = recording.get("file_path")
-            if file_path:
-                db_files.add(file_path)
+            if not file_path:
+                # Empty file_path is the "no file" sentinel
+                continue
+            try:
+                resolved = audio_storage.get_audio_path(file_path)
+            except AudioPathError as e:
+                logger.warning(
+                    f"Recording path {file_path!r} not accessible "
+                    f"({type(e).__name__}); its file will not be treated for cleanup"
+                )
+                continue
+            try:
+                db_files.add(str(resolved.relative_to(recordings_path)))
+            except ValueError:
+                logger.warning(f"Could not normalize stored path: {file_path}")
     except Exception as e:
         logger.error(f"Failed to fetch recordings from database: {e}")
         return []
