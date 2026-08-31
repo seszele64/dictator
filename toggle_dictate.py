@@ -16,7 +16,7 @@ import soundfile as sf
 
 from whisper_dictate.audio_storage import get_audio_storage
 from whisper_dictate.clipboard import ClipboardManager
-from whisper_dictate.config import DatabaseConfig, load_config
+from whisper_dictate.config import load_config
 from whisper_dictate.database import get_database
 from whisper_dictate.dunst_monitor import ensure_dunst_running
 from whisper_dictate.notifications import (
@@ -83,30 +83,41 @@ def setup_logging():
     root_logger.addHandler(console_handler)
 
 
-def get_db_and_storage():
+def get_db_and_storage(config=None):
     """Get database and audio storage instances.
+
+    Args:
+        config: Loaded application configuration. When None, configuration is
+            loaded so the user's configured database paths are always honored.
 
     Returns:
         tuple: (database, audio_storage)
     """
-    db_config = DatabaseConfig()
+    if config is None:
+        # Module-level load_config (kept patchable for tests that redirect
+        # storage paths); honors the user's configured database paths.
+        config = load_config()
+    db_config = config.database
     db = get_database(db_config)
     db.initialize()
     audio_storage = get_audio_storage(db_config)
     return db, audio_storage
 
 
-def is_recording():
+def is_recording(config=None):
     """Check if currently recording.
 
     Checks database state first, falls back to file-based state for compatibility.
+
+    Args:
+        config: Loaded application configuration (loaded when None)
 
     Returns:
         bool: True if recording, False otherwise.
     """
     db = None
     try:
-        db, _ = get_db_and_storage()
+        db, _ = get_db_and_storage(config)
         is_recording = db.get_state(STATE_KEY_RECORDING)
         if is_recording is True:
             return True
@@ -160,10 +171,12 @@ def start_background_recording(config):
         # Create recording entry in database
         recording_id = None
         try:
-            db, _ = get_db_and_storage()
-            # Create initial recording entry
+            db, _ = get_db_and_storage(config)
+            # Create initial recording entry. An empty file_path is the
+            # "no file yet" sentinel: the absolute temp path would escape the
+            # recordings root, and the real path is claimed after the save.
             recording_id = db.create_recording(
-                file_path=str(AUDIO_FILE),
+                file_path="",
                 duration=None,  # Will be updated on stop
                 format="wav",  # toggle_dictate.py always records WAV
                 sample_rate=44100,
@@ -192,7 +205,7 @@ def start_background_recording(config):
             db.close()
 
 
-def stop_background_recording():
+def stop_background_recording(config=None):
     """Stop background recording and process the audio.
 
     Returns:
@@ -205,7 +218,7 @@ def stop_background_recording():
     try:
         # Get recording_id BEFORE clearing state (for transcription use)
         try:
-            db, _ = get_db_and_storage()
+            db, _ = get_db_and_storage(config)
             recording_id = db.get_state(STATE_KEY_RECORDING_ID)
         except Exception as e:
             logging.debug(f"Failed to get recording_id: {e}")
@@ -231,7 +244,7 @@ def stop_background_recording():
         # Clear database state (reuse db connection if available)
         try:
             if db is None:
-                db, _ = get_db_and_storage()
+                db, _ = get_db_and_storage(config)
             db.set_state(STATE_KEY_RECORDING, False)
             db.delete_state(STATE_KEY_RECORDING_ID)
         except Exception as e:
@@ -257,6 +270,8 @@ def transcribe_audio(config, recording_id=None):
         recording_id: Optional recording ID. If not provided, will attempt to get from state.
     """
     db = None
+    audio_saved = False
+    transcript_stored = False
     try:
         if not AUDIO_FILE.exists():
             logging.error("No audio file found")
@@ -265,27 +280,39 @@ def transcribe_audio(config, recording_id=None):
         logging.info("Starting transcription")
 
         # Get database and audio storage
-        db, audio_storage = get_db_and_storage()
+        db, audio_storage = get_db_and_storage(config)
 
         # Get recording ID from parameter or fall back to state lookup
         if recording_id is None:
             recording_id = db.get_state(STATE_KEY_RECORDING_ID)
 
-        # Save audio to persistent storage
+        # Save audio to persistent storage with claim-first ordering: claim
+        # the row's file_path before finalizing so audio cleanup can never
+        # delete a just-saved file whose row still points elsewhere.
         saved_path = None
-        relative_path = None
         try:
-            saved_path, relative_path = audio_storage.save_audio(AUDIO_FILE)
-            logging.info(f"Audio saved to persistent storage: {saved_path}")
-
-            # Update recording entry with file path
-            if recording_id and relative_path:
+            staged = audio_storage.stage_audio(AUDIO_FILE)
+            if recording_id:
                 db.execute(
                     "UPDATE recordings SET file_path = ? WHERE id = ?",
-                    (relative_path, recording_id),
+                    (staged.relative_path, recording_id),
                 )
+            saved_path = audio_storage.finalize_audio(staged)
+            audio_saved = True
+            logging.info(f"Audio saved to persistent storage: {saved_path}")
         except Exception as e:
             logging.warning(f"Failed to save audio to persistent storage: {e}")
+            # Roll back the claim so the row does not point at an unwritten path
+            if recording_id:
+                try:
+                    db.execute(
+                        "UPDATE recordings SET file_path = '' WHERE id = ?",
+                        (recording_id,),
+                    )
+                except Exception as rollback_error:
+                    logging.warning(
+                        f"Failed to roll back file_path claim: {rollback_error}"
+                    )
 
         # Transcribe audio
         transcriber = create_transcriber(config.openai)
@@ -322,6 +349,7 @@ def transcribe_audio(config, recording_id=None):
                         model_used=config.openai.model,
                         confidence=None,
                     )
+                    transcript_stored = True
                 except Exception as e:
                     logging.warning(f"Failed to create empty transcript entry: {e}")
 
@@ -340,6 +368,7 @@ def transcribe_audio(config, recording_id=None):
                     model_used=config.openai.model,
                     confidence=None,  # Whisper API doesn't always provide this
                 )
+                transcript_stored = True
                 logging.debug(f"Created transcript entry for recording {recording_id}")
             except Exception as e:
                 logging.warning(f"Failed to create transcript entry: {e}")
@@ -357,6 +386,21 @@ def transcribe_audio(config, recording_id=None):
     except Exception as e:
         logging.error(f"Transcription error: {e}")
         notify_error(f"Transcription failed: {e}")
+
+        # Remove the in-progress recording row so failed transcriptions do not
+        # leave orphaned rows in history. Rows with persisted audio or a stored
+        # transcript are kept - deleting those would orphan real data.
+        if db is not None and recording_id and not audio_saved and not transcript_stored:
+            try:
+                if db.delete_recording(recording_id):
+                    logging.info(
+                        f"Removed in-progress recording entry {recording_id}"
+                    )
+            except Exception as cleanup_error:
+                logging.warning(
+                    f"Failed to clean up in-progress recording entry: {cleanup_error}"
+                )
+
         return None
 
     finally:
@@ -381,12 +425,12 @@ def main():
 
         config = load_config()
 
-        if is_recording():
+        if is_recording(config):
             logging.info("Stopping recording...")
             notify_stopping_transcription()
             if not notify_recording_stop():
                 logging.warning("Failed to replace persistent notification")
-            success, recording_id = stop_background_recording()
+            success, recording_id = stop_background_recording(config)
             if success:
                 transcribe_audio(config, recording_id)
             else:
@@ -402,7 +446,7 @@ def main():
         logging.error(f"Error: {e}")
         notify_error(str(e))
         # Clean up on error
-        stop_background_recording()
+        stop_background_recording(config)
         if AUDIO_FILE.exists():
             AUDIO_FILE.unlink()
 

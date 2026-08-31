@@ -38,7 +38,7 @@ class E2EEnv:
 
 
 @pytest.fixture
-def e2e_env(tmp_path, monkeypatch, db_singleton_reset):
+def e2e_env(tmp_path, monkeypatch, db_singleton_reset, mock_config):
     """Set up the full E2E environment.
 
     Uses a real SQLite database and real audio storage in temp directories.
@@ -50,14 +50,16 @@ def e2e_env(tmp_path, monkeypatch, db_singleton_reset):
     monkeypatch.setattr(toggle_dictate, "PID_FILE", tmp_path / "pid")
     monkeypatch.setattr(toggle_dictate, "AUDIO_FILE", tmp_path / "audio.wav")
 
-    # Point DatabaseConfig at temp dirs so real SQLite + storage never touch HOME
-    def _test_db_config() -> DatabaseConfig:
-        return DatabaseConfig(
-            path=tmp_path / "test.db",
-            recordings_path=tmp_path / "recordings",
-        )
-
-    monkeypatch.setattr(toggle_dictate, "DatabaseConfig", _test_db_config)
+    # Point the pipeline's config at temp dirs so real SQLite + storage never
+    # touch HOME. The pipeline reads DatabaseConfig through AppConfig.database
+    # (config passed explicitly) and via load_config() when no config is given
+    # (stop_background_recording), so patch both seams.
+    test_db_config = DatabaseConfig(
+        path=tmp_path / "test.db",
+        recordings_path=tmp_path / "recordings",
+    )
+    mock_config.database = test_db_config
+    monkeypatch.setattr(toggle_dictate, "load_config", lambda: mock_config)
 
     # Mock the arecord subprocess (returns a process with a fake PID)
     popen_mock = Mock()
@@ -222,7 +224,10 @@ class TestDictationPipelineE2E:
                 (recording_id,),
             )
             assert row is not None
-            assert row[0] == str(toggle_dictate.AUDIO_FILE)
+            # fix-storage-safety claim-first: start stores an empty file_path
+            # sentinel (the raw arecord temp path lies outside the recordings
+            # root); the real contained path is claimed in after the save.
+            assert row[0] == ""
             assert row[1] == "wav"
             assert row[2] == 44100
             assert row[3] == 2

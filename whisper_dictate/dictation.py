@@ -6,9 +6,9 @@ from types import TracebackType
 
 from whisper_dictate.audio import AudioRecorder
 from whisper_dictate.audio_converter import AudioConverter
-from whisper_dictate.audio_storage import AudioStorage, get_audio_storage
+from whisper_dictate.audio_storage import AudioStorage, StagedAudio, get_audio_storage
 from whisper_dictate.clipboard import ClipboardManager
-from whisper_dictate.config import AppConfig, DatabaseConfig
+from whisper_dictate.config import AppConfig
 from whisper_dictate.database import Database, get_database
 from whisper_dictate.transcription import (
     TranscriptionResult,
@@ -60,8 +60,8 @@ class DictationService:
             Database: Initialized database instance
         """
         if self._db is None:
-            db_config = DatabaseConfig()
-            self._db = get_database(db_config)
+            # Use the user-configured database settings, never defaults
+            self._db = get_database(self.config.database)
             # Initialize database connection
             self._db.initialize()
         return self._db
@@ -74,8 +74,7 @@ class DictationService:
             AudioStorage: Initialized audio storage instance
         """
         if self._audio_storage is None:
-            db_config = DatabaseConfig()
-            self._audio_storage = get_audio_storage(db_config)
+            self._audio_storage = get_audio_storage(self.config.database)
         return self._audio_storage
 
     def check_disk_space(self) -> tuple[bool, int]:
@@ -85,9 +84,58 @@ class DictationService:
             Tuple[bool, int]: (has_space, available_mb) - True if enough space available,
                              and the available space in MB
         """
-        db_config = DatabaseConfig()
-        min_free_mb = db_config.min_free_space_mb
+        min_free_mb = self.config.database.min_free_space_mb
         return self.audio_storage.check_disk_space(min_free_mb)
+
+    def _save_audio_claim_first(
+        self,
+        recording_id: int | None,
+        source_file: Path,
+        audio_format: str,
+    ) -> Path:
+        """Persist the audio file with claim-first ordering.
+
+        Stages the file, claims the row's ``file_path`` in the database, then
+        atomically finalizes with ``os.replace()``. This closes the window
+        where ``audio cleanup --confirm`` could delete a just-saved file whose
+        row still references the old (empty) path. On finalize failure the
+        claim is rolled back and the staging file is removed.
+
+        Args:
+            recording_id: Recording row ID (claim skipped when None)
+            source_file: Audio file to persist
+            audio_format: Audio format suffix (wav/mp3)
+
+        Returns:
+            Path: Final path of the persisted file
+        """
+        staged: StagedAudio = self.audio_storage.stage_audio(
+            source_file, suffix=audio_format
+        )
+
+        # Claim the final path before finalizing so cleanup can never race us
+        if recording_id is not None:
+            self.database.execute(
+                "UPDATE recordings SET file_path = ? WHERE id = ?",
+                (staged.relative_path, recording_id),
+            )
+
+        try:
+            return self.audio_storage.finalize_audio(staged)
+        except Exception:
+            # Roll back the claim: the row must not point at a path that was
+            # never written.
+            if recording_id is not None:
+                try:
+                    self.database.execute(
+                        "UPDATE recordings SET file_path = ? WHERE id = ?",
+                        ("", recording_id),
+                    )
+                except Exception as rollback_error:
+                    logger.warning(
+                        f"Failed to roll back file_path claim: {rollback_error}"
+                    )
+            raise
 
     def dictate(
         self, duration: float | None = None
@@ -109,8 +157,10 @@ class DictationService:
         Raises:
             Exception: Re-raises any exceptions from underlying services
         """
-        audio_file: Path | None = None
+        wav_file: Path | None = None
+        converted_file: Path | None = None
         recording_id: int | None = None
+        recording_saved = False
 
         try:
             # Check disk space before recording
@@ -147,12 +197,25 @@ class DictationService:
                     logger.warning("MP3 conversion failed, using WAV for transcription")
                     audio_format = "wav"
 
+            # Track every temp file created by the flow for cleanup in finally
+            converted_file = audio_file if audio_file != wav_file else None
+
+            # With keep_wav=True the WAV is the canonical persisted file and the
+            # MP3 stays transient (used only for the API upload); otherwise the
+            # converted file itself is persisted.
+            if self.config.audio.keep_wav and converted_file is not None:
+                persist_file = wav_file
+                persist_format = "wav"
+            else:
+                persist_file = audio_file
+                persist_format = audio_format
+
             # Create recording entry in database (status: recording)
             try:
                 recording_id = self.database.create_recording(
-                    file_path="",  # Will be updated after saving
+                    file_path="",  # Claimed after the audio is staged
                     duration=actual_duration,
-                    format=audio_format,
+                    format=persist_format,
                     sample_rate=self.config.audio.sample_rate,
                     channels=self.config.audio.channels,
                 )
@@ -197,18 +260,13 @@ class DictationService:
 
                 return result  # Return early, skip clipboard copy
 
-            # Save audio to persistent storage and update recording
+            # Save audio to persistent storage and update recording (claim-first)
             try:
-                # Move audio to persistent storage
-                saved_path, relative_path = self.audio_storage.save_audio(audio_file)
+                saved_path = self._save_audio_claim_first(
+                    recording_id, persist_file, persist_format
+                )
+                recording_saved = True
                 logger.info(f"Audio saved to persistent storage: {saved_path}")
-
-                # Update recording entry with actual file path
-                if recording_id is not None:
-                    self.database.execute(
-                        "UPDATE recordings SET file_path = ? WHERE id = ?",
-                        (relative_path, recording_id),
-                    )
             except Exception as e:
                 logger.warning(f"Failed to save audio to persistent storage: {e}")
                 # Continue even if storage fails - transcription still valuable
@@ -257,15 +315,22 @@ class DictationService:
             logger.info("Dictation workflow completed successfully")
             return result
 
-        except Exception as e:
-            logger.error(f"Dictation workflow failed: {e}")
+        except BaseException as e:
+            # BaseException (not just Exception) so interrupted dictation
+            # (KeyboardInterrupt/Ctrl+C) also cleans up before propagating.
+            failure_label = str(e) or type(e).__name__
+            logger.error(f"Dictation workflow failed: {failure_label}")
+
+            # Remove the in-progress row so failed/interrupted dictations do
+            # not leave orphaned rows in history.
+            self._cleanup_failed_recording(recording_id, recording_saved)
 
             # Log error to database
             try:
                 if recording_id is not None:
                     self.database.create_log(
                         level="ERROR",
-                        message=f"Dictation failed: {e}",
+                        message=f"Dictation failed: {failure_label}",
                         source="dictation",
                         metadata={"recording_id": recording_id},
                     )
@@ -274,14 +339,41 @@ class DictationService:
 
             raise
         finally:
-            # Clean up temporary audio file (only if not saved to persistent storage)
-            if audio_file and audio_file.exists():
+            # Unlink every temporary file the flow created (the WAV and the
+            # transient MP3) regardless of success/failure, so /tmp never
+            # leaks audio files. Files already consumed (e.g. deleted by the
+            # converter) simply do not exist anymore.
+            for temp_file in (wav_file, converted_file):
+                if temp_file is None:
+                    continue
                 try:
-                    # Only delete if it's still in temp location
-                    audio_file.unlink()
-                    logger.debug(f"Cleaned up temporary file: {audio_file}")
+                    if temp_file.exists():
+                        temp_file.unlink()
+                        logger.debug(f"Cleaned up temporary file: {temp_file}")
                 except Exception as e:
                     logger.warning(f"Failed to clean up temporary file: {e}")
+
+    def _cleanup_failed_recording(
+        self, recording_id: int | None, recording_saved: bool
+    ) -> None:
+        """Delete the in-progress recording row after a failure or interruption.
+
+        Rows that already received their persisted audio are kept - deleting
+        those would orphan the file on disk.
+
+        Args:
+            recording_id: Recording row ID (None if never created)
+            recording_saved: True once the audio file was persisted and claimed
+        """
+        if recording_id is None or recording_saved:
+            return
+        try:
+            if self.database.delete_recording(recording_id):
+                logger.info(
+                    f"Removed in-progress recording entry {recording_id} after failure"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to clean up in-progress recording entry: {e}")
 
     def close(self) -> None:
         """Close the database connection."""
