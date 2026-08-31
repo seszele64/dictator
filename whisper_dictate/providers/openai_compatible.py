@@ -143,21 +143,18 @@ class OpenAICompatibleProvider(TranscriptionProvider):
                 if self._task == "translate":
                     logger.debug(f"Using translation API for task: {self._task}")
                     if self._language:
+                        # The translations endpoint has no `language` parameter —
+                        # it always translates the audio to English — so a
+                        # configured WHISPER_LANGUAGE hint cannot be applied.
                         logger.debug(
-                            f"Language explicitly set to '{self._language}' "
-                            f"(language auto-detection disabled)"
-                        )
-                    else:
-                        logger.debug(
-                            "No language specified — Whisper will auto-detect. "
-                            "Set WHISPER_LANGUAGE in .env for better accuracy "
-                            "with accented or short audio."
+                            f"Ignoring configured language '{self._language}' for "
+                            "translation: the translations endpoint has no "
+                            "'language' parameter (output is always English)."
                         )
                     response = self._client.audio.translations.create(
                         model=self._model,
                         file=file,
                         response_format="json",
-                        language=self._language,
                         temperature=self._temperature,
                     )
                 else:
