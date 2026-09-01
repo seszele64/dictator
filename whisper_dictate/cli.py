@@ -9,7 +9,7 @@ import click
 
 from whisper_dictate.audio_storage import check_disk_space
 from whisper_dictate.cli_helpers import with_database
-from whisper_dictate.config import DatabaseConfig, load_config
+from whisper_dictate.config import DatabaseConfig, load_config, validate_api_key
 from whisper_dictate.database import get_database
 from whisper_dictate.dictation import DictationService
 
@@ -107,14 +107,11 @@ def cli(ctx: click.Context, log_level: str) -> None:
         ctx.call_on_close(db_log_handler.close)
     ctx.ensure_object(dict)
 
+    # Load config WITHOUT demanding an API key: database-only commands (logs,
+    # history, audio, migrate) and `info` must work without one. Transcription
+    # paths validate the key lazily (see the `dictate` command).
     try:
-        config = load_config()
-        ctx.obj["config"] = config
-        service = DictationService(config)
-        ctx.obj["service"] = service
-
-        # Register cleanup to close service after any command
-        ctx.call_on_close(service.close)
+        ctx.obj["config"] = load_config(require_api_key=False)
     except ValueError as e:
         click.echo(f"Configuration error: {e}", err=True)
         sys.exit(1)
@@ -125,7 +122,17 @@ def cli(ctx: click.Context, log_level: str) -> None:
 @click.pass_context
 def dictate(ctx: click.Context, duration: float | None) -> None:
     """Record audio and transcribe it to text."""
-    service = ctx.obj["service"]
+    try:
+        # Lazy API-key validation: only transcription paths require a key, so
+        # keyless providers (local, custom) and non-transcription commands are
+        # unaffected. A missing key prints the friendly error below.
+        validate_api_key(ctx.obj["config"])
+        service = DictationService(ctx.obj["config"])
+        # Register cleanup to close the service (and its DB connection)
+        ctx.call_on_close(service.close)
+    except ValueError as e:
+        click.echo(f"Configuration error: {e}", err=True)
+        sys.exit(1)
 
     try:
         # Check disk space before recording
@@ -162,7 +169,9 @@ def dictate(ctx: click.Context, duration: float | None) -> None:
 @click.pass_context
 def info(ctx: click.Context) -> None:
     """Display system information and configuration."""
-    service = ctx.obj["service"]
+    # get_system_info() does not use the transcriber, so no API key is needed.
+    service = DictationService(ctx.obj["config"])
+    ctx.call_on_close(service.close)
     info = service.get_system_info()
 
     click.echo("🔍 System Information:")

@@ -103,3 +103,88 @@ class TestOpenAICompatibleProvider:
             # Should have called API (silence detection disabled)
             mock_create.assert_called_once()
             assert result.text == "Hello world"
+
+
+class TestTranslateBranch:
+    """Regression tests for the WHISPER_TASK=translate code path.
+
+    The OpenAI SDK's audio.translations.create has NO `language` parameter
+    (the endpoint always outputs English), so passing one breaks every
+    translate call. The provider must omit the kwarg for translation while
+    still passing it for transcription.
+    """
+
+    def test_translate_omits_language_kwarg(self, temp_audio_file, mock_openai_client):
+        """task=translate must call translations.create without `language`."""
+        from whisper_dictate.providers.openai_compatible import OpenAICompatibleProvider
+
+        provider = OpenAICompatibleProvider(
+            api_key="test-key",
+            language="de",
+            task="translate",
+            silence_threshold_dbfs=None,
+        )
+        provider._client = mock_openai_client
+
+        mock_response = Mock()
+        mock_response.text = "Hola mundo"
+        mock_response.language = "spanish"
+        mock_openai_client.audio.translations.create.return_value = mock_response
+
+        result = provider.transcribe_audio(temp_audio_file)
+
+        # Translations endpoint must NOT receive a language kwarg
+        mock_openai_client.audio.translations.create.assert_called_once()
+        call_kwargs = mock_openai_client.audio.translations.create.call_args.kwargs
+        assert "language" not in call_kwargs
+        # Remaining parameters are preserved
+        assert call_kwargs["model"] == "whisper-1"
+        assert call_kwargs["temperature"] == 0.0
+        # Result is mapped from the response
+        assert result.text == "Hola mundo"
+        assert result.provider == "openai"
+
+    def test_translate_without_language_hint(self, temp_audio_file, mock_openai_client):
+        """task=translate with no configured language still omits the kwarg."""
+        from whisper_dictate.providers.openai_compatible import OpenAICompatibleProvider
+
+        provider = OpenAICompatibleProvider(
+            api_key="test-key",
+            language=None,
+            task="translate",
+            silence_threshold_dbfs=None,
+        )
+        provider._client = mock_openai_client
+
+        mock_response = Mock()
+        mock_response.text = "Hola mundo"
+        mock_openai_client.audio.translations.create.return_value = mock_response
+
+        result = provider.transcribe_audio(temp_audio_file)
+
+        call_kwargs = mock_openai_client.audio.translations.create.call_args.kwargs
+        assert "language" not in call_kwargs
+        assert result.text == "Hola mundo"
+
+    def test_transcribe_passes_language_kwarg(self, temp_audio_file, mock_openai_client):
+        """The transcribe branch must keep passing `language` unchanged."""
+        from whisper_dictate.providers.openai_compatible import OpenAICompatibleProvider
+
+        provider = OpenAICompatibleProvider(
+            api_key="test-key",
+            language="de",
+            silence_threshold_dbfs=None,
+        )
+        provider._client = mock_openai_client
+
+        mock_response = Mock()
+        mock_response.text = "Hallo Welt"
+        mock_response.language = "de"
+        mock_openai_client.audio.transcriptions.create.return_value = mock_response
+
+        result = provider.transcribe_audio(temp_audio_file)
+
+        mock_openai_client.audio.transcriptions.create.assert_called_once()
+        call_kwargs = mock_openai_client.audio.transcriptions.create.call_args.kwargs
+        assert call_kwargs["language"] == "de"
+        assert result.text == "Hallo Welt"

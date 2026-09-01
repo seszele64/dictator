@@ -267,7 +267,59 @@ class AppConfig(BaseModel):
     )
 
 
-def load_config() -> AppConfig:
+def _resolve_provider_enum(provider: str) -> WhisperProvider:
+    """Resolve a provider string to a WhisperProvider enum.
+
+    Unknown provider strings fall back to CUSTOM, mirroring
+    create_transcriber() so both key-resolution paths stay consistent.
+    """
+    try:
+        return WhisperProvider(provider)
+    except ValueError:
+        return WhisperProvider.CUSTOM
+
+
+def _provider_auth_env_var(provider: str) -> str | None:
+    """Return the auth env var declared for a provider, if any.
+
+    Providers with no declared env var (local, custom) are keyless by design.
+    """
+    defaults = PROVIDER_DEFAULTS.get(_resolve_provider_enum(provider), {})
+    return defaults.get("env_var")
+
+
+def validate_api_key(config: AppConfig) -> None:
+    """WHY THIS EXISTS: API-key validation must be lazy so that non-transcription
+    CLI commands (logs, history, migrate) run without a key, while transcription
+    paths still fail fast with a helpful message.
+
+    RESPONSIBILITY: Enforce API-key presence for providers that require auth.
+    BOUNDARIES:
+    - DOES: Resolve the effective key (explicit config > provider env var) and
+      raise for auth-requiring providers without one
+    - DOES NOT: Mutate config, construct clients, or contact any API
+
+    Args:
+        config: Application configuration to validate.
+
+    Raises:
+        ValueError: If the provider declares an auth env var (openai, groq,
+            together, deepinfra) but no API key is configured. Keyless
+            providers (local, custom) never raise.
+    """
+    env_var = _provider_auth_env_var(config.openai.provider)
+    api_key = config.openai.api_key
+    if not api_key and env_var:
+        api_key = os.getenv(env_var, "")
+
+    if not api_key and env_var:
+        raise ValueError(
+            "API key not found. Set the appropriate environment variable "
+            "(OPENAI_API_KEY, GROQ_API_KEY, etc.) or configure api_key explicitly."
+        )
+
+
+def load_config(require_api_key: bool = True) -> AppConfig:
     """WHY THIS EXISTS: Configuration loading needs to be centralized
     to ensure consistent initialization across the application.
 
@@ -276,34 +328,23 @@ def load_config() -> AppConfig:
     - DOES: Load configuration from environment variables
     - DOES NOT: Handle configuration file management
 
+    Args:
+        require_api_key: When True (default), raise ValueError if the
+            configured provider declares an auth env var (openai, groq,
+            together, deepinfra) but no key is available. Keyless providers
+            (local, custom) never raise. Pass False for non-transcription
+            callers (e.g. database-only CLI commands) that must work without
+            any key configured.
+
     Returns:
         AppConfig: Validated application configuration
 
     Raises:
-        ValueError: If required configuration is missing
+        ValueError: If required configuration is missing (see validate_api_key()).
     """
     config = AppConfig()
-    api_key = config.openai.api_key
 
-    # Resolve provider enum once (unknown providers fall back to CUSTOM, as before)
-    try:
-        provider_enum = WhisperProvider(config.openai.provider)
-    except ValueError:
-        provider_enum = WhisperProvider.CUSTOM
-
-    # Resolve API key: explicit config > provider env var
-    if not api_key:
-        defaults = PROVIDER_DEFAULTS.get(provider_enum, {})
-        env_var = defaults.get("env_var")
-        if env_var:  # LOCAL/CUSTOM declare env_var=None → nothing to resolve
-            api_key = os.getenv(env_var, "")
-
-    # LOCAL (auth-free local server) and CUSTOM (user-configured endpoint, possibly
-    # local/auth-free) never require a key. Explicit keys still pass through.
-    if not api_key and provider_enum not in (WhisperProvider.LOCAL, WhisperProvider.CUSTOM):
-        raise ValueError(
-            "API key not found. Set the appropriate environment variable "
-            "(OPENAI_API_KEY, GROQ_API_KEY, etc.) or configure api_key explicitly."
-        )
+    if require_api_key:
+        validate_api_key(config)
 
     return config
