@@ -727,7 +727,13 @@ def get_orphaned_files(db) -> list[dict]:
     """
     # Get audio storage to access recordings path
     audio_storage = get_audio_storage()
-    recordings_path = audio_storage.recordings_path
+    # Compare resolved-vs-resolved: the DB side canonicalizes stored paths
+    # through get_audio_path() (resolve()), so the scan root must be
+    # canonicalized too. With the raw configured root (e.g. a symlinked
+    # recordings directory), every resolved DB path fails relative_to() and
+    # gets dropped from db_files — making all real recordings look orphaned
+    # and exposing them to mass deletion via `audio cleanup --confirm`.
+    recordings_path = audio_storage.recordings_path.resolve()
 
     if not recordings_path.exists():
         logger.info("Recordings directory does not exist, no orphaned files")

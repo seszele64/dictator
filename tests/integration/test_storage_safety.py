@@ -22,6 +22,7 @@ from whisper_dictate.audio_storage import (
     get_orphaned_files,
 )
 from whisper_dictate.config import DatabaseConfig
+from whisper_dictate.database import Database
 
 
 @pytest.fixture
@@ -216,6 +217,63 @@ class TestOrphanScanStagingFiles:
             orphaned = get_orphaned_files(db)
 
         assert orphaned == []
+
+
+class TestOrphanScanSymlinkedRoot:
+    """The orphan scan must compare resolved-vs-resolved paths.
+
+    Regression test for the Kilo review WARNING on PR #25: the filesystem
+    scan keyed files against the raw configured recordings root while the DB
+    side resolves paths through get_audio_path(), so a symlinked recordings
+    root made every real recording look orphaned (mass-deletion hazard for
+    `audio cleanup --confirm`).
+    """
+
+    @pytest.fixture
+    def symlinked_setup(self, tmp_path):
+        real_root = tmp_path / "real-recordings"
+        real_root.mkdir()
+        link = tmp_path / "linked-recordings"
+        link.symlink_to(real_root, target_is_directory=True)
+        config = DatabaseConfig(path=tmp_path / "test.db", recordings_path=link)
+        storage = AudioStorage(config)
+        db = Database(config)
+        db.initialize()
+        return storage, db, link, real_root
+
+    def test_stored_recording_is_not_orphaned_through_symlink(
+        self, symlinked_setup
+    ):
+        storage, db, link, real_root = symlinked_setup
+        source = link / "source.wav"
+        source.write_bytes(b"real recording")
+        final, relative = storage.save_audio(source)
+        db.create_recording(file_path=relative, duration=2.5, format="wav")
+
+        with patch(
+            "whisper_dictate.audio_storage.get_audio_storage", return_value=storage
+        ):
+            orphaned = get_orphaned_files(db)
+            deleted, _ = get_orphaned_files_and_cleanup(db)
+
+        assert orphaned == []
+        assert deleted == 0
+        assert final.exists()  # the real file survived cleanup
+
+    def test_untracked_file_in_symlinked_root_is_orphaned(self, symlinked_setup):
+        storage, db, link, real_root = symlinked_setup
+        day_dir = link / "2024/01/01"
+        day_dir.mkdir(parents=True)
+        stray = day_dir / "stray.wav"
+        stray.write_bytes(b"untracked")
+
+        with patch(
+            "whisper_dictate.audio_storage.get_audio_storage", return_value=storage
+        ):
+            orphaned = get_orphaned_files(db)
+
+        assert [o["relative_path"] for o in orphaned] == ["2024/01/01/stray.wav"]
+        assert stray.exists()  # get_orphaned_files only reports, never deletes
 
 
 def get_orphaned_files_and_cleanup(db):
