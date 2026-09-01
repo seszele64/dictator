@@ -447,10 +447,10 @@ All Whisper settings are configurable via environment variables. Switch provider
 | Groq | `groq` | `whisper-large-v3-turbo` | Fast inference; requires `GROQ_API_KEY` |
 | Together AI | `together` | `whisper-large-v3` | Requires `TOGETHER_API_KEY` |
 | DeepInfra | `deepinfra` | `Whisper/whisper-large-v3` | Requires `DEEPINFRA_API_KEY` |
-| Local server | `local` | (your server's model) | No API key required; set `WHISPER_BASE_URL` (default `http://localhost:8000/v1`) |
-| Custom endpoint | `custom` | (your server's model) | No API key required unless your endpoint needs auth; set `WHISPER_BASE_URL` |
-| whisper.cpp | `local` or `custom` | `whisper-large-v3` | Keyless; set `WHISPER_BASE_URL` to your server |
-| faster-whisper-server | `local` or `custom` | `large-v3` | Keyless; set `WHISPER_BASE_URL` to your server |
+| Local server | `local` | `whisper-1` (set `WHISPER_MODEL` to a model your server supports) | No API key required; set `WHISPER_BASE_URL` (default `http://localhost:8000/v1`) |
+| Custom endpoint | `custom` | `whisper-1` (set `WHISPER_MODEL` to a model your server supports) | No API key required unless your endpoint needs auth; set `WHISPER_BASE_URL` |
+| whisper.cpp | `local` or `custom` | `whisper-1` (`whisper-large-v3` recommended) | Keyless; set `WHISPER_BASE_URL` to your server |
+| faster-whisper-server | `local` or `custom` | `whisper-1` (`large-v3` recommended) | Keyless; set `WHISPER_BASE_URL` to your server |
 
 #### Provider-Specific API Key Fallbacks
 
