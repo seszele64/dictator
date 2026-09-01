@@ -7,12 +7,25 @@ from whisper_dictate.database import get_database
 
 
 def with_database(f):
-    """Decorator that handles database initialization and cleanup."""
+    """Decorator that handles database initialization and cleanup.
+
+    Uses the database configuration loaded by the CLI group callback so that
+    user-configured database paths and settings are honored instead of
+    silently falling back to defaults.
+    """
 
     @click.pass_context
     def wrapper(ctx, *args, **kwargs):
+        # Prefer the configuration loaded by the CLI group callback
+        db_config = None
+        if isinstance(ctx.obj, dict):
+            config = ctx.obj.get("config")
+            db_config = getattr(config, "database", None)
+        if db_config is None:
+            # Standalone usage outside the CLI group (tools, direct tests)
+            db_config = DatabaseConfig()
+
         # Initialize database
-        db_config = DatabaseConfig()
         db = get_database(db_config)
         db.initialize()
 

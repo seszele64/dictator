@@ -820,3 +820,341 @@ class TestConnectionLeak:
                 assert mock_db.close.called, (
                     f"db.close() not called for command: {cmd[0]} {cmd[1] if len(cmd) > 1 else ''}"
                 )
+
+
+class TestHistoryUpdateStorageSafety:
+    """Tests for history update command."""
+
+    @pytest.fixture
+    def mock_database_with_update(self):
+        """Create a mock database that supports update."""
+        mock_db = Mock()
+
+        # Transcript for update
+        mock_db.get_transcription_with_recording = Mock(
+            return_value={
+                "id": 1,
+                "text": "Original transcription text",
+                "timestamp": "2024-03-15 10:30:00",
+                "duration": 5.5,
+                "language": "en",
+                "model_used": "whisper-1",
+                "confidence": 0.95,
+                "file_path": "test.wav",
+                "recording_id": 1,
+            }
+        )
+
+        # Update result
+        mock_db.update_transcript = Mock(return_value=True)
+
+        # Initialize and close methods
+        mock_db.initialize = Mock()
+        mock_db.close = Mock()
+
+        return mock_db
+
+    @pytest.fixture
+    def mock_database_not_found(self):
+        """Create a mock database that returns None for non-existent ID."""
+        mock_db = Mock()
+
+        mock_db.get_transcription_with_recording = Mock(return_value=None)
+        mock_db.update_transcript = Mock(return_value=False)
+        mock_db.initialize = Mock()
+        mock_db.close = Mock()
+
+        return mock_db
+
+    def test_history_update_success(self, cli_runner, mock_database_with_update):
+        """Verify history update command works with valid input."""
+        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
+            mock_get_db.return_value = mock_database_with_update
+
+            # Simulate user confirming with 'y'
+            result = cli_runner.invoke(
+                cli, ["history", "update", "1", "--text", "Updated text"], input="y\n"
+            )
+
+            assert result.exit_code == 0, f"Command failed: {result.output}"
+            assert "Updated transcription #1" in result.output
+            assert mock_database_with_update.update_transcript.called
+
+    def test_history_update_cancelled(self, cli_runner, mock_database_with_update):
+        """Verify history update command handles cancellation."""
+        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
+            mock_get_db.return_value = mock_database_with_update
+
+            # Simulate user cancelling with 'n'
+            result = cli_runner.invoke(
+                cli, ["history", "update", "1", "--text", "Updated text"], input="n\n"
+            )
+
+            assert result.exit_code == 0
+            assert "cancelled" in result.output.lower()
+            # Verify update was NOT called
+            assert not mock_database_with_update.update_transcript.called
+
+    def test_history_update_not_found(self, cli_runner, mock_database_not_found):
+        """Verify history update handles non-existent ID."""
+        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
+            mock_get_db.return_value = mock_database_not_found
+
+            result = cli_runner.invoke(
+                cli, ["history", "update", "999", "--text", "Updated text"]
+            )
+
+            assert result.exit_code == 1
+            assert "not found" in result.output
+
+    def test_history_update_with_language(self, cli_runner, mock_database_with_update):
+        """Verify history update command works with language option."""
+        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
+            mock_get_db.return_value = mock_database_with_update
+
+            result = cli_runner.invoke(
+                cli,
+                [
+                    "history",
+                    "update",
+                    "1",
+                    "--text",
+                    "Updated text",
+                    "--language",
+                    "es",
+                ],
+                input="y\n",
+            )
+
+            assert result.exit_code == 0, f"Command failed: {result.output}"
+            assert "Updated transcription #1" in result.output
+
+            # Verify update was called with language
+            mock_database_with_update.update_transcript.assert_called_with(
+                1, "Updated text", "es"
+            )
+
+    def test_history_update_requires_text(self, cli_runner):
+        """Verify history update requires --text option."""
+        from click.testing import CliRunner
+
+        cli_runner = CliRunner()
+        mock_db = Mock()
+        mock_db.initialize = Mock()
+        mock_db.close = Mock()
+
+        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
+            mock_get_db.return_value = mock_db
+
+            result = cli_runner.invoke(cli, ["history", "update", "1"])
+
+            # Should fail because --text is required
+            assert result.exit_code != 0
+
+    def test_history_update_shows_comparison(
+        self, cli_runner, mock_database_with_update
+    ):
+        """Verify history update shows old vs new text comparison."""
+        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
+            mock_get_db.return_value = mock_database_with_update
+
+            result = cli_runner.invoke(
+                cli, ["history", "update", "1", "--text", "New text"], input="y\n"
+            )
+
+            assert "Current Text" in result.output
+            assert "New Text" in result.output
+
+
+class TestHistoryDeleteFileFirst:
+    """Deletion must unlink the audio file BEFORE removing the database row.
+
+    Regression: the row was deleted first, then the unlink crashed on
+    empty/unsafe paths, leaving inconsistent state (and IsADirectoryError for
+    file_path=""). Empty paths are a "no file" sentinel, unsafe paths are never
+    accessed, missing files are tolerated, and real unlink errors abort the row
+    deletion so disk and database stay consistent.
+    """
+
+    @pytest.fixture
+    def transcription_row(self):
+        return {
+            "id": 1,
+            "text": "Delete me",
+            "timestamp": "2024-03-15 10:30:00",
+            "duration": 5.5,
+            "language": "en",
+            "model_used": "whisper-1",
+            "confidence": 0.95,
+            "file_path": "2024/03/14/test.wav",
+            "recording_id": 42,
+        }
+
+    def _invoke(self, cli_runner, mock_db, transcription_row):
+        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
+            mock_get_db.return_value = mock_db
+            with patch(
+                "whisper_dictate.audio_storage.get_audio_storage"
+            ) as mock_storage:
+                result = cli_runner.invoke(cli, ["history", "delete", "1", "--yes"])
+        return result, mock_storage
+
+    def test_unlinks_file_before_deleting_row(
+        self, cli_runner, transcription_row
+    ):
+        mock_db = Mock()
+        mock_db.get_transcription_with_recording = Mock(return_value=transcription_row)
+        order = []
+
+        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
+            mock_get_db.return_value = mock_db
+            with patch(
+                "whisper_dictate.audio_storage.get_audio_storage"
+            ) as mock_storage:
+                mock_audio_path = Mock()
+                mock_audio_path.unlink.side_effect = (
+                    lambda *a, **kw: order.append("unlink")
+                )
+                mock_storage.return_value.get_audio_path.return_value = mock_audio_path
+                mock_db.delete_recording.side_effect = lambda rid: (
+                    order.append("row"),
+                    True,
+                )[1]
+
+                result = cli_runner.invoke(cli, ["history", "delete", "1", "--yes"])
+
+        assert result.exit_code == 0, result.output
+        assert order == ["unlink", "row"], f"file must be unlinked first, got {order}"
+
+    def test_empty_file_path_deletes_row_only(self, cli_runner, transcription_row):
+        transcription_row["file_path"] = ""
+        mock_db = Mock()
+        mock_db.get_transcription_with_recording = Mock(return_value=transcription_row)
+        mock_db.delete_recording = Mock(return_value=True)
+
+        result, mock_storage = self._invoke(cli_runner, mock_db, transcription_row)
+
+        assert result.exit_code == 0, result.output
+        assert "Deleted transcription #1" in result.output
+        mock_storage.return_value.get_audio_path.assert_not_called()
+        mock_db.delete_recording.assert_called_once_with(42)
+
+    def test_unsafe_path_deletes_row_only_and_warns(
+        self, cli_runner, transcription_row
+    ):
+        from whisper_dictate.audio_storage import UnsafeAudioPathError
+
+        mock_db = Mock()
+        mock_db.get_transcription_with_recording = Mock(return_value=transcription_row)
+        mock_db.delete_recording = Mock(return_value=True)
+
+        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
+            mock_get_db.return_value = mock_db
+            with patch(
+                "whisper_dictate.audio_storage.get_audio_storage"
+            ) as mock_storage:
+                mock_storage.return_value.get_audio_path.side_effect = (
+                    UnsafeAudioPathError("escapes the recordings root")
+                )
+                result = cli_runner.invoke(cli, ["history", "delete", "1", "--yes"])
+
+        assert result.exit_code == 0, result.output
+        assert "escapes the recordings root" in result.output
+        mock_db.delete_recording.assert_called_once_with(42)
+
+    def test_unlink_permission_error_aborts_row_deletion(
+        self, cli_runner, transcription_row
+    ):
+        mock_db = Mock()
+        mock_db.get_transcription_with_recording = Mock(return_value=transcription_row)
+        mock_db.delete_recording = Mock(return_value=True)
+
+        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
+            mock_get_db.return_value = mock_db
+            with patch(
+                "whisper_dictate.audio_storage.get_audio_storage"
+            ) as mock_storage:
+                mock_path = Mock()
+                mock_path.unlink.side_effect = PermissionError("denied")
+                mock_storage.return_value.get_audio_path.return_value = mock_path
+
+                result = cli_runner.invoke(cli, ["history", "delete", "1", "--yes"])
+
+        assert result.exit_code == 1
+        assert "Failed to delete audio file" in result.output
+        mock_db.delete_recording.assert_not_called()
+
+    def test_missing_file_still_deletes_row(self, cli_runner, transcription_row):
+        mock_db = Mock()
+        mock_db.get_transcription_with_recording = Mock(return_value=transcription_row)
+        mock_db.delete_recording = Mock(return_value=True)
+
+        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
+            mock_get_db.return_value = mock_db
+            with patch(
+                "whisper_dictate.audio_storage.get_audio_storage"
+            ) as mock_storage:
+                mock_path = Mock()
+                mock_path.unlink.side_effect = FileNotFoundError()
+                mock_storage.return_value.get_audio_path.return_value = mock_path
+
+                result = cli_runner.invoke(cli, ["history", "delete", "1", "--yes"])
+
+        assert result.exit_code == 0, result.output
+        assert mock_db.delete_recording.assert_called_once_with(42) is None
+
+    def test_real_files_inside_and_outside_root(self, cli_runner, tmp_path):
+        """End-to-end: in-root file is deleted, out-of-root file is never touched."""
+        from whisper_dictate.audio_storage import AudioStorage
+        from whisper_dictate.config import DatabaseConfig
+
+        recordings_root = tmp_path / "recordings"
+        inside = recordings_root / "2024/03/14"
+        inside.mkdir(parents=True)
+        in_root_file = inside / "rec.wav"
+        in_root_file.write_bytes(b"audio")
+        outside_file = tmp_path / "outside.wav"
+        outside_file.write_bytes(b"do not touch")
+
+        storage = AudioStorage(DatabaseConfig(recordings_path=recordings_root))
+
+        mock_db = Mock()
+        mock_db.get_transcription_with_recording = Mock(
+            side_effect=[
+                {**self.transcription_default(), "file_path": str(outside_file)},
+                {
+                    **self.transcription_default(),
+                    "file_path": "2024/03/14/rec.wav",
+                },
+            ]
+        )
+        mock_db.delete_recording = Mock(return_value=True)
+
+        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
+            mock_get_db.return_value = mock_db
+            with patch(
+                "whisper_dictate.audio_storage.get_audio_storage", return_value=storage
+            ):
+                # Out-of-root absolute path: row-only delete
+                result1 = cli_runner.invoke(cli, ["history", "delete", "1", "--yes"])
+                # In-root relative path: file deleted + row deleted
+                result2 = cli_runner.invoke(cli, ["history", "delete", "1", "--yes"])
+
+        assert result1.exit_code == 0, result1.output
+        assert outside_file.exists()  # never touched
+        assert result2.exit_code == 0, result2.output
+        assert not in_root_file.exists()  # deleted file-first
+        assert mock_db.delete_recording.call_count == 2
+
+    @staticmethod
+    def transcription_default():
+        return {
+            "id": 1,
+            "text": "Delete me",
+            "timestamp": "2024-03-15 10:30:00",
+            "duration": 5.5,
+            "language": "en",
+            "model_used": "whisper-1",
+            "confidence": 0.95,
+            "recording_id": 42,
+        }

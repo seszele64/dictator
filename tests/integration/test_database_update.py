@@ -306,3 +306,123 @@ class TestHistoryUpdateCLI:
 
             assert "Current Text" in result.output
             assert "New Text" in result.output
+
+
+class TestLegacyDatabaseMigration:
+    """Legacy databases (tables, no schema_versions) must run migration 2.
+
+    Regression: version-0 legacy databases were stamped version 2 without the
+    migration ever running, so update_transcript failed with
+    'no such column: updated_at' forever.
+    """
+
+    @pytest.fixture
+    def legacy_database(self, legacy_db_path):
+        from whisper_dictate.config import DatabaseConfig
+        from whisper_dictate.database import Database
+
+        db = Database(DatabaseConfig(path=legacy_db_path))
+        db.initialize()
+        yield db
+        db.close()
+
+    def _schema_version(self, db):
+        row = db.fetchone("SELECT MAX(version) FROM schema_versions")
+        return row[0] or 0
+
+    def test_legacy_db_backfills_to_current_version(self, legacy_database):
+        from whisper_dictate.database import CURRENT_SCHEMA_VERSION
+
+        assert self._schema_version(legacy_database) == CURRENT_SCHEMA_VERSION
+
+    def test_legacy_db_gains_updated_at_column(self, legacy_database):
+        columns = {row[1] for row in legacy_database.fetchall("PRAGMA table_info(transcripts)")}
+        assert "updated_at" in columns
+
+    def test_update_transcript_works_on_migrated_legacy_db(self, legacy_database):
+        assert legacy_database.update_transcript(1, "corrected text") is True
+        transcript = legacy_database.get_transcript_by_recording(1)
+        assert transcript["text"] == "corrected text"
+        assert transcript["updated_at"]  # backfilled timestamp
+
+    def test_legacy_rows_survive_migration(self, legacy_database):
+        recording = legacy_database.get_recording(1)
+        assert recording["file_path"] == "2024/01/01/legacy.wav"
+
+    def test_reinitialize_is_idempotent(self, legacy_db_path):
+        from whisper_dictate.config import DatabaseConfig
+        from whisper_dictate.database import Database
+
+        db = Database(DatabaseConfig(path=legacy_db_path))
+        db.initialize()
+        db.initialize()  # second run must not re-migrate or fail
+        assert self._schema_version(db) == 2
+        db.close()
+
+    def test_fresh_db_still_works(self, tmp_path):
+        from whisper_dictate.config import DatabaseConfig
+        from whisper_dictate.database import CURRENT_SCHEMA_VERSION, Database
+
+        db = Database(DatabaseConfig(path=tmp_path / "fresh.db"))
+        db.initialize()
+        assert self._schema_version(db) == CURRENT_SCHEMA_VERSION
+        rid = db.create_recording("a.wav")
+        assert db.get_recording(rid)["file_path"] == "a.wav"
+        db.close()
+
+
+class TestRowMappingStrictness:
+    """Row mapping must match the schema exactly (zip strict=True)."""
+
+    @pytest.fixture
+    def db(self, tmp_path):
+        from whisper_dictate.config import DatabaseConfig
+        from whisper_dictate.database import Database
+
+        database = Database(DatabaseConfig(path=tmp_path / "strict.db"))
+        database.initialize()
+        yield database
+        database.close()
+
+    def test_row_to_dict_raises_on_drift(self):
+        from whisper_dictate.database import Database
+
+        with pytest.raises(ValueError):
+            Database._row_to_dict(("a", "b"), ["col1", "col2", "col3"])
+
+    def test_row_to_dict_maps_matching_columns(self):
+        from whisper_dictate.database import Database
+
+        result = Database._row_to_dict(("a", "b"), ["col1", "col2"])
+        assert result == {"col1": "a", "col2": "b"}
+
+    def test_get_recording_full_dict_without_updated_at(self, db):
+        rid = db.create_recording("2024/01/01/x.wav", duration=1.5)
+        recording = db.get_recording(rid)
+        assert recording["file_path"] == "2024/01/01/x.wav"
+        assert "updated_at" not in recording
+        assert set(recording) == {
+            "id",
+            "file_path",
+            "timestamp",
+            "duration",
+            "format",
+            "sample_rate",
+            "channels",
+            "created_at",
+        }
+
+    def test_list_recordings_full_dicts(self, db):
+        db.create_recording("a.wav")
+        db.create_recording("b.wav")
+        recordings = db.list_recordings()
+        assert len(recordings) == 2
+        assert all("updated_at" not in r for r in recordings)
+        assert all(r["file_path"] for r in recordings)
+
+    def test_drifted_schema_fails_loudly(self, db):
+        rid = db.create_recording("a.wav")
+        # Simulate future schema drift: a column the query mapping doesn't know
+        db.execute("ALTER TABLE recordings ADD COLUMN extra_col TEXT")
+        with pytest.raises(ValueError):
+            db.get_recording(rid)

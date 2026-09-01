@@ -14,8 +14,16 @@ from whisper_dictate.database import get_database
 from whisper_dictate.dictation import DictationService
 
 
-def setup_logging(level: str, enable_db_logging: bool = True):
+def setup_logging(
+    level: str, db_config: DatabaseConfig | None = None, enable_db_logging: bool = True
+):
     """Configure application logging with file and optional database output.
+
+    Args:
+        level: Logging level name (e.g. "INFO")
+        db_config: Database configuration for the database log handler; when
+            None, default configuration is used (only for standalone callers)
+        enable_db_logging: Whether to attach the database log handler
 
     Returns:
         The DatabaseLogHandler if database logging was enabled, otherwise None.
@@ -60,8 +68,9 @@ def setup_logging(level: str, enable_db_logging: bool = True):
         try:
             from whisper_dictate.db_logging import DatabaseLogHandler
 
-            # Get or create database
-            db_config = DatabaseConfig()
+            # Get or create database (with the configured values)
+            if db_config is None:
+                db_config = DatabaseConfig()
             db = get_database(db_config)
 
             # Initialize database synchronously for logging
@@ -102,19 +111,23 @@ def setup_logging(level: str, enable_db_logging: bool = True):
 @click.pass_context
 def cli(ctx: click.Context, log_level: str) -> None:
     """Whisper-dictate: Voice-to-text dictation with clipboard integration."""
-    db_log_handler = setup_logging(log_level)
-    if db_log_handler is not None:
-        ctx.call_on_close(db_log_handler.close)
-    ctx.ensure_object(dict)
-
-    # Load config WITHOUT demanding an API key: database-only commands (logs,
-    # history, audio, migrate) and `info` must work without one. Transcription
-    # paths validate the key lazily (see the `dictate` command).
+    # Configuration must be loaded before logging setup and before any
+    # database/storage singleton is initialized, so user-configured database
+    # paths and thresholds actually take effect. It is loaded WITHOUT demanding
+    # an API key: database-only commands (logs, history, audio, migrate) and
+    # `info` must work without one. Transcription paths validate the key lazily
+    # (see the `dictate` command).
     try:
-        ctx.obj["config"] = load_config(require_api_key=False)
+        config = load_config(require_api_key=False)
     except ValueError as e:
         click.echo(f"Configuration error: {e}", err=True)
         sys.exit(1)
+
+    db_log_handler = setup_logging(log_level, config.database)
+    if db_log_handler is not None:
+        ctx.call_on_close(db_log_handler.close)
+    ctx.ensure_object(dict)
+    ctx.obj["config"] = config
 
 
 @cli.command()
@@ -135,8 +148,8 @@ def dictate(ctx: click.Context, duration: float | None) -> None:
         sys.exit(1)
 
     try:
-        # Check disk space before recording
-        db_config = DatabaseConfig()
+        # Check disk space before recording (use configured values)
+        db_config = ctx.obj["config"].database
         has_space, available_mb = check_disk_space(
             db_config.get_recordings_path(), db_config.min_free_space_mb
         )
@@ -392,7 +405,7 @@ def cleanup_logs(ctx: click.Context, days: int | None) -> None:
         whisper-dictate logs cleanup --days 7
     """
     db = ctx.obj["db"]
-    db_config = DatabaseConfig()
+    db_config = ctx.obj["config"].database
 
     try:
         # Get retention days from config if not provided
@@ -490,7 +503,7 @@ def show_history(ctx: click.Context, transcript_id: int, audio: bool) -> None:
     from whisper_dictate.audio_storage import get_audio_storage
 
     db = ctx.obj["db"]
-    db_config = DatabaseConfig()
+    db_config = ctx.obj["config"].database
 
     try:
         transcription = db.get_transcription_with_recording(transcript_id)
@@ -530,16 +543,23 @@ def show_history(ctx: click.Context, transcript_id: int, audio: bool) -> None:
 
         # Audio file path
         if audio:
+            from whisper_dictate.audio_storage import NoAudioFileError, UnsafeAudioPathError
+
+            audio_storage = get_audio_storage(db_config)
             try:
-                audio_storage = get_audio_storage(db_config)
                 audio_path = audio_storage.get_audio_path(
                     transcription["file_path"], verify_exists=True
                 )
-                click.echo(f"\n🎵 Audio File: {audio_path}")
+            except NoAudioFileError:
+                click.echo("\nℹ️  No audio file stored for this transcription.")
+            except UnsafeAudioPathError as e:
+                click.echo(f"\n⚠️  {e}", err=True)
             except FileNotFoundError as e:
                 click.echo("\n⚠️  Audio file not found!", err=True)
                 click.echo(f"   {e}", err=True)
                 sys.exit(1)
+            else:
+                click.echo(f"\n🎵 Audio File: {audio_path}")
 
         # Full transcript text
         click.echo("\n" + "-" * 60)
@@ -625,10 +645,14 @@ def delete_history(ctx: click.Context, transcript_id: int, confirm_yes: bool) ->
         whisper-dictate history delete 42
         whisper-dictate history delete 42 --yes
     """
-    from whisper_dictate.audio_storage import get_audio_storage
+    from whisper_dictate.audio_storage import (
+        NoAudioFileError,
+        UnsafeAudioPathError,
+        get_audio_storage,
+    )
 
     db = ctx.obj["db"]
-    db_config = DatabaseConfig()
+    db_config = ctx.obj["config"].database
 
     try:
         # First get the transcription to verify it exists and get audio path
@@ -660,21 +684,48 @@ def delete_history(ctx: click.Context, transcript_id: int, confirm_yes: bool) ->
             click.echo("Deletion cancelled.")
             return
 
-        # Delete the recording (cascades to transcript due to foreign key)
-        audio_path = None
-        if transcription.get("file_path"):
-            audio_storage = get_audio_storage(db_config)
-            audio_path = audio_storage.get_audio_path(transcription["file_path"])
-
         recording_id = transcription.get("recording_id")
+        stored_path = transcription.get("file_path") or ""
+
+        # Resolve the audio path BEFORE deleting anything. An empty stored
+        # path is the "no file" sentinel; unsafe paths (outside the recordings
+        # root) are never accessed - those recordings are deleted row-only.
+        unlink_path = None
+        if stored_path:
+            audio_storage = get_audio_storage(db_config)
+            try:
+                unlink_path = audio_storage.get_audio_path(stored_path)
+            except NoAudioFileError:
+                click.echo("No audio file stored for this transcription.")
+            except UnsafeAudioPathError as e:
+                click.echo(f"⚠️  {e}", err=True)
+                click.echo(
+                    "   Deleting the record only; the file will not be touched.",
+                    err=True,
+                )
+
+        # File-first deletion: unlink the audio before the database row so a
+        # failure can never leave a row pointing at a deleted file (or crash
+        # after the row was already removed).
+        if unlink_path is not None:
+            try:
+                unlink_path.unlink()
+                click.echo(f"Deleted audio file: {unlink_path}")
+            except FileNotFoundError:
+                # An already-gone file is not an error
+                click.echo("Audio file already missing; deleting the record only.")
+            except OSError as e:
+                # Real unlink errors abort the row deletion so disk and
+                # database stay consistent.
+                click.echo(
+                    f"Error: Failed to delete audio file {unlink_path}: {e}", err=True
+                )
+                sys.exit(1)
+
+        # Delete the recording (cascades to transcript due to foreign key)
         deleted = db.delete_recording(recording_id)
 
         if deleted:
-            # Also delete the audio file if it exists
-            if audio_path and audio_path.exists():
-                audio_path.unlink()
-                click.echo(f"Deleted audio file: {audio_path}")
-
             click.echo(f"✅ Deleted transcription #{transcript_id}")
         else:
             click.echo(
@@ -796,8 +847,13 @@ def cleanup_audio(ctx: click.Context, dry_run: bool, confirm: bool) -> None:
     """
     from whisper_dictate.audio_storage import (
         cleanup_orphaned_files,
+        get_audio_storage,
         get_orphaned_files,
     )
+
+    # Ensure the once-only audio storage singleton is initialized with the
+    # configured recordings path before the orphan scan uses it.
+    get_audio_storage(ctx.obj["config"].database)
 
     # Determine actual dry_run value
     # If --confirm is specified, dry_run becomes False

@@ -317,9 +317,23 @@ class Database:
         current_version = self._get_schema_version()
 
         if current_version == 0:
-            logger.info("No schema version found. Creating initial schema...")
-            self._create_schema()
-            self._set_schema_version(CURRENT_SCHEMA_VERSION)
+            if self._has_legacy_schema():
+                # Legacy database: core tables exist but were created before
+                # schema versioning. Treat it as baseline version 1 so the
+                # pending migrations (e.g. transcripts.updated_at) actually run
+                # instead of silently stamping the current version onto an old
+                # schema (which broke update_transcript forever).
+                logger.info(
+                    "Legacy database detected (core tables without schema "
+                    "version). Backfilling schema migrations..."
+                )
+                self._create_schema()  # idempotent; fills any missing tables/indexes
+                self._set_schema_version(1)
+                self._run_migrations(1, CURRENT_SCHEMA_VERSION)
+            else:
+                logger.info("No schema version found. Creating initial schema...")
+                self._create_schema()
+                self._set_schema_version(CURRENT_SCHEMA_VERSION)
         elif current_version < CURRENT_SCHEMA_VERSION:
             logger.info(
                 f"Migrating schema from version {current_version} "
@@ -328,6 +342,23 @@ class Database:
             self._run_migrations(current_version, CURRENT_SCHEMA_VERSION)
         else:
             logger.debug(f"Schema version is current: {current_version}")
+
+    def _has_legacy_schema(self) -> bool:
+        """Detect a database created before schema versioning existed.
+
+        Returns:
+            bool: True when the core application tables (recordings, transcripts)
+                  exist but no schema version row is present.
+        """
+        with self.connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT COUNT(*) FROM sqlite_master
+                WHERE type = 'table' AND name IN ('recordings', 'transcripts')
+                """
+            )
+            core_table_count = cursor.fetchone()[0]
+        return core_table_count >= 2
 
     def _get_schema_version(self) -> int:
         """Get the current schema version.
@@ -540,7 +571,6 @@ class Database:
                     "sample_rate",
                     "channels",
                     "created_at",
-                    "updated_at",
                 ],
             )
         return None
@@ -560,15 +590,26 @@ class Database:
         Raises:
             FileNotFoundError: If verify_exists is True and file doesn't exist
         """
-        from whisper_dictate.audio_storage import get_audio_storage
+        from whisper_dictate.audio_storage import (
+            NoAudioFileError,
+            UnsafeAudioPathError,
+            get_audio_storage,
+        )
 
         recording = self.get_recording(recording_id)
         if recording:
             audio_storage = get_audio_storage(self._config)
-            absolute_path = audio_storage.get_audio_path(
-                recording["file_path"], verify_exists=verify_exists
-            )
-            recording["absolute_path"] = str(absolute_path)
+            try:
+                absolute_path = audio_storage.get_audio_path(
+                    recording["file_path"], verify_exists=verify_exists
+                )
+            except NoAudioFileError:
+                recording["absolute_path"] = None
+            except UnsafeAudioPathError as e:
+                logger.warning(f"Recording {recording_id} has an unsafe stored path: {e}")
+                recording["absolute_path"] = None
+            else:
+                recording["absolute_path"] = str(absolute_path)
         return recording
 
     def list_recordings(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
@@ -601,7 +642,6 @@ class Database:
                     "sample_rate",
                     "channels",
                     "created_at",
-                    "updated_at",
                 ],
             )
             for row in rows
@@ -1054,7 +1094,7 @@ class Database:
         Returns:
             dict: Row as dictionary
         """
-        return dict(zip(columns, row, strict=False))
+        return dict(zip(columns, row, strict=True))
 
 
 # Global database instance
