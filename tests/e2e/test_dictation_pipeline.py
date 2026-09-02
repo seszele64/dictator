@@ -52,14 +52,14 @@ def e2e_env(tmp_path, monkeypatch, db_singleton_reset, mock_config):
 
     # Point the pipeline's config at temp dirs so real SQLite + storage never
     # touch HOME. The pipeline reads DatabaseConfig through AppConfig.database
-    # (config passed explicitly) and via load_config() when no config is given
+    # (config passed explicitly) and via bootstrap() when no config is given
     # (stop_background_recording), so patch both seams.
     test_db_config = DatabaseConfig(
         path=tmp_path / "test.db",
         recordings_path=tmp_path / "recordings",
     )
     mock_config.database = test_db_config
-    monkeypatch.setattr(toggle_dictate, "load_config", lambda: mock_config)
+    monkeypatch.setattr(toggle_dictate, "bootstrap", lambda *a, **k: mock_config)
 
     # Mock the arecord subprocess (returns a process with a fake PID)
     popen_mock = Mock()

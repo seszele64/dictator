@@ -47,7 +47,7 @@ def cli_runner() -> CliRunner:
 def invoke_with_config(cli_runner, config, args):
     """Invoke the CLI with a real custom config overriding the session mock."""
     with (
-        patch("whisper_dictate.cli.load_config", return_value=config),
+        patch("whisper_dictate.cli.bootstrap", return_value=config),
         patch("whisper_dictate.cli.setup_logging", return_value=None),
     ):
         return cli_runner.invoke(cli, args)
@@ -105,7 +105,7 @@ class TestConfiguredLogRetention:
         db.close = Mock()
 
         with (
-            patch("whisper_dictate.cli.load_config", return_value=custom_config),
+            patch("whisper_dictate.cli.bootstrap", return_value=custom_config),
             patch("whisper_dictate.cli.setup_logging", return_value=None),
             patch("whisper_dictate.cli_helpers.get_database", return_value=db),
         ):

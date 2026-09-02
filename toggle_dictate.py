@@ -13,9 +13,10 @@ import time
 
 import soundfile as sf
 
+from whisper_dictate.app import bootstrap
 from whisper_dictate.audio_storage import get_audio_storage
 from whisper_dictate.clipboard import ClipboardManager
-from whisper_dictate.config import AppPaths, load_config
+from whisper_dictate.config import AppPaths
 from whisper_dictate.database import get_database
 from whisper_dictate.dunst_monitor import ensure_dunst_running
 from whisper_dictate.notifications import (
@@ -95,9 +96,9 @@ def get_db_and_storage(config=None):
         tuple: (database, audio_storage)
     """
     if config is None:
-        # Module-level load_config (kept patchable for tests that redirect
+        # Module-level bootstrap (kept patchable for tests that redirect
         # storage paths); honors the user's configured database paths.
-        config = load_config()
+        config = bootstrap()
     db_config = config.database
     db = get_database(db_config)
     db.initialize()
@@ -424,7 +425,7 @@ def main():
                 "Dunst notification daemon not available - notifications may not work"
             )
 
-        config = load_config()
+        config = bootstrap()
 
         if is_recording(config):
             logging.info("Stopping recording...")

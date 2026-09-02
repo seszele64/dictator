@@ -8,9 +8,10 @@ from pathlib import Path
 import click
 
 from whisper_dictate import __version__
+from whisper_dictate.app import bootstrap
 from whisper_dictate.audio_storage import check_disk_space
 from whisper_dictate.cli_helpers import with_database
-from whisper_dictate.config import AppPaths, DatabaseConfig, load_config, validate_api_key
+from whisper_dictate.config import AppPaths, DatabaseConfig, validate_api_key
 from whisper_dictate.database import get_database
 from whisper_dictate.dictation import DictationService
 
@@ -111,14 +112,14 @@ def setup_logging(
 @click.pass_context
 def cli(ctx: click.Context, log_level: str) -> None:
     """Whisper-dictate: Voice-to-text dictation with clipboard integration."""
-    # Configuration must be loaded before logging setup and before any
-    # database/storage singleton is initialized, so user-configured database
-    # paths and thresholds actually take effect. It is loaded WITHOUT demanding
-    # an API key: database-only commands (logs, history, audio, migrate) and
-    # `info` must work without one. Transcription paths validate the key lazily
-    # (see the `dictate` command).
+    # bootstrap() owns .env loading (moved out of load_config in S2) and
+    # loads configuration BEFORE logging setup, so user-configured database
+    # paths and thresholds actually take effect. It is loaded WITHOUT
+    # demanding an API key: database-only commands (logs, history, audio,
+    # migrate) and `info` must work without one. Transcription paths validate
+    # the key lazily (see the `dictate` command).
     try:
-        config = load_config(require_api_key=False)
+        config = bootstrap(require_api_key=False)
     except ValueError as e:
         # The version tag makes bug reports from this top-level failure path
         # self-identifying without needing the reporter to run --version.

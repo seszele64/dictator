@@ -1,13 +1,9 @@
-"""CLI tests exercising the REAL load_config() validation path.
+"""CLI tests exercising the REAL bootstrap() validation path.
 
-tests/conftest.py patches whisper_dictate.cli.load_config at session scope
+tests/conftest.py patches whisper_dictate.cli.bootstrap at session scope
 (autouse) to keep the other CLI tests hermetic. These tests need the real
-provider/key validation, so the real_load_config fixture re-patches
-whisper_dictate.cli.load_config with the actual function.
-
-Covers the fix-provider-crash change: non-transcription commands must run
-without any API key, and `dictate` must validate the key lazily (keyless
-local passes; keyless openai fails with a friendly error).
+provider/key validation, so the real_bootstrap fixture re-patches
+whisper_dictate.cli.bootstrap with the actual function.
 """
 
 from unittest.mock import patch
@@ -16,8 +12,8 @@ import pytest
 from click.testing import CliRunner
 
 from whisper_dictate import __version__
+from whisper_dictate.app import bootstrap
 from whisper_dictate.cli import cli
-from whisper_dictate.config import load_config
 
 
 @pytest.fixture
@@ -28,13 +24,13 @@ def cli_runner():
 
 @pytest.fixture
 def real_load_config():
-    """Swap the session-scoped load_config mock for the real function.
+    """Swap the session-scoped bootstrap mock for the real function.
 
     The session autouse fixture in tests/conftest.py mocks
-    whisper_dictate.cli.load_config to keep other CLI tests hermetic; these
+    whisper_dictate.cli.bootstrap to keep other CLI tests hermetic; these
     tests must exercise the real env-var resolution and key validation.
     """
-    with patch("whisper_dictate.cli.load_config", load_config):
+    with patch("whisper_dictate.cli.bootstrap", bootstrap):
         yield
 
 

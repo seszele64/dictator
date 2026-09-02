@@ -57,7 +57,7 @@ def mock_cli_setup():
 
     with (
         patch("whisper_dictate.cli.setup_logging") as mock_setup_logging,
-        patch("whisper_dictate.cli.load_config") as mock_load_config,
+        patch("whisper_dictate.cli.bootstrap") as mock_bootstrap,
     ):
         mock_setup_logging.return_value = None
 
@@ -75,7 +75,7 @@ def mock_cli_setup():
         mock_config.audio.device = None
         mock_config.audio.mp3_enabled = False
         mock_config.copy_to_clipboard = True
-        mock_load_config.return_value = mock_config
+        mock_bootstrap.return_value = mock_config
 
         yield
 

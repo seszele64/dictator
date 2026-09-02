@@ -141,7 +141,7 @@ def snapshot_cli(
 ) -> str:
     """Run one CLI command, capture its observable behavior, compare to baseline.
 
-    Patches ``whisper_dictate.cli.load_config`` to return the supplied real
+    Patches ``whisper_dictate.cli.bootstrap`` to return the supplied real
     ``AppConfig`` (tmp paths) for the duration of the invocation. The
     session-scoped ``setup_logging`` mock from conftest stays in place, and
     logging is additionally disabled while the command runs so stderr
@@ -160,7 +160,7 @@ def snapshot_cli(
     logging.disable(logging.CRITICAL)
     try:
         with patch(
-            "whisper_dictate.cli.load_config", lambda *a, **k: config
+            "whisper_dictate.cli.bootstrap", lambda *a, **k: config
         ):
             result = runner.invoke(cli, payload_args)
     finally:

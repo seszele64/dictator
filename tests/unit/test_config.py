@@ -402,8 +402,10 @@ class TestDotenvImportPurity:
 
     load_dotenv() used to run at module import time (config.py module
     level), so a bare ``import whisper_dictate.config`` could rewrite
-    os.environ. It now runs inside load_config() — same behavior for every
-    caller (CLI, root toggle script), side-effect-free import.
+    os.environ. Since S2 it runs only in the composition root
+    (whisper_dictate.app.bootstrap), which every entry point (CLI, root
+    toggle script) calls; the config module import and load_config() itself
+    stay side-effect-free.
 
     Both tests run real subprocesses with a .env file present in the working
     directory, because in-process imports would already be cached.
@@ -445,13 +447,26 @@ class TestDotenvImportPurity:
         )
         assert payload["probe_present"] is False
 
-    def test_load_config_still_loads_dotenv(self, tmp_path):
-        """load_config() picks up .env values — the move preserved behavior
-        for every caller."""
+    def test_load_config_does_not_load_dotenv(self, tmp_path):
+        """load_config() is side-effect-free: .env values are NOT picked up
+        without the explicit bootstrap step."""
         (tmp_path / ".env").write_text(self._PROBE_DOTENV)
         code = (
             "from whisper_dictate.config import load_config\n"
             "config = load_config(require_api_key=False)\n"
+            "print(config.openai.model)\n"
+        )
+        result = self._run_python(tmp_path, code)
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() != "probe-model-from-dotenv"
+
+    def test_bootstrap_loads_dotenv(self, tmp_path):
+        """bootstrap() picks up .env values — entry-point behavior is
+        preserved now that the composition root owns .env loading."""
+        (tmp_path / ".env").write_text(self._PROBE_DOTENV)
+        code = (
+            "from whisper_dictate.app import bootstrap\n"
+            "config = bootstrap(require_api_key=False)\n"
             "print(config.openai.model)\n"
         )
         result = self._run_python(tmp_path, code)

@@ -116,7 +116,7 @@ def snapshot_ctx(env_isolator, monkeypatch, fake_provider, fake_recorder):
     - The three DictationService construction seams (AudioRecorder,
       create_transcriber, ClipboardManager) are replaced with deterministic
       fakes — the same seams the existing dictate tests patch per-instance.
-    - whisper_dictate.cli.load_config is re-patched per invocation by the
+    - whisper_dictate.cli.bootstrap is re-patched per invocation by the
       harness to return the real AppConfig below; the session-scoped
       setup_logging mock from conftest stays in place.
     """

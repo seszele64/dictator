@@ -62,7 +62,7 @@ def _seed_one_recording_with_orphan(config: AppConfig) -> tuple[Path, Path]:
 def cleanup_env(env_isolator, monkeypatch):
     """Isolated CLI env: a REAL AppConfig pointing at tmp DB/recordings.
 
-    The session-scoped mock_cli_setup fixture patches cli.load_config with a
+    The session-scoped mock_cli_setup fixture patches cli.bootstrap with a
     Mock; the cleanup command needs real paths, so this fixture re-patches it
     with the real config for the duration of each test.
     """
@@ -78,7 +78,7 @@ def cleanup_env(env_isolator, monkeypatch):
         openai=WhisperConfig(api_key="test-api-key", model="whisper-1"),
     )
     monkeypatch.setattr(
-        "whisper_dictate.cli.load_config", lambda require_api_key=True: config
+        "whisper_dictate.cli.bootstrap", lambda *a, **k: config
     )
     return config, db_path
 
