@@ -36,7 +36,6 @@ Long story short: **the two-week plan takes the repo from "works for me" to a po
 **What is wrong (remaining debt — the landed items are pruned from this list):**
 
 - **God modules:** `database.py` (1,148L), `cli.py` (1,004L), `audio_storage.py` (861L) — the S3 splits.
-- **Stale ADRs:** ADR 0001/0002 "Proposed" citing non-existent files; new ADRs 0003–0007 still to write (P12).
 - **pydub dependency** (audioop removed in 3.13 → the 3.13 classifier is currently false; the test matrix can't include 3.13 while it remains).
 
 ### 1.2 Priority & status tracking (tick off as you go)
@@ -46,7 +45,7 @@ Long story short: **the two-week plan takes the repo from "works for me" to a po
 | ☐ | **Tier A — Polished production tool** | §2 | ☐ |
 | ☐ | **Tier B — Professional hygiene** | §2 | ☐ |
 | ☐ | **Tier C — Engineering rigor at scale** | §2, §9 | ☐ |
-| ☐ | **S4 — Toggle merge** (unblocked — S2 done) | §7 | ☐ |
+| ✅ | **S4 — Toggle merge** (unblocked — S2 done) | §7 | ✅ done (Day 3) |
 | ☐ | **S3 — God-module splits** (Week 2, Day 5–8) | §7 | ☐ |
 | ☐ | **S5 — Notifier wiring** (Day 8) | §7 | ☐ |
 | ☐ | **S6 — Release freeze + v0.1.0** (Day 9–10) | §7, §12 | ☐ |
@@ -82,10 +81,10 @@ Ordering rule: **A → B → C**. Complete an entire tier before making progress
 |---|---|---|---|
 | `database.py` | 1,148 | God class + module singleton + facade mixing schema, CRUD, migrations, logging, orphan logic | `_database` global at `:1101`; getter/closers at `:1137-1148`; lazy audio import at `:593-597` (cycle) |
 | `audio_storage.py` | 861 | Storage mixes path logic, I/O, orphan scan, placeholder | `_audio_storage` global `:689` + getter `:692-706`; `get_recording_path` placeholder `:249-260`; orphan scan `:729` (DEFAULT-config bug) + re-scan `:829` + per-invocation scan `:864` & `:895-897` |
-| `cli.py` | 1,004 | Flat command monolith + setup_logging owns sole-canonical logging | logging `:17-106` (duped in `db_logging.py:101-164` + `toggle_dictate.py:42-83`); literal paths `:34`, `:208`; `--dry-run` `:822-827` not honored, inverted `:860` |
+| `cli.py` | 1,004 | Flat command monolith + setup_logging owns sole-canonical logging | logging `:17-106` (duped in `db_logging.py:101-164` + `toggle.py:54-100` — the sole remaining dup; S3 absorbs into `util/logging_setup.py`); literal paths `:34`, `:208`; `--dry-run` `:822-827` not honored, inverted `:860` |
 | `notifications.py` | 650 | `PersistentNotification` mutable class state, zero prod callers | class `:323-635` (313L) + helpers `:572-650` + global `:569` |
 | `dunst_monitor.py` | 206 | Wraps a 30-L helper in a class + getter | `DunstMonitor :24`, `get_dunst_monitor :180` |
-| `toggle_dictate.py` (root) | 455 | Third logging copy + raw SQL (bypasses `_database`) + second recording stack | logging `:42-83`; `db.execute` outside storage |
+| `toggle.py` (package) | 411 | Third logging copy remains (S3 absorbs into `util/logging_setup.py`); transcription half delegated | raw SQL gone (S4: claim/duration via named `Database` methods); transcribe delegates to `DictationService.transcribe_existing`; logging copy `:54-100` |
 | `cli_helpers.py` | 45 | `with_database` decorator builds DB from global, asymmetric close | `:9-45`; `close()` vs `close_database()` |
 | `dictation.py` | 436 | Core service is fine — keep near-verbatim as house template | dictation loop `:140-354`; no notifier wiring (P6), no named logger |
 | `config.py` | 350 | Side-effect import + unused field | `load_dotenv()` at `:10`; `log_level` at `:264` (zero prod readers) |
@@ -93,14 +92,9 @@ Ordering rule: **A → B → C**. Complete an entire tier before making progress
 | `db_logging.py` | 164 | Duplicate logging | `setup_dual_logging :101-164` (zero callers) |
 | `audio_converter.py` | 180 | Test-only converters | `convert_and_keep_wav` / `convert_and_delete_wav` `:154-180` |
 
-### 3.2 Dead / stale code — remaining purge items
+### 3.2 Dead / stale code — purge list fully landed
 
-Of the original 16-item purge list, items 1–9, 11, 13–16 landed with S1/S2/P3; the two outstanding items keep their original IDs:
-
-| # | Target | Action | Rationale / notes | Tests touched |
-|---|---|---|---|---|
-| 10 | Root `toggle_dictate.py` | **Delete AFTER P5 cut-over** (phase 4 = S4) | Replaced by package `ToggleService` | old toggle tests deleted with it |
-| 12 | ADR 0001/0002 "Proposed", citing non-existent files | **P12** + new ADR 0003 | ADR 0003 (composition root over lazy singletons) supersedes 0002 explicitly | — |
+All 16 items of the original purge list have landed: items 1–9, 11, 13–16 via S1/S2/P3, item 10 (root `toggle_dictate.py` + its tests) via S4, and item 12 (ADR 0001/0002 "Proposed" with stale references) via P12 — both on Day 3. No rows remain.
 
 ---
 
@@ -200,7 +194,7 @@ database.py:593-597 → audio_storage edge removed by: path hoist to util/paths.
 - **cli.py (1,004L) →** `cli/` package (group assembly ~40L; `options.py` shared options incl `--dry-run` now actually read; `commands/*.py` one module per concern, thin parse→call-service; `invoke.py` replaces `cli_helpers.py` with a new `with_database` decorator reading `ctx.obj.config`, constructing `Database`, closing in `finally`; `ctx.obj` = `CliContext(config, factories)` dataclass — **factories, not instances**; composition root in `app.py` above `cli/`; flat `cli.py` deleted).
 - **notifications.py (650L) →** delete `PersistentNotification :323-635` (313L), 4 helpers `:572-650`, global `_recording_notification :569`; keep the dunstify invocation as **Notifier Protocol + `DunstNotifier`** (subprocess.call dunstify ~40L, injectable command runner for tests); wire into `DictationService` as an **OPTIONAL constructor param** `notifier: Notifier | None = None`; CLI builds one when `config.notifications.enabled` (default False); `click.echo` stays primary UX; **zero behavior change by default**.
 - **dunst_monitor.py (200L → ~30L):** delete `DunstMonitor :24` + `get_dunst_monitor :180`; move `ensure_dunst_running` into `notifications/dunst.py`; imported by `ToggleService` and the `DictationService` notify path.
-- **toggle_dictate.py (455L root):** `services/toggle.ToggleService` keeps WM/hotkey orchestration, recording on/off state, session lifecycle; record→transcribe→clipboard step calls `DictationService.dictate()` instead of duplicating raw SQL (`db.execute` bypasses) + a second recording stack; third logging copy `:42-83` deleted in favor of `util/logging_setup.py`; `cli/commands/toggle.py` entry; `setup_i3.sh:4` + `generate_run_script.sh:19` point at the new console script; `conftest.py:23` sys.path hack removed; `tests/integration/test_toggle_dictate.py` rewritten against the package API; the typo (and the file) dies with the old name.
+- **toggle_dictate.py (455L root):** `services/toggle.ToggleService` keeps WM/hotkey orchestration, recording on/off state, session lifecycle; record→transcribe→clipboard step delegates the transcribe→clipboard→DB half to `DictationService.transcribe_existing()` (added S4; toggle keeps arecord/PID/state orchestration); third logging copy `:42-83` deleted in favor of `util/logging_setup.py`; `cli/commands/toggle.py` entry; `setup_i3.sh:4` + `generate_run_script.sh:19` point at the new console script; `conftest.py:23` sys.path hack removed; `tests/integration/test_toggle_dictate.py` rewritten against the package API; the typo (and the file) dies with the old name.
 - **DictationService / OpenAICompatibleProvider:** kept near-verbatim (house template); deltas: optional `notifier` param, `logging.getLogger(__name__)` (P6), module moves `services/dictation.py` + `providers/openai.py` pure moves; provider contract tests stay authoritative (P11).
 
 ### 4.6 What we are NOT doing
@@ -223,8 +217,8 @@ One list, process and structural together, ordered by execution sequence within 
 
 | # | Done | ID | Type | Item (short) | Impact | Effort | Deps | Slot |
 |---|---|---|---|---|---|---|---|---|
-| 1 | ☐ | S4 | Structural | Toggle merge (P5 cut-over): `ToggleService` + `cli/commands/toggle.py`; delegation to `DictationService`; entry-point switch `setup_i3.sh:4` + `generate_run_script.sh:19`; delete root script + old tests; `conftest.py:23` removed | H | M-L | S1+S2+P5 (done) | unblocked — lands now that S2 is done |
-| 2 | ☐ | P12 | Process | ADR finalization: fix 0001/0002 refs to real files (`tests/conftest.py`, `whisper_dictate/dictation.py`), status Accepted, dates; new ADRs 0003 Provider ABC+factory, 0004 Centralized config after P2, 0005 pydub removal after P10, 0006 Distribution model after D1, 0007 Local provider after P14 | M | S | P2 (done), P10-adjacent | Day 3 |
+| 1 | ✅ | S4 | Structural | Toggle merge (P5 cut-over): `ToggleService` + `cli/commands/toggle.py`; delegation to `DictationService`; entry-point switch `setup_i3.sh:4` + `generate_run_script.sh:19`; delete root script + old tests; `conftest.py:23` removed (H, M-L) — **Done (Day 3)**: cut-over, entry-point switch, shim deleted, raw SQL out, transcribe delegation; `ToggleService` + `cli/commands/toggle.py` land with S3's layout move | H | M-L | S1+S2+P5 (done) | unblocked — lands now that S2 is done |
+| 2 | ✅ | P12 | Process | ADR finalization: 0001 rewritten to what exists + Accepted; 0002 → Superseded by ADR 0003; new ADRs: 0003 Composition root (supersedes 0002), 0004 Centralized config, 0005 Provider ABC+factory; future 0006 pydub (P10), 0007 distribution (P13/D1), 0008 local provider (P14) (M, S) — **Done (Day 3)** | M | S | P2 (done), P10-adjacent | Day 3 |
 | 3 | ☐ | P7 | Process | Typing gate core modules: mypy strict = true (py3.11), files = `whisper_dictate`; per-module overrides opt-out `cli.py` + `dunst_monitor.py` initially; `warn_unused_ignores`; CI job; ratchet policy (never loosens) | H | M | S2 (done) | Day 4 |
 | 4 | ☐ | P8 | Process | pre-commit + ruff format (`.pre-commit-config.yaml` ruff lint + format + EOF/whitespace/yaml/toml/merge-conflict checks; decide ruff format repo-wide one commit; `.editorconfig`; optional dependabot) | M | S | — | Day 5 |
 | 5 | ☐ | P11 | Process | Resolve `tests/contract/` honestly (Option A recommended: move provider-contract tests into `tests/contract/test_openai_compatible.py`? — see §3.2/8 — actually: tests live in `tests/unit/test_provider_contract.py`; update spec 008; add contract marker; optional live-mode `@mark.contract-live` behind `WHISPER_DICTATE_LIVE_CONTRACT` skip-by-default; Option B: delete dir + amend spec) | M | S | — | Day 5 |
@@ -272,7 +266,7 @@ Structural phases (S0–S6) are interleaved with the process items (P1–P20) �
 
 | Day | Focus | Work | Gate |
 |---|---|---|---|
-| **3** | Toggle cut-over + ADR pass | **S4** toggle merge (root shim deletion + entry-point switch; unblocked — S2 done); **P12** ADR fixes + 0003/0004 | `whisper-dictate-toggle` wired in i3 config; `docs/adr` references only existing files |
+| **3** | Toggle cut-over + ADR pass | ✅ **done** — **S4** toggle merge (root shim deletion + entry-point switch; unblocked — S2 done); **P12** ADR fixes + 0003/0004/0005 | Gate passed: i3/run-script entries verified by simulation; `docs/adr` references only existing files; full suite + ruff + coverage + snapshot green |
 | **4** | Type-checking foundation | **P7** mypy strict core (`cli.py` deferred explicit override) | `uv run mypy` clean |
 | **5** | Hygiene | **P8** pre-commit + ruff format decision/landing; **P11** contracts move; **S3** starts (god-module splits can start once mypy locked) | End-Week-1 gate: full local suite + mypy + ruff green; one logic change per day |
 
@@ -297,7 +291,6 @@ Structural phases (S0–S6) are interleaved with the process items (P1–P20) �
 | pydub removal changes audio behavior silently | Golden behavior tests first (P10), tolerance comparisons, full suite on 3.13 |
 | mypy cleanup balloons (e.g. `database.py` `CursorResult`) | Lax-overrides approved per-module only; strictness ratchet never loosens |
 | CI matrix adds 3× runtime | Coverage on one job only; uv cache; `--frozen` catches drift |
-| Toggle folding breaks user i3 muscle memory | Root shim deprecation to stderr for one release; README i3 section updated in the same commit |
 | Release ceremony swallows the 2-week budget | P13 is 1 day with uv + trusted publishing; test.pypi dry-run only |
 | AI-assisted changes re-drift specs | P3 single-sources specs; AGENTS hook stays current |
 
@@ -341,7 +334,7 @@ Each phase lands **only when its gate passes.** Additionally, every phase lands 
 | Phase | Gate (pass = tick) |
 |---|---|
 | **S3** | ☐ no `src/**/*.py` ≥ 600 lines; ☐ import graph acyclic (`import-linter` in CI as a lint step; forbidden rule: storage → audio); ☐ per-module coverage gates ≥ current (P4 fail_under); ☐ CLI snapshot diffs = empty |
-| **S4** | ☐ `whisper-dictate toggle --help` exits 0; ☐ `setup_i3.sh` + `generate_run_script.sh` produce valid entries; ☐ root `toggle_dictate.py` absent; ☐ `conftest.py:23` absent; ☐ toggle integration green; ☐ `grep ".execute("` outside `storage/` → 0 |
+| **S4** | ✅ `whisper-dictate toggle --help` exits 0; ✅ `setup_i3.sh` + `generate_run_script.sh` produce valid entries; ✅ root `toggle_dictate.py` absent; ✅ `conftest.py:23` absent; ✅ toggle integration green; ✅ `grep ".execute("` outside `storage/` → 0. Gate is interpreted pre-S3: `storage/` does not exist yet; it means **no `.execute(` consumers outside the database module** — `database.py` may define and internally use `.execute(` (incl. `update_recording_file_path`/`update_recording_duration`). Precedent: S2's benign-families note. |
 | **S5** | ☐ notifications enabled smoke → dunst message; ☐ default → no message; ☐ full suite green |
 | **Global** | ☐ pytest green; ☐ ruff clean; ☐ mypy strict-core green (Day 4+); ☐ snapshot diff human-reviewed; ☐ no release-window violations |
 | **Fresh-clone checklist** (medium-term gate) | ☐ `uv sync --frozen`; ☐ pre-commit green; ☐ mypy + ruff clean; ☐ full pytest 3.11/3.12/3.13; ☐ pip-audit clean; ☐ `whisper-dictate-toggle` installed; ☐ fault-injection test proves traceback lands in the log |
@@ -356,7 +349,7 @@ The release is done when **all** of the following hold:
 - ☐ CI green on 3.11/3.12/3.13: lint, format, mypy core-strict, full tests, coverage gate, pip-audit.
 - ☐ No pydub in the dep tree.
 - ☐ Fault injection produces a traceback in `{state_dir}/logs/` **and** a useful dunst notification (P6).
-- ☐ `docs/adr` all Accepted, referencing only existing files (P12).
+- ☐ `docs/adr` all final status (Accepted or Superseded), no Proposed, referencing only existing files (P12).
 - ☐ LICENSE + CHANGELOG + tag-publishing workflow live (P13, D1).
 - ☐ Property tests cover path-containment + migration idempotency (P16 seeds).
 - ☐ `docs/security.md` lists every subprocess call site (P17 quick audit).
