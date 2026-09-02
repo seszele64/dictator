@@ -68,4 +68,7 @@ openspec/
 └── specs/                   # Synced specification files
 ```
 
+### Type checking
+- `uv run mypy` — strict core gate (P7, Day 4+): must stay clean. Ratchet policy lives in `pyproject.toml` `[tool.mypy]` (strict by default for all `whisper_dictate` modules; opt-out only via explicit per-module override, never added without owner approval — currently only `cli.py`, per D3).
+
 <!-- MANUAL ADDITIONS END -->

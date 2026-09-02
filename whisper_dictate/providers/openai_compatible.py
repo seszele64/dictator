@@ -170,7 +170,11 @@ class OpenAICompatibleProvider(TranscriptionProvider):
                             "Set WHISPER_LANGUAGE in .env for better accuracy "
                             "with accented or short audio."
                         )
-                    response = self._client.audio.transcriptions.create(
+                    # SDK types `language` as `str | Omit`; `Omit` only exists
+                    # in private `openai._types`, and passing None vs omitting
+                    # changes the wire payload — cannot narrow without a
+                    # behavior change, so the signature mismatch is accepted.
+                    response = self._client.audio.transcriptions.create(  # type: ignore[call-overload]
                         model=self._model,
                         file=file,
                         response_format="json",

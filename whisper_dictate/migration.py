@@ -117,7 +117,7 @@ class MigrationManager:
         try:
             status = self._db.get_state(MIGRATION_STATUS_KEY)
             if status and isinstance(status, dict):
-                return status.get("status") == MIGRATION_COMPLETED
+                return bool(status.get("status") == MIGRATION_COMPLETED)
         except Exception as e:
             logger.debug(f"Could not check migration status: {e}")
 

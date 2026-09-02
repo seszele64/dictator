@@ -26,7 +26,7 @@ import click
 
 from whisper_dictate.app import bootstrap
 from whisper_dictate.audio_storage import AudioStorage
-from whisper_dictate.config import AppPaths
+from whisper_dictate.config import AppConfig, AppPaths
 from whisper_dictate.database import Database
 from whisper_dictate.dictation import DictationService
 from whisper_dictate.dunst_monitor import ensure_dunst_running
@@ -53,7 +53,7 @@ STATE_KEY_RECORDING = "is_recording"
 STATE_KEY_RECORDING_ID = "current_recording_id"
 
 
-def setup_logging():
+def setup_logging() -> None:
     """WHY THIS EXISTS: Logging needs to be configured consistently
     across the application for debugging and monitoring.
 
@@ -102,7 +102,7 @@ def setup_logging():
     root_logger.addHandler(console_handler)
 
 
-def get_db_and_storage(config=None):
+def get_db_and_storage(config: AppConfig | None = None) -> tuple[Database, AudioStorage]:
     """Get database and audio storage instances.
 
     Args:
@@ -123,7 +123,7 @@ def get_db_and_storage(config=None):
     return db, audio_storage
 
 
-def is_recording(config=None):
+def is_recording(config: AppConfig | None = None) -> bool:
     """Check if currently recording.
 
     Checks database state first, falls back to file-based state for compatibility.
@@ -134,7 +134,7 @@ def is_recording(config=None):
     Returns:
         bool: True if recording, False otherwise.
     """
-    db = None
+    db: Database | None = None
     try:
         db, _ = get_db_and_storage(config)
         is_recording = db.get_state(STATE_KEY_RECORDING)
@@ -154,7 +154,7 @@ def is_recording(config=None):
     return file_state
 
 
-def get_recording_pid():
+def get_recording_pid() -> int | None:
     """Get the PID of the recording process."""
     try:
         if PID_FILE.exists():
@@ -164,9 +164,9 @@ def get_recording_pid():
     return None
 
 
-def start_background_recording(config):
+def start_background_recording(config: AppConfig) -> subprocess.Popen[bytes] | None:
     """Start background recording process using arecord."""
-    db = None
+    db: Database | None = None
     try:
         # Build the command - use default device
         cmd = [
@@ -188,7 +188,7 @@ def start_background_recording(config):
         STATE_FILE.touch()
 
         # Create recording entry in database
-        recording_id = None
+        recording_id: int | None = None
         try:
             db, _ = get_db_and_storage(config)
             # Create initial recording entry. An empty file_path is the
@@ -224,15 +224,17 @@ def start_background_recording(config):
             db.close()
 
 
-def stop_background_recording(config=None):
+def stop_background_recording(
+    config: AppConfig | None = None,
+) -> tuple[bool, int | None]:
     """Stop background recording and process the audio.
 
     Returns:
         tuple: (success: bool, recording_id: int or None) - Returns the recording_id
                before clearing it from state, so it can be used for transcription.
     """
-    recording_id = None
-    db = None
+    recording_id: int | None = None
+    db: Database | None = None
 
     try:
         # Get recording_id BEFORE clearing state (for transcription use)
@@ -281,7 +283,9 @@ def stop_background_recording(config=None):
             db.close()
 
 
-def transcribe_audio(config, recording_id=None):
+def transcribe_audio(
+    config: AppConfig, recording_id: int | None = None
+) -> str | None:
     """Transcribe the recorded audio.
 
     Delegates the transcribe → clipboard → database half to
@@ -294,7 +298,7 @@ def transcribe_audio(config, recording_id=None):
         config: Configuration object
         recording_id: Optional recording ID. If not provided, will attempt to get from state.
     """
-    db = None
+    db: Database | None = None
     try:
         if not AUDIO_FILE.exists():
             logging.error("No audio file found")
@@ -345,7 +349,7 @@ def transcribe_audio(config, recording_id=None):
             AUDIO_FILE.unlink()
 
 
-def main():
+def main() -> None:
     """Main function - real toggle recording."""
     setup_logging()
 

@@ -46,6 +46,7 @@ Long story short: **the two-week plan takes the repo from "works for me" to a po
 | ☐ | **Tier B — Professional hygiene** | §2 | ☐ |
 | ☐ | **Tier C — Engineering rigor at scale** | §2, §9 | ☐ |
 | ✅ | **S4 — Toggle merge** (unblocked — S2 done) | §7 | ✅ done (Day 3) |
+| ✅ | **P7 — mypy strict core** (Day 4) | §7 | ✅ done (Day 4) |
 | ☐ | **S3 — God-module splits** (Week 2, Day 5–8) | §7 | ☐ |
 | ☐ | **S5 — Notifier wiring** (Day 8) | §7 | ☐ |
 | ☐ | **S6 — Release freeze + v0.1.0** (Day 9–10) | §7, §12 | ☐ |
@@ -219,7 +220,7 @@ One list, process and structural together, ordered by execution sequence within 
 |---|---|---|---|---|---|---|---|---|
 | 1 | ✅ | S4 | Structural | Toggle merge (P5 cut-over): `ToggleService` + `cli/commands/toggle.py`; delegation to `DictationService`; entry-point switch `setup_i3.sh:4` + `generate_run_script.sh:19`; delete root script + old tests; `conftest.py:23` removed (H, M-L) — **Done (Day 3)**: cut-over, entry-point switch, shim deleted, raw SQL out, transcribe delegation; `ToggleService` + `cli/commands/toggle.py` land with S3's layout move | H | M-L | S1+S2+P5 (done) | unblocked — lands now that S2 is done |
 | 2 | ✅ | P12 | Process | ADR finalization: 0001 rewritten to what exists + Accepted; 0002 → Superseded by ADR 0003; new ADRs: 0003 Composition root (supersedes 0002), 0004 Centralized config, 0005 Provider ABC+factory; future 0006 pydub (P10), 0007 distribution (P13/D1), 0008 local provider (P14) (M, S) — **Done (Day 3)** | M | S | P2 (done), P10-adjacent | Day 3 |
-| 3 | ☐ | P7 | Process | Typing gate core modules: mypy strict = true (py3.11), files = `whisper_dictate`; per-module overrides opt-out `cli.py` + `dunst_monitor.py` initially; `warn_unused_ignores`; CI job; ratchet policy (never loosens) | H | M | S2 (done) | Day 4 |
+| 3 | ✅ | P7 | Process | Typing gate core modules: mypy strict = true (py3.11), files = `whisper_dictate`; per-module overrides opt-out `cli.py` + `dunst_monitor.py` initially; `warn_unused_ignores`; CI job; ratchet policy (never loosens) — **Done (Day 4)**: strict on all 21 modules, 0 errors; `cli.py` sole explicit-flag lax override (D3; bodies still checked); `dunst_monitor.py` needed no override (strict-clean at introduction); CI job deferred to P9 (Day 7 — includes the mypy job; no CI existed at Day 4); 2 coded ignores (db_logging assignment, openai language wire-payload) | H | M | S2 (done) | Day 4 |
 | 4 | ☐ | P8 | Process | pre-commit + ruff format (`.pre-commit-config.yaml` ruff lint + format + EOF/whitespace/yaml/toml/merge-conflict checks; decide ruff format repo-wide one commit; `.editorconfig`; optional dependabot) | M | S | — | Day 5 |
 | 5 | ☐ | P11 | Process | Resolve `tests/contract/` honestly (Option A recommended: move provider-contract tests into `tests/contract/test_openai_compatible.py`? — see §3.2/8 — actually: tests live in `tests/unit/test_provider_contract.py`; update spec 008; add contract marker; optional live-mode `@mark.contract-live` behind `WHISPER_DICTATE_LIVE_CONTRACT` skip-by-default; Option B: delete dir + amend spec) | M | S | — | Day 5 |
 | 6 | ☐ | S3 | Structural | God-module splits: Database → ConnectionManager/Repos/Migrations; `cli.py` → `cli/` package; `audio_storage` → `util/paths` + `storage/audio_storage` + `orphan_scan` | H | L | S2 (done) | Week 2, Day 5–8 (after mypy locked) |
@@ -267,7 +268,7 @@ Structural phases (S0–S6) are interleaved with the process items (P1–P20) �
 | Day | Focus | Work | Gate |
 |---|---|---|---|
 | **3** | Toggle cut-over + ADR pass | ✅ **done** — **S4** toggle merge (root shim deletion + entry-point switch; unblocked — S2 done); **P12** ADR fixes + 0003/0004/0005 | Gate passed: i3/run-script entries verified by simulation; `docs/adr` references only existing files; full suite + ruff + coverage + snapshot green |
-| **4** | Type-checking foundation | **P7** mypy strict core (`cli.py` deferred explicit override) | `uv run mypy` clean |
+| **4** | Type-checking foundation | ✅ **done** — **P7** mypy strict core (`cli.py` deferred explicit override) | Gate passed: `uv run mypy` clean (mypy 2.3.1, py3.11); ratchet enforced by pyproject (strict default, opt-out only via explicit override, never added) |
 | **5** | Hygiene | **P8** pre-commit + ruff format decision/landing; **P11** contracts move; **S3** starts (god-module splits can start once mypy locked) | End-Week-1 gate: full local suite + mypy + ruff green; one logic change per day |
 
 ### Week 2 — supply chain, CI, observability, release
@@ -289,7 +290,6 @@ Structural phases (S0–S6) are interleaved with the process items (P1–P20) �
 | Risk | Mitigation |
 |---|---|
 | pydub removal changes audio behavior silently | Golden behavior tests first (P10), tolerance comparisons, full suite on 3.13 |
-| mypy cleanup balloons (e.g. `database.py` `CursorResult`) | Lax-overrides approved per-module only; strictness ratchet never loosens |
 | CI matrix adds 3× runtime | Coverage on one job only; uv cache; `--frozen` catches drift |
 | Release ceremony swallows the 2-week budget | P13 is 1 day with uv + trusted publishing; test.pypi dry-run only |
 | AI-assisted changes re-drift specs | P3 single-sources specs; AGENTS hook stays current |

@@ -33,13 +33,15 @@ class CursorResult:
     """
 
     def __init__(self, cursor: sqlite3.Cursor) -> None:
-        self._rows = cursor.fetchall()  # [] for UPDATE/DELETE/INSERT
+        # sqlite3 row shape is dynamic (row_factory-dependent); the
+        # materialized rows are tuple[Any, ...] by contract.
+        self._rows: list[tuple[Any, ...]] = cursor.fetchall()  # [] for UPDATE/DELETE/INSERT
         self._index = 0
         self.rowcount = cursor.rowcount
         self.lastrowid = cursor.lastrowid
         self.description = cursor.description
 
-    def fetchone(self) -> tuple | None:
+    def fetchone(self) -> tuple[Any, ...] | None:
         """Fetch the next result row, or None if all rows are consumed."""
         if self._index >= len(self._rows):
             return None
@@ -47,7 +49,7 @@ class CursorResult:
         self._index += 1
         return row
 
-    def fetchall(self) -> list[tuple]:
+    def fetchall(self) -> list[tuple[Any, ...]]:
         """Fetch all remaining result rows."""
         rows = self._rows[self._index:]
         self._index = len(self._rows)
@@ -56,7 +58,7 @@ class CursorResult:
     def __iter__(self) -> "CursorResult":
         return self
 
-    def __next__(self) -> tuple:
+    def __next__(self) -> tuple[Any, ...]:
         if self._index >= len(self._rows):
             raise StopIteration
         row = self._rows[self._index]
@@ -153,8 +155,11 @@ class Database:
                 self._initialized = False  # Reset state
                 logger.debug("Database connection closed")
 
-    def _ensure_initialized(self) -> None:
+    def _ensure_initialized(self) -> sqlite3.Connection:
         """Ensure database is initialized, auto-initializing if needed.
+
+        Returns:
+            sqlite3.Connection: The live database connection.
 
         Raises:
             RuntimeError: If database connection is not available after initialization.
@@ -166,6 +171,8 @@ class Database:
             raise RuntimeError(
                 "Database connection not available after initialization."
             )
+
+        return self._connection
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
@@ -180,8 +187,10 @@ class Database:
             RuntimeError: If database connection is not available after initialization.
         """
         with self._lock:
-            self._ensure_initialized()
-            yield self._connection
+            # _ensure_initialized() hands back the live connection; binding it
+            # to a local gives mypy the non-None guarantee for the yield.
+            conn = self._ensure_initialized()
+            yield conn
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -197,16 +206,16 @@ class Database:
             RuntimeError: If database connection is not available after initialization.
         """
         with self._lock:
-            self._ensure_initialized()
-            self._connection.execute("BEGIN IMMEDIATE")
+            conn = self._ensure_initialized()
+            conn.execute("BEGIN IMMEDIATE")
             try:
-                yield self._connection
-                self._connection.commit()
+                yield conn
+                conn.commit()
             except Exception:
-                self._connection.rollback()
+                conn.rollback()
                 raise
 
-    def execute(self, query: str, parameters: tuple = ()) -> CursorResult:
+    def execute(self, query: str, parameters: tuple[Any, ...] = ()) -> CursorResult:
         """Execute a query and return a materialized result.
 
         The result is fully materialized (all rows fetched) *under the
@@ -225,7 +234,7 @@ class Database:
         with self.connection() as conn:
             return CursorResult(conn.execute(query, parameters))
 
-    def executemany(self, query: str, parameters: list) -> None:
+    def executemany(self, query: str, parameters: list[tuple[Any, ...]]) -> None:
         """Execute a query with multiple parameter sets.
 
         Args:
@@ -235,7 +244,9 @@ class Database:
         with self.connection() as conn:
             conn.executemany(query, parameters)
 
-    def fetchone(self, query: str, parameters: tuple = ()) -> tuple | None:
+    def fetchone(
+        self, query: str, parameters: tuple[Any, ...] = ()
+    ) -> tuple[Any, ...] | None:
         """Execute a query and fetch one result.
 
         Args:
@@ -247,9 +258,12 @@ class Database:
         """
         with self.connection() as conn:
             cursor = conn.execute(query, parameters)
-            return cursor.fetchone()
+            # typeshed's Cursor.fetchone() is Any (row shape is dynamic); the
+            # annotated local recovers the row type without a runtime check.
+            row: tuple[Any, ...] | None = cursor.fetchone()
+            return row
 
-    def fetchall(self, query: str, parameters: tuple = ()) -> list[tuple]:
+    def fetchall(self, query: str, parameters: tuple[Any, ...] = ()) -> list[tuple[Any, ...]]:
         """Execute a query and fetch all results.
 
         Args:
@@ -371,7 +385,10 @@ class Database:
                 WHERE type = 'table' AND name IN ('recordings', 'transcripts')
                 """
             )
-            core_table_count = cursor.fetchone()[0]
+            # typeshed's Cursor.fetchone() is Any; the annotated local recovers
+            # the COUNT(*) row type without changing the runtime behavior.
+            row = cursor.fetchone()
+            core_table_count: int = row[0]
         return core_table_count >= 2
 
     def _get_schema_version(self) -> int:
@@ -386,7 +403,7 @@ class Database:
                     "SELECT version FROM schema_versions ORDER BY applied_at DESC LIMIT 1"
                 )
                 row = cursor.fetchone()
-                return row[0] if row else 0
+                return int(row[0]) if row else 0
         except sqlite3.OperationalError:
             return 0
 
@@ -884,6 +901,7 @@ class Database:
             bool: True if transcript was found and updated, False otherwise
         """
         # Build update query dynamically based on provided parameters
+        params: tuple[str | int | None, ...]
         if language is not None:
             query = """
                 UPDATE transcripts
@@ -946,7 +964,7 @@ class Database:
         level: str,
         message: str,
         source: str | None = None,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> int:
         """Create a new log entry.
 
@@ -992,7 +1010,7 @@ class Database:
             list[dict]: List of log entries
         """
         query = "SELECT * FROM logs WHERE 1=1"
-        params = []
+        params: list[str | int] = []
 
         if level:
             query += " AND level = ?"
@@ -1098,7 +1116,7 @@ class Database:
     # ============ Utility Methods ============
 
     @staticmethod
-    def _row_to_dict(row: tuple, columns: list[str]) -> dict[str, Any]:
+    def _row_to_dict(row: tuple[Any, ...], columns: list[str]) -> dict[str, Any]:
         """Convert a database row to a dictionary.
 
         Args:

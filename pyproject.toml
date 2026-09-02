@@ -35,6 +35,7 @@ path = "whisper_dictate/__init__.py"
 
 [project.optional-dependencies]
 dev = [
+    "mypy>=1.11",
     "ruff>=0.6.0",
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
@@ -72,6 +73,44 @@ exclude_lines = [
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
 ]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["whisper_dictate"]
+warn_unused_ignores = true
+
+# Ratchet policy (D3, locked 2026-09-02; updated P7 2026-09-02):
+#   * Every `whisper_dictate` module is type-checked under `strict = true` by
+#     default — a new module is picked up automatically and must be strict.
+#   * Opt-out is allowed ONLY via an explicit per-module override in this file,
+#     and overrides may only be REMOVED (never added) without owner approval.
+#     `dunst_monitor.py` was strict-clean at P7 introduction — it carries no
+#     override. `cli.py` is the sole lax island until the S3 god-module split.
+#   * `# type: ignore[code]` needs a one-line why; `warn_unused_ignores` prunes
+#     stale ignores so the ratchet can never silently loosen.
+
+[[tool.mypy.overrides]]
+# D3 (2026-09-02): cli.py is the sole approved lax module — god-module slated
+# for the S3 split; bodies are still type-checked via check_untyped_defs.
+# (Per-module `strict = false` is a silent no-op in mypy 2.x; explicit flags
+# are the only reliable per-module lax mechanism.)
+module = "whisper_dictate.cli"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+disallow_untyped_decorators = false
+disallow_any_generics = false
+disallow_subclassing_any = false
+warn_return_any = false
+strict_equality = false
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# Untyped third-party libraries (no py.typed marker shipped).
+# Every OTHER third-party dependency must be py.typed or it errors loudly here.
+module = ["soundfile", "sounddevice", "pydub"]
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 120

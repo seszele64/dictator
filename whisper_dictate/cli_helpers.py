@@ -1,14 +1,19 @@
 """Helper functions and decorators for CLI commands."""
 
 import functools
+from collections.abc import Callable
+from typing import Concatenate, ParamSpec, TypeVar
 
 import click
 
 from whisper_dictate.config import DatabaseConfig
 from whisper_dictate.database import Database
 
+P = ParamSpec("P")
+R = TypeVar("R")
 
-def with_database(f):
+
+def with_database(f: Callable[Concatenate[click.Context, P], R]) -> Callable[P, R]:
     """Decorator that provides a fresh, per-invocation Database instance.
 
     Constructs a new Database from the configuration loaded by the CLI group
@@ -26,9 +31,9 @@ def with_database(f):
     constructor used inside the decorator), not a module-level getter.
     """
 
-    @click.pass_context
     @functools.wraps(f)
-    def wrapper(ctx, *args, **kwargs):
+    @click.pass_context
+    def wrapper(ctx: click.Context, /, *args: P.args, **kwargs: P.kwargs) -> R:
         # Prefer the configuration loaded by the CLI group callback
         db_config = None
         if isinstance(ctx.obj, dict):

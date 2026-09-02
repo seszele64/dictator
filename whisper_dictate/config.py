@@ -26,7 +26,7 @@ class WhisperProvider(StrEnum):
 
 
 # Maps provider enum to default base_url and environment variable for API key
-PROVIDER_DEFAULTS: dict[WhisperProvider, dict] = {
+PROVIDER_DEFAULTS: dict[WhisperProvider, dict[str, str | None]] = {
     WhisperProvider.OPENAI: {
         "base_url": None,  # OpenAI SDK default
         "env_var": "OPENAI_API_KEY",

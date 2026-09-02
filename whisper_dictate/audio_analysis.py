@@ -49,7 +49,7 @@ def is_audio_silent(audio_file: Path, threshold_dbfs: float = -50.0) -> bool:
         audio = AudioSegment.from_file(str(audio_file))
         dbfs = audio.dBFS
 
-        is_silent = dbfs < threshold_dbfs
+        is_silent: bool = dbfs < threshold_dbfs
 
         logger.debug(
             f"Audio analysis: {audio_file.name} -> {dbfs:.1f} dBFS "

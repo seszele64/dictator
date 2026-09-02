@@ -88,5 +88,7 @@ class DatabaseLogHandler(logging.Handler):
         super().close()
         if self._db:
             self._db.close()
-            self._db = None
+            # _db stays typed as Database so emit()'s hot path needs no
+            # None-guards; close() is the sole clearing point.
+            self._db = None  # type: ignore[assignment]
             self._initialized = False

@@ -3,6 +3,7 @@
 import logging
 from pathlib import Path
 from types import TracebackType
+from typing import Any
 
 import soundfile as sf
 
@@ -567,7 +568,7 @@ class DictationService:
         """
         self.close()
 
-    def get_system_info(self) -> dict:
+    def get_system_info(self) -> dict[str, Any]:
         """WHY THIS EXISTS: Users need diagnostic information to troubleshoot
         configuration issues.
 

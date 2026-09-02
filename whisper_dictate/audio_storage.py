@@ -18,8 +18,10 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from whisper_dictate.config import DatabaseConfig
+from whisper_dictate.database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +216,7 @@ class AudioStorage:
         """
         return check_disk_space(self._recordings_path, min_free_mb)
 
-    def get_disk_usage(self) -> dict:
+    def get_disk_usage(self) -> dict[str, Any]:
         """Get disk usage statistics for the recordings directory's filesystem.
 
         Returns:
@@ -648,7 +650,7 @@ class AudioStorage:
 
         return removed_count
 
-    def get_storage_stats(self) -> dict:
+    def get_storage_stats(self) -> dict[str, Any]:
         """Get storage statistics.
 
         Returns:
@@ -674,7 +676,7 @@ class AudioStorage:
 # ============ Orphaned File Cleanup Functions ============
 
 
-def get_orphaned_files(db, storage: AudioStorage) -> list[dict]:
+def get_orphaned_files(db: Database, storage: AudioStorage) -> list[dict[str, Any]]:
     """Scan for orphaned audio files not referenced in the database.
 
     Compares files in the recordings directory against database records
@@ -782,7 +784,7 @@ def get_orphaned_files(db, storage: AudioStorage) -> list[dict]:
 
 
 def cleanup_orphaned_files(
-    db, storage: AudioStorage, dry_run: bool = True
+    db: Database, storage: AudioStorage, dry_run: bool = True
 ) -> tuple[int, int]:
     """Clean up orphaned audio files not referenced in the database.
 

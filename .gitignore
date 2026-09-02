@@ -12,6 +12,7 @@ coverage.xml
 # Python
 *.egg-info/
 __pycache__/
+.mypy_cache/
 *.pyc
 *.pyo
 
