@@ -173,8 +173,8 @@ whisper-dictate info
 #   • language: auto
 # 
 # 📊 Logging:
-#   • Log file: /home/user/.local/share/whisper-dictate/whisper-dictate.log
-#   • View logs: tail -f /home/user/.local/share/whisper-dictate/whisper-dictate.log
+#   • Log file: /home/user/.local/state/whisper-dictate/logs/whisper-dictate.log
+#   • View logs: tail -f /home/user/.local/state/whisper-dictate/logs/whisper-dictate.log
 ```
 
 ---
@@ -470,6 +470,7 @@ The only environment variable read outside the `WHISPER_*` set is:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `XDG_DATA_HOME` | Base directory for the database and recordings (XDG Base Directory spec) | `~/.local/share` |
+| `XDG_STATE_HOME` | Base directory for the log file (XDG Base Directory spec) | `~/.local/state` |
 
 There are no `LOG_LEVEL`, `LOG_RETENTION_DAYS`, `MIN_FREE_SPACE_MB`,
 `MP3_ENABLED`, `MP3_BITRATE` or `KEEP_WAV` environment variables — the
@@ -650,7 +651,7 @@ whisper-dictate --log-level DEBUG dictate
 ### View Application Logs
 ```bash
 # Tail the log file
-tail -f ~/.local/share/whisper-dictate/whisper-dictate.log
+tail -f ~/.local/state/whisper-dictate/logs/whisper-dictate.log
 
 # Or use the CLI to query logs
 whisper-dictate logs list --level DEBUG

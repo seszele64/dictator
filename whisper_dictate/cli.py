@@ -10,7 +10,7 @@ import click
 from whisper_dictate import __version__
 from whisper_dictate.audio_storage import check_disk_space
 from whisper_dictate.cli_helpers import with_database
-from whisper_dictate.config import DatabaseConfig, load_config, validate_api_key
+from whisper_dictate.config import AppPaths, DatabaseConfig, load_config, validate_api_key
 from whisper_dictate.database import get_database
 from whisper_dictate.dictation import DictationService
 
@@ -29,13 +29,11 @@ def setup_logging(
     Returns:
         The DatabaseLogHandler if database logging was enabled, otherwise None.
     """
-    from pathlib import Path
+    # Log directory from the single source of truth (XDG state home)
+    paths = AppPaths()
+    paths.log_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create log directory
-    log_dir = Path.home() / ".local" / "share" / "whisper-dictate"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    log_file = log_dir / "whisper-dictate.log"
+    log_file = paths.log_file
 
     # Create formatter
     formatter = logging.Formatter(
@@ -212,11 +210,7 @@ def info(ctx: click.Context) -> None:
         click.echo(f"  • {key}: {value}")
 
     click.echo("\n📊 Logging:")
-    from pathlib import Path
-
-    log_file = (
-        Path.home() / ".local" / "share" / "whisper-dictate" / "whisper-dictate.log"
-    )
+    log_file = AppPaths().log_file
     click.echo(f"  • Log file: {log_file}")
     click.echo(f"  • View logs: tail -f {log_file}")
 

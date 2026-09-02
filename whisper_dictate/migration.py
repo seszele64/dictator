@@ -19,18 +19,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from whisper_dictate.config import DatabaseConfig
+from whisper_dictate.config import AppPaths, DatabaseConfig
 from whisper_dictate.database import get_database
 
 logger = logging.getLogger(__name__)
 
-# Legacy file paths
-LEGACY_STATE_FILE = Path.home() / ".whisper-dictate-state"
-LEGACY_PID_FILE = Path.home() / ".whisper-dictate-pid"
-LEGACY_AUDIO_FILE = Path.home() / ".whisper-dictate-audio.wav"
+# Legacy file paths — resolved through AppPaths (single source of truth) so
+# migration reads exactly the same dotfiles toggle_dictate writes at runtime.
+_paths = AppPaths()
+LEGACY_STATE_FILE = _paths.legacy_state_file
+LEGACY_PID_FILE = _paths.legacy_pid_file
+LEGACY_AUDIO_FILE = _paths.legacy_audio_file
 
-# Backup directory
-BACKUP_DIR = Path.home() / ".local" / "share" / "whisper-dictate" / "backups"
+# Backup directory — inside the XDG data home, via AppPaths
+BACKUP_DIR = _paths.backup_dir
 
 # Migration status keys
 MIGRATION_STATUS_KEY = "migration_status"

@@ -10,13 +10,12 @@ import signal
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 import soundfile as sf
 
 from whisper_dictate.audio_storage import get_audio_storage
 from whisper_dictate.clipboard import ClipboardManager
-from whisper_dictate.config import load_config
+from whisper_dictate.config import AppPaths, load_config
 from whisper_dictate.database import get_database
 from whisper_dictate.dunst_monitor import ensure_dunst_running
 from whisper_dictate.notifications import (
@@ -30,9 +29,13 @@ from whisper_dictate.transcription import create_transcriber
 
 # State and process tracking
 # Note: Using database for state management (preferred), with file fallbacks for compatibility
-STATE_FILE = Path.home() / ".whisper-dictate-state"
-PID_FILE = Path.home() / ".whisper-dictate-pid"
-AUDIO_FILE = Path.home() / ".whisper-dictate-audio.wav"
+# These are the SAME legacy dotfiles migration.py treats as its migration
+# sources — both modules resolve them through AppPaths so the toggle's
+# runtime paths and the migration's source paths can never drift apart.
+_paths = AppPaths()
+STATE_FILE = _paths.legacy_state_file
+PID_FILE = _paths.legacy_pid_file
+AUDIO_FILE = _paths.legacy_audio_file
 
 # Database state keys
 STATE_KEY_RECORDING = "is_recording"
@@ -48,13 +51,11 @@ def setup_logging():
     - DOES: Set up logging configuration with file output
     - DOES NOT: Handle log rotation or file management
     """
-    from pathlib import Path
+    # Log directory from the single source of truth (XDG state home)
+    paths = AppPaths()
+    paths.log_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create log directory
-    log_dir = Path.home() / ".local" / "share" / "whisper-dictate"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    log_file = log_dir / "whisper-dictate.log"
+    log_file = paths.log_file
 
     # Create formatter
     formatter = logging.Formatter(

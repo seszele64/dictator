@@ -411,6 +411,9 @@ def real_db(real_db_config, db_singleton_reset):
 def env_isolator(tmp_path, monkeypatch):
     """Isolate environment variables: redirect XDG dirs, set test API key, clear WHISPER_* vars."""
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    # Logs live under XDG_STATE_HOME since AppPaths centralization (P2); redirect
+    # it too so any real logging setup writes inside tmp, never ~/.local/state.
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     monkeypatch.setenv("OPENAI_API_KEY", "test-api-key")
     # Clear any WHISPER_* env vars that might affect config loading
     for key in list(os.environ.keys()):

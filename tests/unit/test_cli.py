@@ -57,8 +57,10 @@ def clean_provider_env(monkeypatch, tmp_path):
     ):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("WHISPER_PROVIDER", "local")
-    # Redirect XDG data (database, recordings) away from the real home dir
+    # Redirect XDG data (database, recordings) and state (logs) away from the
+    # real home dir
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     return monkeypatch
 
 

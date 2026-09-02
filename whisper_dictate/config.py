@@ -5,7 +5,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class WhisperProvider(StrEnum):
@@ -84,34 +84,120 @@ class DatabaseConfig(BaseModel):
     def get_database_path(self) -> Path:
         """Get the full database file path.
 
+        Delegates to AppPaths.database_path() so the XDG base-directory
+        resolution lives in exactly one place (explicit path override still
+        wins).
+
         Returns:
             Path: Full path to the database file
         """
-        if self.path:
-            return self.path
-
-        # Use XDG Base Directory spec: ~/.local/share/whisper-dictate/
-        data_dir = (
-            Path(os.getenv("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-            / "whisper-dictate"
-        )
-        return data_dir / "whisper-dictate.db"
+        return AppPaths().database_path(self)
 
     def get_recordings_path(self) -> Path:
         """Get the full recordings directory path.
 
+        Delegates to AppPaths.recordings_dir() so the XDG base-directory
+        resolution lives in exactly one place (explicit override still wins).
+
         Returns:
             Path: Full path to the recordings directory
         """
-        if self.recordings_path:
-            return self.recordings_path
+        return AppPaths().recordings_dir(self)
 
-        # Use XDG Base Directory spec: ~/.local/share/whisper-dictate/recordings/
-        return (
-            Path(os.getenv("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-            / "whisper-dictate"
-            / "recordings"
-        )
+
+def _xdg_data_home() -> Path:
+    """Return $XDG_DATA_HOME or its XDG Base Directory spec default (~/.local/share)."""
+    return Path(os.getenv("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+
+
+def _xdg_state_home() -> Path:
+    """Return $XDG_STATE_HOME or its XDG Base Directory spec default (~/.local/state)."""
+    return Path(os.getenv("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+
+
+class AppPaths(BaseModel):
+    """WHY THIS EXISTS: Every filesystem location (database, recordings, logs,
+    backups, legacy dotfiles) used to be resolved independently in four
+    modules, duplicating the XDG base-directory logic and drifting apart
+    (logs lived under the data home, legacy files under $HOME). A single
+    frozen model keeps one source of truth and pre-wires a future composition
+    root that passes paths explicitly instead of reading globals.
+
+    RESPONSIBILITY: Resolve application filesystem paths from XDG env vars.
+    BOUNDARIES:
+    - DOES: Resolve data_home / log_dir / legacy file paths from the
+      environment at instantiation time, expose derived backup_dir and
+      log_file, and provide effective database/recordings resolvers that
+      honor DatabaseConfig overrides
+    - DOES NOT: Create directories, read or write any file, or perform I/O
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    data_home: Path = Field(
+        default_factory=lambda: _xdg_data_home() / "whisper-dictate",
+        description="XDG data home ($XDG_DATA_HOME or ~/.local/share) for "
+        "whisper-dictate; contains the database, recordings and backups",
+    )
+    log_dir: Path = Field(
+        default_factory=lambda: _xdg_state_home() / "whisper-dictate" / "logs",
+        description="Log directory ($XDG_STATE_HOME or ~/.local/state). Logs "
+        "are state, not data, so they live under XDG_STATE_HOME — previously "
+        "they were written under the data home. Old logs are not migrated.",
+    )
+    legacy_state_file: Path = Field(
+        default_factory=lambda: Path.home() / ".whisper-dictate-state",
+        description="Legacy toggle state marker in $HOME — the toggle's "
+        "runtime fallback file AND the migration source path (shared)",
+    )
+    legacy_pid_file: Path = Field(
+        default_factory=lambda: Path.home() / ".whisper-dictate-pid",
+        description="Legacy arecord PID file in $HOME — the toggle's runtime "
+        "fallback file AND the migration source path (shared)",
+    )
+    legacy_audio_file: Path = Field(
+        default_factory=lambda: Path.home() / ".whisper-dictate-audio.wav",
+        description="Legacy audio scratch file in $HOME — the toggle's "
+        "runtime fallback file AND the migration source path (shared)",
+    )
+
+    @property
+    def backup_dir(self) -> Path:
+        """Backup directory inside the data home (always consistent with it)."""
+        return self.data_home / "backups"
+
+    @property
+    def log_file(self) -> Path:
+        """Path of the main application log file inside log_dir."""
+        return self.log_dir / "whisper-dictate.log"
+
+    def database_path(self, config: DatabaseConfig | None = None) -> Path:
+        """Effective database file path: explicit override wins over XDG default.
+
+        Args:
+            config: Database config carrying an optional explicit path; when
+                None, default configuration (XDG data home) is used.
+
+        Returns:
+            Path: Full path to the database file
+        """
+        db_config = config if config is not None else DatabaseConfig()
+        return db_config.path if db_config.path else self.data_home / "whisper-dictate.db"
+
+    def recordings_dir(self, config: DatabaseConfig | None = None) -> Path:
+        """Effective recordings directory: explicit override wins over XDG default.
+
+        Args:
+            config: Database config carrying an optional explicit recordings
+                path; when None, default configuration (XDG data home) is used.
+
+        Returns:
+            Path: Full path to the recordings directory
+        """
+        db_config = config if config is not None else DatabaseConfig()
+        if db_config.recordings_path:
+            return db_config.recordings_path
+        return self.data_home / "recordings"
 
 
 class AudioConfig(BaseModel):
@@ -262,6 +348,20 @@ class AppConfig(BaseModel):
     copy_to_clipboard: bool = Field(
         default=True, description="Copy transcription to clipboard"
     )
+
+    @property
+    def paths(self) -> AppPaths:
+        """Application filesystem paths (single source of truth).
+
+        WHY a computed property instead of a stored field: AppPaths resolves
+        the XDG_* environment variables at instantiation time, so returning a
+        fresh instance on every access preserves the call-time env semantics
+        all path consumers had before centralization — a caller (or test) can
+        change XDG_DATA_HOME / XDG_STATE_HOME after this config object was
+        built and still see the override. A default_factory field would have
+        frozen the env snapshot at AppConfig() construction instead.
+        """
+        return AppPaths()
 
 
 def _resolve_provider_enum(provider: str) -> WhisperProvider:
