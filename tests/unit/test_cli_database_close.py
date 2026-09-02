@@ -684,9 +684,11 @@ class TestDatabaseErrorHandling:
 
             result = cli_runner.invoke(cli, ["history", "list"])
 
-            # Even with exception, close should be attempted
-            # The finally block ensures this
-            assert mock_db.close.called or result.exit_code != 0
+            # S1: initialization happens INSIDE the try/finally, so an
+            # initialize failure must close the database unconditionally -
+            # the old `close.called or exit_code != 0` escape hatch is gone.
+            assert mock_db.close.called
+            assert result.exit_code != 0
 
     def test_logs_list_db_error_still_closes(self, cli_runner):
         """Verify logs list closes database even when error occurs."""

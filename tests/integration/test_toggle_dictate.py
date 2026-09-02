@@ -473,6 +473,29 @@ class TestToggleStateMachine:
             toggle.main()
         assert excinfo.value.code == 1
 
+    def test_main_requires_api_key_before_recording(self, toggle_env, monkeypatch):
+        """W2: startup validates the API key again (legacy fail-fast restored).
+
+        bootstrap() must be called with require_api_key=True; a keyless
+        startup notifies the error and exits 1 BEFORE any recording process
+        is spawned or any state is touched. The `whisper-dictate toggle`
+        subcommand inherits this pin because it forwards to toggle.main().
+        """
+        bootstrap = Mock(side_effect=ValueError("API key not found"))
+        monkeypatch.setattr(toggle, "bootstrap", bootstrap)
+        mocks = self._patch_dispatch(monkeypatch)
+
+        with pytest.raises(SystemExit) as excinfo:
+            toggle.main()
+
+        assert excinfo.value.code == 1
+        bootstrap.assert_called_once_with(require_api_key=True)
+        toggle_env.notifies["notify_error"].assert_called_once_with("API key not found")
+        toggle_env.popen.assert_not_called()
+        mocks.start_background_recording.assert_not_called()
+        mocks.stop_background_recording.assert_not_called()
+        mocks.transcribe_audio.assert_not_called()
+
     def test_main_error_path_notifies_and_cleans_up(
         self, toggle_env, monkeypatch, tmp_path
     ):
@@ -510,6 +533,28 @@ class TestToggleLogging:
         finally:
             # setup_logging clears the handler list; undo its global changes so
             # neither pytest's capture handlers nor the root level leak.
+            for handler in root.handlers[:]:
+                if handler not in prior_handlers:
+                    handler.close()
+            root.handlers[:] = prior_handlers
+            root.setLevel(prior_level)
+
+    def test_setup_logging_closes_preexisting_handlers(self, env_isolator):
+        """W3: re-setup CLOSES the handlers it replaces before clearing.
+
+        A cleared-but-open handler keeps its resource alive (the CLI group
+        callback's DatabaseLogHandler holds a database open until click
+        teardown), so close must precede the clear.
+        """
+        root = logging.getLogger()
+        prior_handlers = root.handlers[:]
+        prior_level = root.level
+        stale = Mock(spec=logging.Handler)
+        root.addHandler(stale)
+        try:
+            toggle.setup_logging()
+            stale.close.assert_called_once()
+        finally:
             for handler in root.handlers[:]:
                 if handler not in prior_handlers:
                     handler.close()

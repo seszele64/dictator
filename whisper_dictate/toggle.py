@@ -10,6 +10,7 @@ recording/transcription stack. P5 folds it into the package as
 stub command) while the root script remains only as a deprecation shim.
 """
 
+import contextlib
 import logging
 import os
 import signal
@@ -75,7 +76,14 @@ def setup_logging():
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
 
-    # Clear existing handlers to avoid duplicates
+    # Clear existing handlers to avoid duplicates. Close each one first so a
+    # re-setup never orphans handlers that hold resources (e.g. the CLI group
+    # callback's DatabaseLogHandler keeps its database open until click
+    # teardown). close() is a no-op on already-closed handlers; failures are
+    # swallowed so a broken stale handler cannot abort re-setup.
+    for handler in root_logger.handlers[:]:
+        with contextlib.suppress(Exception):
+            handler.close()
     root_logger.handlers.clear()
 
     # File handler
@@ -425,6 +433,10 @@ def main():
     """Main function - real toggle recording."""
     setup_logging()
 
+    # Bound only after a successful bootstrap; failure paths must not touch
+    # an unbound/None config (the legacy script crashed with a NameError in
+    # its cleanup line when startup itself failed).
+    config = None
     try:
         # Ensure dunst is running for notifications
         if not ensure_dunst_running():
@@ -432,7 +444,11 @@ def main():
                 "Dunst notification daemon not available - notifications may not work"
             )
 
-        config = bootstrap()
+        # Fail fast on a missing API key BEFORE recording, replicating the
+        # legacy startup UX (pre-batch): load_config() defaulted to
+        # require_api_key=True, so a keyless startup notified the error and
+        # exited non-zero without ever spawning arecord.
+        config = bootstrap(require_api_key=True)
 
         if is_recording(config):
             logging.info("Stopping recording...")
@@ -454,10 +470,16 @@ def main():
     except Exception as e:
         logging.error(f"Error: {e}")
         notify_error(str(e))
-        # Clean up on error
-        stop_background_recording(config)
+        # Clean up on error (only meaningful if startup got past bootstrap)
+        if config is not None:
+            stop_background_recording(config)
         if AUDIO_FILE.exists():
             AUDIO_FILE.unlink()
+        if config is None:
+            # Startup failed before configuration existed (e.g. missing API
+            # key). The legacy script exited non-zero here - its cleanup
+            # line crashed on the unbound config - so exit 1 deterministically.
+            sys.exit(1)
 
 
 if __name__ == "__main__":

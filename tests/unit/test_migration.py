@@ -16,6 +16,7 @@ from whisper_dictate.migration import (
     MigrationError,
     MigrationManager,
     check_migration_status,
+    run_migration,
 )
 
 
@@ -321,3 +322,53 @@ class TestCheckMigrationStatus:
         assert result["has_legacy_files"] is True
         assert result["migration_completed"] is False
         assert result["migration_needed"] is True
+
+
+class TestModuleLevelErrorPropagation:
+    """W1 regression: the module-level run_migration()/check_migration_status()
+    wrappers must propagate the ORIGINAL exception raised inside their
+    try/finally - never a masked or replacement error (a regression here
+    surfaced as NameError instead of the real failure).
+    """
+
+    def test_run_migration_backup_failure_propagates_migration_error(
+        self, mock_migration_db, tmp_legacy_paths
+    ):
+        """A failed backup copy aborts via MigrationError through the wrapper."""
+        tmp_legacy_paths["state"].write_text("recording")
+        with (
+            patch(
+                "whisper_dictate.migration.shutil.copy2",
+                side_effect=OSError("disk full"),
+            ),
+            pytest.raises(MigrationError, match="Backup creation failed"),
+        ):
+            run_migration()
+
+    def test_run_migration_inner_failure_not_masked_by_status_write(
+        self, mock_migration_db, tmp_legacy_paths
+    ):
+        """The best-effort FAILED-status write must not replace the original
+        migration error with the secondary failure."""
+        tmp_legacy_paths["state"].write_text("recording")
+        mock_migration_db.transaction.return_value.__enter__ = Mock(
+            side_effect=RuntimeError("db went away mid-migration")
+        )
+        mock_migration_db.set_state = Mock(
+            side_effect=RuntimeError("status write failed")
+        )
+        with pytest.raises(MigrationError, match="db went away mid-migration"):
+            run_migration()
+
+    def test_check_migration_status_init_failure_propagates_original_error(
+        self, mock_migration_db, tmp_legacy_paths
+    ):
+        """An initialize failure inside check_migration_status propagates the
+        wrapped MigrationError, not a masked replacement."""
+        mock_migration_db.initialize = Mock(
+            side_effect=RuntimeError("cannot open database")
+        )
+        with pytest.raises(
+            MigrationError, match="Failed to initialize database"
+        ):
+            check_migration_status()

@@ -208,7 +208,15 @@ class MigrationManager:
             # Attempt rollback
             self._rollback(backup_path, legacy_files)
 
-            self._set_migration_status(MIGRATION_FAILED, error=str(e))
+            # Best-effort status write: a failed status record must never
+            # mask the migration error itself (the wrapped MigrationError
+            # must propagate - regression-pinned in tests/unit/test_migration.py).
+            try:
+                self._set_migration_status(MIGRATION_FAILED, error=str(e))
+            except Exception as status_error:
+                self._log(
+                    "ERROR", f"Failed to record migration failure: {status_error}"
+                )
             raise MigrationError(f"Migration failed: {e}") from e
 
     def _create_backup(self, legacy_files: dict[str, bool]) -> Path | None:

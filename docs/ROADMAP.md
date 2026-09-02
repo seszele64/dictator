@@ -53,7 +53,7 @@ Long story short: **the two-week plan takes the repo from "works for me" to a po
 | ☐ | **Tier C — Engineering rigor at scale** | §2, §9 | ☐ |
 | ✅ | **S0 — Characterization first** (Day 0–1) | §7 | ✅ |
 | ✅ | **S1 — Truth & dead-code purge** (Day 1–2) | §7 | ✅ |
-| ☐ | **S2 — Singleton removal** (Day 2–4) | §7 | ☐ |
+| ✅ | **S2 — Singleton removal** (Day 2–4) | §7 | ✅ `4b51915`+`ce09424`+`286bd60` |
 | ☐ | **S4 — Toggle merge** (starts Day 2–3, lands after S2) | §7 | ☐ |
 | ☐ | **S3 — God-module splits** (Week 2, Day 5–8) | §7 | ☐ |
 | ☐ | **S5 — Notifier wiring** (Day 8) | §7 | ☐ |
@@ -248,9 +248,9 @@ One list, process and structural together, ordered by execution sequence within 
 | 3 | ✅ | P3 | Process | OpenSpec archive+sync (`fix-provider-crash`, `fix-storage-safety`); legacy `specs/` → single deprecated README stub (streaming explicitly NOT planned); fix AGENTS.md stale `src/` layout | M | S | — | Day 1 |
 | 4 | ✅ | P4 | Process | Coverage fail_under=70 + branch; strict markers (unit/integration/e2e/contract) + `--strict-markers`; e2e runs WITHOUT a skip-if-no-binaries guard — deliberately: the e2e suite mocks all system binaries at their seams (see `tests/e2e/conftest.py`), so a path-based guard would only skip 7 real tests on every CI container; fix `.env.example` wrinkle | M | S | — | Day 1 |
 | 5 | ✅ | S1 | Structural | Truth & dead-code purge (deletions 1–8, 11, 13, 14; `--dry-run` implemented; README truth; agent dirs removed; "log path → XDG state" deferred to P2 with the other path constants) | H | S | S0 | Day 1–2 |
-| 6 | ☐ | P2 | Process | Centralize path/state constants (`PathConfig`/`AppPaths` in `config.py`; replace literals `cli.py:34,208`, `db_logging.py:128`, `migration.py:28-33`, toggle; `get_audio_path` chokepoint stays the only path-construction site) | M | S | — | Day 2 |
-| 7 | ☐ | P5 | Process | Fold `toggle_dictate.py` into package (`toggle.py` + console script `whisper-dictate-toggle` + stub `whisper-dictate toggle`; root file kept as deprecation shim one release then deleted; toggle state-machine tests) | H | M | P2 | Day 2–3 |
-| 8 | ☐ | S2 | Structural | Singletons removal: `app.py` composition root; per-command Database + `with_database` required; AudioStorage DI-ed; orphan scan explicit params; `load_dotenv` into `app.py` | H | M | S1 | Day 2–4 |
+| 6 | ✅ | P2 | Process | Centralize path/state constants (`PathConfig`/`AppPaths` in `config.py`; replace literals `cli.py:34,208`, `db_logging.py:128`, `migration.py:28-33`, toggle; `get_audio_path` chokepoint stays the only path-construction site) | M | S | — | Day 2 | `85a3267` |
+| 7 | ✅ | P5 | Process | Fold `toggle_dictate.py` into package (`toggle.py` + console script `whisper-dictate-toggle` + stub `whisper-dictate toggle`; root file kept as deprecation shim one release then deleted; toggle state-machine tests) | H | M | P2 | Day 2–3 | `8ebc467` |
+| 8 | ✅ | S2 | Structural | Singletons removal: `app.py` composition root; per-command Database + `with_database` required; AudioStorage DI-ed; orphan scan explicit params; `load_dotenv` into `app.py` | H | M | S1 | Day 2–4 | `4b51915`+`ce09424`+`286bd60` |
 | 9 | ☐ | S4 | Structural | Toggle merge (P5 cut-over): `ToggleService` + `cli/commands/toggle.py`; delegation to `DictationService`; entry-point switch `setup_i3.sh:4` + `generate_run_script.sh:19`; delete root script + old tests; `conftest.py:23` removed | H | M-L | S1+S2, P5 | starts Day 2–3, lands after S2 |
 | 10 | ☐ | P12 | Process | ADR finalization: fix 0001/0002 refs to real files (`tests/conftest.py`, `whisper_dictate/dictation.py`), status Accepted, dates; new ADRs 0003 Provider ABC+factory, 0004 Centralized config after P2, 0005 pydub removal after P10, 0006 Distribution model after D1, 0007 Local provider after P14 | M | S | P2, P10-adjacent | Day 3 |
 | 11 | ☐ | P7 | Process | Typing gate core modules: mypy strict = true (py3.11), files = `whisper_dictate`; per-module overrides opt-out `cli.py` + `dunst_monitor.py` initially; `warn_unused_ignores`; CI job; ratchet policy (never loosens) | H | M | S2 | Day 4 |
@@ -378,7 +378,7 @@ Each phase lands **only when its gate passes.** Additionally, every phase lands 
 |---|---|
 | **S0** | ☐ `uv run pytest -q` green with new characterization/snapshot tests; snapshot baseline committed |
 | **S1** | ✅ `grep -rEn "PersistentNotification\|DunstMonitor\|setup_dual_logging\|convert_and_keep_wav\|convert_and_delete_wav\|get_recording_path\|\.log_level" whisper_dictate/` → 0 result; ✅ `git ls-files \| grep -E '\.opencode\|\.specify\|\.memories'` → 0; ✅ pytest + ruff green; ✅ `--dry-run` leaves DB unmodified |
-| **S2** | ☐ `grep -rn "_database\|_audio_storage" whisper_dictate/ tests/` → 0 (conftest resets deleted); ☐ `test_cli_database_close 46 green`; ☐ `python -c "import whisper_dictate.config"` changes no env vars |
+| **S2** | ✅ `grep -rn "_database\|_audio_storage" whisper_dictate/ tests/` → only benign substring families (`with_database`, `get_database_path`/`close_database`, `test_database_*`, `mock_audio_storage` locals) — these are name-collision families, **not** singleton state (genuine `self._database =` / `self._audio_storage =` / `global` hits: 0); ✅ `test_cli_database_close 46 green`; ✅ `python -c "import whisper_dictate.config"` changes no env vars — landed `4b51915`+`ce09424`+`286bd60` |
 | **S3** | ☐ no `src/**/*.py` ≥ 600 lines; ☐ import graph acyclic (`import-linter` in CI as a lint step; forbidden rule: storage → audio); ☐ per-module coverage gates ≥ current (P4 fail_under); ☐ CLI snapshot diffs = empty |
 | **S4** | ☐ `whisper-dictate toggle --help` exits 0; ☐ `setup_i3.sh` + `generate_run_script.sh` produce valid entries; ☐ root `toggle_dictate.py` absent; ☐ `conftest.py:23` absent; ☐ toggle integration green; ☐ `grep ".execute("` outside `storage/` → 0 |
 | **S5** | ☐ notifications enabled smoke → dunst message; ☐ default → no message; ☐ full suite green |

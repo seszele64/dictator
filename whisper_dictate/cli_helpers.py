@@ -38,14 +38,17 @@ def with_database(f):
             # Standalone usage outside the CLI group (tools, direct tests)
             db_config = DatabaseConfig()
 
-        # Construct and initialize a dedicated database for this invocation
+        # Construct and initialize a dedicated database for this invocation.
+        # Construction is trivial (no I/O); initialization happens INSIDE the
+        # try so a failed initialize still closes whatever was opened (S1).
         db = Database(db_config)
-        db.initialize()
-
-        ctx.obj = ctx.obj or {}
-        ctx.obj["db"] = db
 
         try:
+            db.initialize()
+
+            ctx.obj = ctx.obj or {}
+            ctx.obj["db"] = db
+
             # Invoke the command
             return ctx.invoke(f, ctx, *args, **kwargs)
         finally:

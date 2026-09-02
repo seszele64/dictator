@@ -136,7 +136,17 @@ def cli(ctx: click.Context, log_level: str) -> None:
         sys.exit(1)
 
     log_db = Database(config.database)
-    db_log_handler = setup_logging(log_level, db=log_db)
+    # setup_logging performs the log_db.initialize() itself (Database's
+    # guard makes re-initialization an idempotent no-op), so the callback
+    # does not initialize a second time. But any failure inside setup_logging
+    # (log-dir/file-handler errors, or that initialize) must close the db it
+    # was handed instead of leaking the connection (S1).
+    try:
+        db_log_handler = setup_logging(log_level, db=log_db)
+    except Exception:
+        with contextlib.suppress(Exception):
+            log_db.close()
+        raise
     if db_log_handler is not None:
         ctx.call_on_close(db_log_handler.close)
     ctx.ensure_object(dict)
