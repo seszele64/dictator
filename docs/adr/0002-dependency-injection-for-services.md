@@ -2,11 +2,11 @@
 
 ## Status
 
-Proposed
+Superseded by ADR 0003 (2026-09-02)
 
 ## Context
 
-`DictationService` currently uses lazy property access to create database and audio storage singletons:
+`DictationService` uses lazy property access to create database and audio storage instances:
 
 ```python
 @property
@@ -16,54 +16,37 @@ def _database(self):
     return self._db
 ```
 
-This pattern makes tests require `patch()` for dependency replacement:
-```python
-@patch('DictationService._database', new_callable=property)
-def test_something(self, mock_db):
-    ...
-```
-
-This approach:
-- Makes tests harder to write and maintain
-- Requires understanding of property patching nuances
-- Creates implicit dependencies that aren't visible in the constructor
-- Makes it difficult to inject custom implementations for testing edge cases
+This pattern makes tests require `patch()` for dependency replacement,
+creates implicit dependencies that aren't visible in the constructor, and
+makes it difficult to inject custom implementations for testing edge cases.
 
 ## Decision
 
-Add optional constructor parameters for `database` and `audio_storage` to enable direct injection during tests while maintaining lazy initialization for production use.
+**As written, this ADR never landed.** The optional constructor parameters
+for `database` / `audio_storage` alongside lazy singletons were not
+implemented. Instead, S2 resolved the underlying problem differently:
+module-level singletons (`_database` / `_audio_storage` globals with
+getter/closers) were deleted and replaced with **per-command instances
+constructed at the composition root**, with configuration passed explicitly
+and connections closed deterministically.
 
-The implementation will:
-1. Accept optional `database` and `audio_storage` parameters in `__init__`
-2. Store injected instances directly if provided
-3. Lazily create instances only when needed and no instance was provided
-4. Maintain backward compatibility with existing code
-
-Example:
-```python
-class DictationService:
-    def __init__(self, database=None, audio_storage=None, ...):
-        self._database = database
-        self._audio_storage = audio_storage
-        # ... rest of init
-    
-    @property
-    def _database(self):
-        if self._db is None:
-            self._db = Database(...)  # Lazy creation for production
-        return self._db
-```
+That approach is recorded as ADR 0003 (Composition Root over Lazy
+Singletons), which supersedes this ADR. Constructor injection was not
+adopted; the remaining lazy `database` / `audio_storage` properties on
+`DictationService` are S3 residue, scheduled to disappear with the
+god-module splits.
 
 ## Consequences
 
-- **Positive**: Tests become simpler - no patching required, just pass mocks to constructor
-- **Positive**: Explicit dependencies - constructor signature shows what's needed
-- **Positive**: Better test isolation - each test can have its own instances
-- **Positive**: Enables testing with real implementations (not just mocks)
-- **Negative**: Larger constructor signature
-- **Negative**: Need to handle None vs injected instances carefully
+- **Positive**: The problem this ADR targeted (hidden global singletons)
+  is resolved - tests construct real per-command instances
+- **Negative**: Constructor-injection ergonomics were never gained;
+  `DictationService` tests still patch the lazy seams
+- **Neutral**: Superseded before acceptance; kept for decision history
 
 ## Related Files
 
-- `src/services/dictation.py` - Main service to modify
-- `tests/test_dictation.py` - Tests that will be simplified
+- `whisper_dictate/dictation.py` - service with the remaining lazy properties
+- `whisper_dictate/app.py` - composition root (S2)
+- `whisper_dictate/cli_helpers.py` - `with_database` per-command construction
+- `tests/integration/test_dictation.py` - tests exercising the service
