@@ -1,6 +1,9 @@
 """Unit tests for the whisper_dictate configuration module."""
 
+import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -392,3 +395,65 @@ class TestLoadConfig:
         monkeypatch.setenv("WHISPER_API_KEY", "whisper-key")
         monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
         load_config()  # should not raise
+
+
+class TestDotenvImportPurity:
+    """Importing whisper_dictate.config must not mutate the environment.
+
+    load_dotenv() used to run at module import time (config.py module
+    level), so a bare ``import whisper_dictate.config`` could rewrite
+    os.environ. It now runs inside load_config() — same behavior for every
+    caller (CLI, root toggle script), side-effect-free import.
+
+    Both tests run real subprocesses with a .env file present in the working
+    directory, because in-process imports would already be cached.
+    """
+
+    _PROBE_DOTENV = "WHISPER_MODEL=probe-model-from-dotenv\n"
+
+    def _run_python(self, tmp_path: Path, code: str) -> subprocess.CompletedProcess:
+        repo_root = Path(__file__).resolve().parents[2]
+        env = {**os.environ, "PYTHONPATH": str(repo_root)}
+        return subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+    def test_bare_import_does_not_mutate_os_environ(self, tmp_path):
+        """A bare `import whisper_dictate.config` leaves os.environ identical,
+        even with a .env file in the working directory."""
+        (tmp_path / ".env").write_text(self._PROBE_DOTENV)
+        code = (
+            "import os, json\n"
+            "before = dict(os.environ)\n"
+            "import whisper_dictate.config\n"
+            "after = dict(os.environ)\n"
+            "print(json.dumps({'identical': before == after,\n"
+            "                  'probe_present': 'WHISPER_MODEL' in after and\n"
+            "                  after.get('WHISPER_MODEL', '').endswith('from-dotenv')}))\n"
+        )
+        result = self._run_python(tmp_path, code)
+        assert result.returncode == 0, result.stderr
+        payload = json.loads(result.stdout.strip())
+        assert payload["identical"] is True, (
+            "importing whisper_dictate.config mutated os.environ"
+        )
+        assert payload["probe_present"] is False
+
+    def test_load_config_still_loads_dotenv(self, tmp_path):
+        """load_config() picks up .env values — the move preserved behavior
+        for every caller."""
+        (tmp_path / ".env").write_text(self._PROBE_DOTENV)
+        code = (
+            "from whisper_dictate.config import load_config\n"
+            "config = load_config(require_api_key=False)\n"
+            "print(config.openai.model)\n"
+        )
+        result = self._run_python(tmp_path, code)
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "probe-model-from-dotenv"

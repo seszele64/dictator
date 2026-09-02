@@ -5,6 +5,8 @@ coverage.xml
 
 .env
 .opencode/
+.specify/
+.memories/
 .vscode/
 
 # Python

@@ -7,8 +7,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
-load_dotenv()
-
 
 class WhisperProvider(StrEnum):
     """WHY THIS EXISTS: Users need to select from known Whisper API providers
@@ -341,6 +339,12 @@ def load_config(require_api_key: bool = True) -> AppConfig:
     Raises:
         ValueError: If required configuration is missing (see validate_api_key()).
     """
+    # .env loading happens HERE, not at module import time: importing
+    # whisper_dictate.config must be side-effect-free (no os.environ
+    # mutation), while every load_config() caller (CLI and toggle) keeps
+    # identical behavior.
+    load_dotenv()
+
     config = AppConfig()
 
     if require_api_key:

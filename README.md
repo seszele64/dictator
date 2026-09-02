@@ -434,9 +434,9 @@ All Whisper settings are configurable via environment variables. Switch provider
 | `WHISPER_API_KEY` | API key for the selected provider | (required for cloud providers; not needed for `local`/`custom`) |
 | `WHISPER_BASE_URL` | Custom API base URL (for `custom` provider) | Provider default |
 | `WHISPER_MODEL` | Model name to use | `whisper-1` |
-| `WHISPER_LANGUAGE` | Language code (e.g., `en`, `es`, `auto`) | `auto` |
+| `WHISPER_LANGUAGE` | Language hint as ISO 639-1 code (e.g., `en`, `de`) | (unset) — Whisper auto-detects |
 | `WHISPER_TEMPERATURE` | Sampling temperature (0.0-1.0) | `0.0` |
-| `WHISPER_TIMEOUT` | API request timeout in seconds | `60` |
+| `WHISPER_TIMEOUT` | API request timeout in seconds | `30` |
 | `WHISPER_TASK` | Whisper task: `transcribe` or `translate` (translation always outputs English) | `transcribe` |
 
 #### Supported Providers
@@ -462,14 +462,17 @@ If `WHISPER_API_KEY` is not set, the system falls back to provider-specific env 
 
 #### Other Configuration
 
+The only environment variable read outside the `WHISPER_*` set is:
+
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR) | `INFO` |
-| `LOG_RETENTION_DAYS` | Days to keep logs | `30` |
-| `MIN_FREE_SPACE_MB` | Minimum free disk space for recording | `100` |
-| `MP3_ENABLED` | Enable/disable MP3 conversion | `true` |
-| `MP3_BITRATE` | MP3 encoding bitrate: `64k`, `128k`, `192k` | `128k` |
-| `KEEP_WAV` | Keep original WAV after MP3 conversion | `false` |
+| `XDG_DATA_HOME` | Base directory for the database and recordings (XDG Base Directory spec) | `~/.local/share` |
+
+There are no `LOG_LEVEL`, `LOG_RETENTION_DAYS`, `MIN_FREE_SPACE_MB`,
+`MP3_ENABLED`, `MP3_BITRATE` or `KEEP_WAV` environment variables — the
+application does not read them. Logging level is controlled by the CLI flag
+(`whisper-dictate --log-level DEBUG`); the remaining settings are code
+defaults in `whisper_dictate/config.py`.
 
 ### Database Configuration
 
@@ -477,10 +480,7 @@ The CLI uses a SQLite database stored at:
 ```
 ~/.local/share/whisper-dictate/whisper-dictate.db
 ```
-
-Configuration options (in `.env`):
-- `LOG_RETENTION_DAYS` - Days to keep logs (default: 30)
-- `MIN_FREE_SPACE_MB` - Minimum free disk space required for recording (default: 100)
+(under `$XDG_DATA_HOME` when that variable is set).
 
 ### Audio Settings
 
@@ -493,18 +493,10 @@ The CLI uses sensible defaults:
 
 WAV files are large (~10MB per minute at 44.1kHz stereo) but the Whisper API supports MP3 natively. By default, audio is automatically converted to MP3 before upload, achieving **80-90% file size reduction** with no impact on transcription quality for speech.
 
-Configuration options (in `.env`):
-- `MP3_ENABLED` - Enable/disable MP3 conversion (default: true)
-- `MP3_BITRATE` - MP3 encoding bitrate: '64k', '128k', '192k' (default: '128k')
-- `KEEP_WAV` - Keep original WAV after MP3 conversion (default: false)
-
-**Example `.env` configuration:**
-```bash
-OPENAI_API_KEY=your-api-key-here
-MP3_ENABLED=true
-MP3_BITRATE=128k
-KEEP_WAV=false
-```
+MP3 conversion is currently configured only through code defaults in
+`whisper_dictate/config.py` (`AudioConfig`): `mp3_enabled` (true),
+`mp3_bitrate` (`128k`) and `keep_wav` (false). There are no `MP3_*` or
+`KEEP_WAV` environment variables — setting them in `.env` has no effect.
 
 **Bitrate Guide:**
 | Bitrate | Quality | Size | Use Case |
@@ -620,10 +612,9 @@ python -c "import subprocess; subprocess.run(['ffmpeg', '-version'])"
 
 If FFmpeg cannot be installed or is not working, you can disable MP3 conversion to continue using WAV files (note: this will result in larger file sizes):
 
-```bash
-# Set in your .env file
-MP3_ENABLED=false
-```
+MP3 conversion cannot currently be disabled via `.env` (there is no
+`MP3_ENABLED` environment variable). Change the `mp3_enabled` default in
+`whisper_dictate/config.py` (`AudioConfig`) to `False` instead.
 
 The system will continue to function with WAV files, but uploads will be larger (~10MB per minute at 16kHz mono).
 
