@@ -39,14 +39,17 @@ dev = [
 
 [tool.pytest.ini_options]
 timeout = 30
-addopts = "--import-mode=importlib"
+addopts = "--import-mode=importlib --strict-markers"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [
     "timeout: mark test with specific timeout override",
-    "integration: mark test as an integration test",
+    "unit: fast isolated tests with no real DB, filesystem or system binaries",
+    "integration: tests exercising real SQLite database and filesystem (offline)",
+    "e2e: full-system tests that require system binaries (dunstify, xclip)",
+    "contract: provider contract tests pinning external transcription seams",
 ]
 
 [tool.coverage.run]
@@ -55,6 +58,10 @@ branch = true
 relative_files = true
 
 [tool.coverage.report]
+# Gate: fail the suite below 70% combined statement+branch coverage.
+# Measured floor at introduction was 83% (branch enabled), so 70 is a
+# conservative ratchet, not an aspiration.
+fail_under = 70
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",

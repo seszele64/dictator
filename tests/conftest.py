@@ -23,6 +23,33 @@ from whisper_dictate.transcription import TranscriptionResult  # noqa: E402
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
+# ============ Suite markers: auto-applied by directory ============
+# pyproject.toml registers unit/integration/e2e/contract markers and runs with
+# --strict-markers. Applying them here from the test's directory means new test
+# files never need per-file decoration to stay strict-marker-clean, and
+# selection (-m unit, -m e2e ...) works uniformly.
+
+_MARKER_BY_DIR = {
+    "unit": "unit",
+    "integration": "integration",
+    "e2e": "e2e",
+    "contract": "contract",
+}
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]):
+    """Auto-apply the directory's suite marker to every collected test."""
+    tests_root = Path(__file__).resolve().parent
+    for item in items:
+        try:
+            relative = Path(item.path).resolve().relative_to(tests_root)
+        except ValueError:
+            continue  # Test file outside tests/ (should not happen; leave untouched)
+        marker_name = _MARKER_BY_DIR.get(relative.parts[0]) if relative.parts else None
+        if marker_name:
+            item.add_marker(getattr(pytest.mark, marker_name))
+
+
 @pytest.fixture(scope="session", autouse=True)
 def mock_cli_setup():
     """Prevent CLI from initializing real database during tests."""
