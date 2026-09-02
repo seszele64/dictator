@@ -16,7 +16,7 @@
       "recordings": [
         [
           1,
-          "<DATE>/kept.wav",
+          "2024/01/01/kept.wav",
           2.0
         ]
       ]
@@ -25,5 +25,5 @@
   "exception": null,
   "exit_code": 0,
   "stderr": "",
-  "stdout": "Found 1 orphaned audio file(s):\nTotal size: 0.00 MB (44 bytes)\n\n  1. <DATE>/orphan.wav (0.00 MB)\n\n✅ Deleted 1 orphaned file(s), freed 0.00 MB\n"
+  "stdout": "Found 1 orphaned audio file(s):\nTotal size: 0.00 MB (44 bytes)\n\n  1. 2024/01/01/orphan.wav (0.00 MB)\n\n✅ Deleted 1 orphaned file(s), freed 0.00 MB\n"
 }

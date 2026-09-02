@@ -125,7 +125,14 @@ def snapshot_ctx(env_isolator, monkeypatch, fake_provider, fake_recorder):
     db_path = tmp_root / "data" / "whisper-dictate" / "whisper-dictate.db"
     config = AppConfig(
         database=DatabaseConfig(
-            path=db_path, recordings_path=tmp_root / "recordings"
+            path=db_path,
+            recordings_path=tmp_root / "recordings",
+            # Disk-independence: with the default 100 MB threshold, a machine
+            # whose tmp fs is nearly full would render the low-disk warning
+            # into dictate snapshots (a machine-dependent spurious failure).
+            # 0 makes `has_space` unconditionally true so the branch can never
+            # render (pydantic accepts 0; no validation constraint).
+            min_free_space_mb=0,
         ),
         audio=AudioConfig(sample_rate=16000, channels=1, duration=1.0, mp3_enabled=False),
         openai=WhisperConfig(
@@ -195,7 +202,9 @@ def test_snapshot_top_level_help(snapshot_ctx):
 def test_snapshot_dictate_success_roundtrip(snapshot_ctx):
     """Pins the full dictate roundtrip: recorder output, provider traffic, the
     success message block, and the persisted end-state (claim-first audio save
-    row, transcript row, INFO log with metadata)."""
+    row, transcript row, INFO log with metadata). Run-time DB stamps
+    (timestamp/created_at of rows created now) normalize to <TIMESTAMP>;
+    everything else — messages, counts, seeded-quality values — is literal."""
     ctx = snapshot_ctx
     ctx.snap(
         ["dictate", "--duration", "2.0"],
@@ -216,6 +225,9 @@ def test_snapshot_dictate_success_roundtrip(snapshot_ctx):
     assert ctx.recorder.calls[0].duration == 2.0
     assert ctx.provider.calls[0].audio_file.name == "fake-recording-1.wav"
     assert ctx.clipboard.copied == ["Hello from the fake provider."]
+    # Temp-file cleanup: DictationService's finally block must unlink the
+    # recorder's temp WAV after the roundtrip, so /tmp never leaks audio.
+    assert not ctx.recorder.files_written[0].exists()
 
 
 def test_snapshot_dictate_transcription_error(snapshot_ctx):
@@ -249,7 +261,10 @@ def test_snapshot_history_list_empty(snapshot_ctx):
 
 def test_snapshot_history_list_seeded(snapshot_ctx):
     """Pins the seeded history table: column layout, duration formatting,
-    preview truncation, and timestamp-DESC ordering across seeded rows."""
+    preview truncation, and timestamp-DESC ordering across seeded rows.
+    The seeded 2024 timestamps appear VERBATIM in stdout and DB rows —
+    normalization only erases run-time datetimes (near-now scoping), so a
+    change to date rendering/format/timezone fails here instead of hiding."""
     ctx = snapshot_ctx
     db = ctx.seed_db()
     try:
@@ -268,7 +283,8 @@ def test_snapshot_history_list_seeded(snapshot_ctx):
 
 def test_snapshot_history_show_detail(snapshot_ctx):
     """Pins the full detail rendering of one transcription (header block,
-    pinned date, duration/language/model lines, full untruncated text)."""
+    pinned `📅 Date:` line with the seeded 2024 timestamp verbatim,
+    duration/language/model lines, full untruncated text)."""
     ctx = snapshot_ctx
     db = ctx.seed_db()
     try:

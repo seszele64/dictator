@@ -13,13 +13,21 @@ Regenerating baselines (deliberately, after reviewing a diff)::
 
 What the normalizer erases (volatile content), everything else must match:
 - absolute tmp/XDG paths and repo paths -> ``<TMP>`` / ``<REPO>``
-- datetimes (SQLite ``datetime('now')`` and ISO w/ microseconds) -> ``<TIMESTAMP>``
-- storage date directories ``YYYY/MM/DD/`` -> ``<DATE>/``
+- run-time datetimes (those within +/-48h of the current run) -> ``<TIMESTAMP>``
+- run-time storage date directories (today +/-2 days) -> ``<DATE>/``
 - generated audio filenames ``YYYYMMDD_HHMMSS_<random>.wav|mp3`` -> ``<AUDIO_FILE>``
 - free-disk amounts in the low-space warning -> ``<DISK_MB>``
 
+Historical (seeded) datetimes and date paths fall outside the near-now
+window and are left literal — so a refactor that changes date rendering,
+format or timezone shows up as a diff instead of passing silently.
+
 Everything else — wording, wording order, whitespace/column padding, exit
 codes, row counts, IDs, seeded values — is pinned byte-for-byte.
+
+Known limitation: the ``<AUDIO_FILE>`` regex matches random suffixes made of
+``[A-Za-z0-9]+`` (mirroring audio_storage's random suffix charset). If that
+charset ever changes in production, update the regex here as well.
 """
 
 from __future__ import annotations
@@ -30,6 +38,7 @@ import logging
 import os
 import re
 import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -45,6 +54,42 @@ _DATE_DIR_RE = re.compile(r"\d{4}/\d{2}/\d{2}(?=/)")
 _AUDIO_FILENAME_RE = re.compile(r"\d{8}_\d{6}_[A-Za-z0-9]+\.(?:wav|mp3)")
 _DISK_MB_RE = re.compile(r"only \d+ MB available")
 
+# Only timestamps/datetimes produced by the current run are volatile; seeded
+# historical dates must stay literal so date rendering stays characterized.
+# The window absorbs timezone offsets (SQLite stamps UTC, Python stamps local)
+# and captures near midnight.
+_NEAR_NOW_WINDOW = timedelta(hours=48)
+
+
+def _is_near_now(parsed: datetime) -> bool:
+    if parsed.tzinfo is not None:
+        parsed = parsed.replace(tzinfo=None)
+    return abs(parsed - datetime.now()) <= _NEAR_NOW_WINDOW
+
+
+def _datetime_sub(match: re.Match[str]) -> str:
+    """Replace a datetime only when it is within +/-48h of the current run."""
+    text = match.group(0)
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return text
+    return "<TIMESTAMP>" if _is_near_now(parsed) else text
+
+
+def _date_dir_sub(match: re.Match[str]) -> str:
+    """Replace a YYYY/MM/DD path segment only when it is today +/-2 days.
+
+    Recording paths are laid out by storage date, so a file saved *now* always
+    carries the run-time date (volatile), while seeded recordings under
+    historical dates (e.g. 2024/01/01) are stable content worth pinning.
+    """
+    try:
+        parsed = datetime.strptime(match.group(0), "%Y/%m/%d")
+    except ValueError:
+        return match.group(0)
+    return "<DATE>" if _is_near_now(parsed) else match.group(0)
+
 
 def normalize(text: str, *, tmp_root: Path | str, repo_root: Path | str = REPO_ROOT) -> str:
     """Normalize volatile content so baselines are machine-independent."""
@@ -52,8 +97,8 @@ def normalize(text: str, *, tmp_root: Path | str, repo_root: Path | str = REPO_R
     for root, marker in ((str(repo_root), "<REPO>"), (str(tmp_root), "<TMP>")):
         if root:
             text = text.replace(root, marker)
-    text = _DATETIME_RE.sub("<TIMESTAMP>", text)
-    text = _DATE_DIR_RE.sub("<DATE>", text)
+    text = _DATETIME_RE.sub(_datetime_sub, text)
+    text = _DATE_DIR_RE.sub(_date_dir_sub, text)
     text = _AUDIO_FILENAME_RE.sub("<AUDIO_FILE>", text)
     text = _DISK_MB_RE.sub("only <DISK_MB> MB available", text)
     return text

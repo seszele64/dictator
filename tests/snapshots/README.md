@@ -28,20 +28,27 @@ never regenerate to make a red suite green without explaining the diff.
 
 Applied by `tests/helpers/snapshot.py::normalize` to the serialized payload:
 
-| Volatile content                                    | Normalized to   |
-| --------------------------------------------------- | --------------- |
-| absolute tmp/XDG paths (pytest `tmp_path` root)     | `<TMP>`         |
-| repository path                                     | `<REPO>`        |
-| datetimes (`YYYY-MM-DD HH:MM:SS`, ISO w/ micros)    | `<TIMESTAMP>`   |
-| storage date directories (`YYYY/MM/DD/`)            | `<DATE>/`       |
-| generated audio filenames (`YYYYMMDD_HHMMSS_<rand>`) | `<AUDIO_FILE>` |
-| free-disk MB in the low-space warning               | `<DISK_MB>`     |
+| Volatile content                                        | Normalized to   |
+| ------------------------------------------------------- | --------------- |
+| absolute tmp/XDG paths (pytest `tmp_path` root)         | `<TMP>`         |
+| repository path                                         | `<REPO>`        |
+| run-time datetimes (within ±48h of the current run)     | `<TIMESTAMP>`   |
+| run-time storage date directories (today ±2 days)       | `<DATE>/`       |
+| generated audio filenames (`YYYYMMDD_HHMMSS_<rand>`)    | `<AUDIO_FILE>`  |
+| free-disk MB in the low-space warning                   | `<DISK_MB>`     |
+
+Normalization is **near-now scoped**: only datetimes/date directories
+produced by the current run are erased. Historical seeded timestamps (e.g.
+`2024-01-03 11:30:00`, seeded through the real `Database` API) and the date
+directories of seeded recording paths appear **verbatim** and are pinned
+byte-for-byte — a refactor that changes date rendering, format or timezone
+fails the suite instead of hiding behind a placeholder. `<TIMESTAMP>` and
+`<DATE>` appear only where production code stamps "now". This also keeps
+baselines deterministic across days: run-time stamps are placeholders on both
+the captured and the baseline side, seeded stamps are literals on both.
 
 Everything else — wording, order, whitespace/column padding, exit codes, row
-counts, deterministic IDs, seeded values — is pinned byte-for-byte. Tests
-seed static timestamps through the real `Database` API, so most timestamps in
-the baselines are real pinned values rather than `<TIMESTAMP>` placeholders;
-`<TIMESTAMP>` only appears where production code stamps "now".
+counts, deterministic IDs, seeded values — is pinned byte-for-byte.
 
 ## Notes
 

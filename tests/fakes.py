@@ -69,8 +69,14 @@ class FakeTranscriptionProvider(TranscriptionProvider):
     def provider_name(self) -> str:
         return self._provider_name
 
-    def transcribe_audio(self, audio_file: Path, **kwargs: object) -> TranscriptionResult:
-        self.calls.append(FakeProviderCall(audio_file=audio_file, kwargs=dict(kwargs)))
+    def transcribe_audio(self, audio_file: Path) -> TranscriptionResult:
+        """Exact production signature (TranscriptionProvider.transcribe_audio).
+
+        Deliberately NOT more permissive: if the interface grows parameters,
+        this fake raises TypeError and the interface change must be made
+        consciously in lockstep.
+        """
+        self.calls.append(FakeProviderCall(audio_file=audio_file))
         if self.error is not None:
             raise self.error
         index = min(len(self.calls), len(self._script)) - 1

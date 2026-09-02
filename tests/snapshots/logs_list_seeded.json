@@ -17,21 +17,21 @@
           "INFO",
           "Transcription completed",
           "dictation",
-          "<TIMESTAMP>",
+          "2024-05-01 08:00:00",
           "{\"recording_id\": 1, \"duration\": 2.5, \"language\": \"en\"}"
         ],
         [
           "ERROR",
           "Dictation failed: simulated API timeout",
           "dictation",
-          "<TIMESTAMP>",
+          "2024-05-02 09:30:00",
           null
         ],
         [
           "DEBUG",
           "startup",
           "whisper_dictate.cli",
-          "<TIMESTAMP>",
+          "2024-05-01 10:00:00",
           null
         ]
       ]
@@ -40,5 +40,5 @@
   "exception": null,
   "exit_code": 0,
   "stderr": "",
-  "stdout": "Found 3 log entries:\n\n<TIMESTAMP> | ERROR | dictation                      | Dictation failed: simulated API timeout\n<TIMESTAMP> | DEBUG    | whisper_dictate.cli            | startup\n<TIMESTAMP> | INFO | dictation                      | Transcription completed\n       Metadata: {'recording_id': 1, 'duration': 2.5, 'language': 'en'}\n"
+  "stdout": "Found 3 log entries:\n\n2024-05-02 09:30:00 | ERROR | dictation                      | Dictation failed: simulated API timeout\n2024-05-01 10:00:00 | DEBUG    | whisper_dictate.cli            | startup\n2024-05-01 08:00:00 | INFO | dictation                      | Transcription completed\n       Metadata: {'recording_id': 1, 'duration': 2.5, 'language': 'en'}\n"
 }
