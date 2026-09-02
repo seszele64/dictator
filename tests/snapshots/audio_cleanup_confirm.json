@@ -1,0 +1,29 @@
+{
+  "args": [
+    "audio",
+    "cleanup",
+    "--confirm"
+  ],
+  "db": {
+    "counts": {
+      "logs": 0,
+      "recordings": 1,
+      "schema_versions": 1,
+      "state": 0,
+      "transcripts": 1
+    },
+    "queries": {
+      "recordings": [
+        [
+          1,
+          "<DATE>/kept.wav",
+          2.0
+        ]
+      ]
+    }
+  },
+  "exception": null,
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Found 1 orphaned audio file(s):\nTotal size: 0.00 MB (44 bytes)\n\n  1. <DATE>/orphan.wav (0.00 MB)\n\n✅ Deleted 1 orphaned file(s), freed 0.00 MB\n"
+}

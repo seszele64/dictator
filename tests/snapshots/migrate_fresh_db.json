@@ -1,0 +1,26 @@
+{
+  "args": [
+    "migrate"
+  ],
+  "db": {
+    "counts": {
+      "logs": 0,
+      "recordings": 0,
+      "schema_versions": 1,
+      "state": 1,
+      "transcripts": 0
+    },
+    "queries": {
+      "state": [
+        [
+          "migration_status",
+          "{\"status\": \"completed\", \"timestamp\": \"<TIMESTAMP>\", \"log\": [{\"timestamp\": \"<TIMESTAMP>\", \"level\": \"INFO\", \"message\": \"Starting migration process\"}, {\"timestamp\": \"<TIMESTAMP>\", \"level\": \"INFO\", \"message\": \"No legacy files found, nothing to migrate\"}]}"
+        ]
+      ]
+    }
+  },
+  "exception": null,
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Starting migration...\n⚠️  No legacy files to migrate\n"
+}

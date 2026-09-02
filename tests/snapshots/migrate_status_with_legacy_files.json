@@ -1,0 +1,20 @@
+{
+  "args": [
+    "migrate",
+    "--status"
+  ],
+  "db": {
+    "counts": {
+      "logs": 0,
+      "recordings": 0,
+      "schema_versions": 1,
+      "state": 0,
+      "transcripts": 0
+    },
+    "queries": {}
+  },
+  "exception": null,
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Migration Status:\n========================================\nLegacy state file:  Found\nLegacy PID file:   Found\nLegacy audio file: Not found\n\nMigration completed: False\nMigration needed:   True\n\nRun 'whisper-dictate migrate' to perform migration.\n"
+}

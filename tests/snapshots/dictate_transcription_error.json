@@ -1,0 +1,30 @@
+{
+  "args": [
+    "dictate",
+    "--duration",
+    "2.0"
+  ],
+  "db": {
+    "counts": {
+      "logs": 1,
+      "recordings": 0,
+      "schema_versions": 1,
+      "state": 0,
+      "transcripts": 0
+    },
+    "queries": {
+      "logs": [
+        [
+          "ERROR",
+          "Dictation failed: simulated provider outage",
+          "dictation",
+          "{\"recording_id\": 1}"
+        ]
+      ]
+    }
+  },
+  "exception": "SystemExit(1)",
+  "exit_code": 1,
+  "stderr": "❌ Error: simulated provider outage\n",
+  "stdout": "🎤 Recording... (Press Ctrl+C to stop early)\n"
+}

@@ -1,0 +1,50 @@
+{
+  "args": [
+    "dictate",
+    "--duration",
+    "2.0"
+  ],
+  "db": {
+    "counts": {
+      "logs": 1,
+      "recordings": 1,
+      "schema_versions": 1,
+      "state": 0,
+      "transcripts": 1
+    },
+    "queries": {
+      "logs": [
+        [
+          "INFO",
+          "Transcription completed",
+          "dictation",
+          "{\"recording_id\": 1, \"duration\": 2.0, \"language\": \"en\"}"
+        ]
+      ],
+      "recordings": [
+        [
+          "<DATE>/<AUDIO_FILE>",
+          2.0,
+          "wav",
+          16000,
+          1,
+          "<TIMESTAMP>",
+          "<TIMESTAMP>"
+        ]
+      ],
+      "transcripts": [
+        [
+          1,
+          "Hello from the fake provider.",
+          "en",
+          "whisper-1",
+          null
+        ]
+      ]
+    }
+  },
+  "exception": null,
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "🎤 Recording... (Press Ctrl+C to stop early)\n✅ Transcription: Hello from the fake provider.\n🌐 Language: en\n"
+}

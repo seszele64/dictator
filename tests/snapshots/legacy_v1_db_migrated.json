@@ -1,0 +1,37 @@
+{
+  "args": [
+    "history",
+    "list"
+  ],
+  "db": {
+    "counts": {
+      "logs": 0,
+      "recordings": 1,
+      "schema_versions": 2,
+      "state": 0,
+      "transcripts": 1
+    },
+    "queries": {
+      "schema_versions": [
+        [
+          1
+        ],
+        [
+          2
+        ]
+      ],
+      "transcripts": [
+        [
+          1,
+          "legacy transcription text",
+          "en",
+          1
+        ]
+      ]
+    }
+  },
+  "exception": null,
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Recent Transcriptions (showing 1 of 1):\n\nID    Date                 Duration   Preview                                           \n------------------------------------------------------------------------------------------\n1     <TIMESTAMP>   3.5s       legacy transcription text                         \n"
+}

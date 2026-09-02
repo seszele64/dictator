@@ -51,7 +51,7 @@ Long story short: **the two-week plan takes the repo from "works for me" to a po
 | ☐ | **Tier A — Polished production tool** | §2 | ☐ |
 | ☐ | **Tier B — Professional hygiene** | §2 | ☐ |
 | ☐ | **Tier C — Engineering rigor at scale** | §2, §9 | ☐ |
-| ☐ | **S0 — Characterization first** (Day 0–1) | §7 | ☐ |
+| ✅ | **S0 — Characterization first** (Day 0–1) | §7 | ✅ |
 | ☐ | **S1 — Truth & dead-code purge** (Day 1–2) | §7 | ☐ |
 | ☐ | **S2 — Singleton removal** (Day 2–4) | §7 | ☐ |
 | ☐ | **S4 — Toggle merge** (starts Day 2–3, lands after S2) | §7 | ☐ |

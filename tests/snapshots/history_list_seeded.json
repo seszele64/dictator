@@ -1,0 +1,55 @@
+{
+  "args": [
+    "history",
+    "list"
+  ],
+  "db": {
+    "counts": {
+      "logs": 0,
+      "recordings": 3,
+      "schema_versions": 1,
+      "state": 0,
+      "transcripts": 3
+    },
+    "queries": {
+      "recordings": [
+        [
+          1,
+          "<DATE>/alpha.wav",
+          1.5
+        ],
+        [
+          2,
+          "<DATE>/beta.wav",
+          12.0
+        ],
+        [
+          3,
+          "<DATE>/gamma.wav",
+          30.25
+        ]
+      ],
+      "transcripts": [
+        [
+          1,
+          "<TIMESTAMP>",
+          "alpha meeting notes about budgets"
+        ],
+        [
+          2,
+          "<TIMESTAMP>",
+          "beta standup notes with a very long transcript text that must be truncated"
+        ],
+        [
+          3,
+          "<TIMESTAMP>",
+          "gamma retro notes"
+        ]
+      ]
+    }
+  },
+  "exception": null,
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Recent Transcriptions (showing 3 of 3):\n\nID    Date                 Duration   Preview                                           \n------------------------------------------------------------------------------------------\n2     <TIMESTAMP>   12.0s      beta standup notes with a very long transcript ...\n1     <TIMESTAMP>   1.5s       alpha meeting notes about budgets                 \n3     <TIMESTAMP>   30.2s      gamma retro notes                                 \n"
+}

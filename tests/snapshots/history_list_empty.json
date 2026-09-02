@@ -1,0 +1,20 @@
+{
+  "args": [
+    "history",
+    "list"
+  ],
+  "db": {
+    "counts": {
+      "logs": 0,
+      "recordings": 0,
+      "schema_versions": 1,
+      "state": 0,
+      "transcripts": 0
+    },
+    "queries": {}
+  },
+  "exception": null,
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "No transcriptions found.\n"
+}

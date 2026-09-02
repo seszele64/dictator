@@ -1,0 +1,44 @@
+{
+  "args": [
+    "logs",
+    "list"
+  ],
+  "db": {
+    "counts": {
+      "logs": 3,
+      "recordings": 0,
+      "schema_versions": 1,
+      "state": 0,
+      "transcripts": 0
+    },
+    "queries": {
+      "logs": [
+        [
+          "INFO",
+          "Transcription completed",
+          "dictation",
+          "<TIMESTAMP>",
+          "{\"recording_id\": 1, \"duration\": 2.5, \"language\": \"en\"}"
+        ],
+        [
+          "ERROR",
+          "Dictation failed: simulated API timeout",
+          "dictation",
+          "<TIMESTAMP>",
+          null
+        ],
+        [
+          "DEBUG",
+          "startup",
+          "whisper_dictate.cli",
+          "<TIMESTAMP>",
+          null
+        ]
+      ]
+    }
+  },
+  "exception": null,
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "Found 3 log entries:\n\n<TIMESTAMP> | ERROR | dictation                      | Dictation failed: simulated API timeout\n<TIMESTAMP> | DEBUG    | whisper_dictate.cli            | startup\n<TIMESTAMP> | INFO | dictation                      | Transcription completed\n       Metadata: {'recording_id': 1, 'duration': 2.5, 'language': 'en'}\n"
+}

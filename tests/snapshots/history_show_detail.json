@@ -1,0 +1,34 @@
+{
+  "args": [
+    "history",
+    "show",
+    "2"
+  ],
+  "db": {
+    "counts": {
+      "logs": 0,
+      "recordings": 3,
+      "schema_versions": 1,
+      "state": 0,
+      "transcripts": 3
+    },
+    "queries": {
+      "detail": [
+        [
+          2,
+          "beta standup notes with a very long transcript text that must be truncated",
+          "en",
+          "whisper-1",
+          "<TIMESTAMP>",
+          null,
+          12.0,
+          "<DATE>/beta.wav"
+        ]
+      ]
+    }
+  },
+  "exception": null,
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": "============================================================\nTranscription #2\n============================================================\n\n📅 Date: <TIMESTAMP>\n⏱️  Duration: 12.0 seconds\n🌐 Language: en\n🤖 Model: whisper-1\n\n------------------------------------------------------------\n📝 Transcript:\n------------------------------------------------------------\nbeta standup notes with a very long transcript text that must be truncated\n"
+}
