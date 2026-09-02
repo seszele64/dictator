@@ -357,16 +357,16 @@ Everything here is explicitly out of the 2-week window (except Day-10 *seeds* of
 
 ## 10. Decisions for the owner
 
-Five decisions plus one bonus. **D1 and D4 must be locked in writing by Day 4** (they gate P13 / P10+P9); the rest by the time their dependent items start. Each decision has a recommendation; the "if no" column says what the plan loses.
+Five decisions plus one bonus — **all six were locked in writing by the owner on 2026-09-02** (D1/D3/D4 ahead of the Day-4 deadline); see the Locked column. Each decision has a recommendation; the "if no" column says what the plan loses.
 
-| ID | Decision | Recommendation | If declined… |
-|---|---|---|---|
-| **D1** | Distribution intent: personal vs public PyPI | **Public-PyPI-ready, low ceremony** — `uv tool install whisper-dictate`. | Drop the P13 publish job; keep LICENSE + CHANGELOG; skip OSS-Fuzz; telemetry becomes moot |
-| **D2** | Stale streaming spec (`specs/002`): implement / delete / re-scope | **Delete from legacy specs now** (ghost weight; never implemented; not in openspec). Fold streaming into the local-provider conversation (P14) if latency is measured as pain. **Never resurrect the stale one.** | Keeping it re-drifts documentation and re-opens an unimplemented feature |
-| **D3** | Typing rigor: how far, how fast | **mypy strict on core now**; `cli.py` lax explicit override; fail-new-errors policy. (pyright is a fine alternative — recommend mypy for ecosystem + pre-commit/CI maturity; if the mypy message style is intolerable → pyright strict, same incremental list) | Slower typing rollout; ratchet starts lower |
-| **D4** | pydub: replace or keep-pinned | **Replace** (soundfile + ffmpeg-only-when-needed). audioop is gone in 3.13 → the 3.13 classifier is currently false, and the P9 matrix depends on this. | Keep-pinned → drop the 3.13 classifier forever + pip-audit flags forever. Either way: golden tests first (P10) kills silent-drift risk |
-| **D5** | Provider ambition: when does `providers/` get real? | **One local provider (whisper-cpp) as the 2nd ABC instance** + NO plugin/entry-point system until a 3rd provider is actually wanted (P15 deferred). ABC + factory is already the right seam; plugins now = gold-plating. | If a local provider is never needed: skip P14, keep P15 closed, Tier C shrinks |
-| **B30** | Telemetry posture (bonus) | **Local SQLite stats only, zero network ever.** Revisit only with an explicit ADR + opt-in if a real audience materializes (ties to D1) | Non-local telemetry would require a full ADR + explicit opt-in — default is never |
+| ID | Decision | Recommendation | If declined… | Locked (2026-09-02) |
+|---|---|---|---|---|
+| **D1** | Distribution intent: personal vs public PyPI | **Public-PyPI-ready, low ceremony** — `uv tool install whisper-dictate`. | Drop the P13 publish job; keep LICENSE + CHANGELOG; skip OSS-Fuzz; telemetry becomes moot | ✅ Public-PyPI-ready (low ceremony, `uv tool install`; full P13 publish job + LICENSE + CHANGELOG) |
+| **D2** | Stale streaming spec (`specs/002`): implement / delete / re-scope | **Delete from legacy specs now** (ghost weight; never implemented; not in openspec). Fold streaming into the local-provider conversation (P14) if latency is measured as pain. **Never resurrect the stale one.** | Keeping it re-drifts documentation and re-opens an unimplemented feature | ✅ executed via P3 (`ba92531`); never resurrect |
+| **D3** | Typing rigor: how far, how fast | **mypy strict on core now**; `cli.py` lax explicit override; fail-new-errors policy. (pyright is a fine alternative — recommend mypy for ecosystem + pre-commit/CI maturity; if the mypy message style is intolerable → pyright strict, same incremental list) | Slower typing rollout; ratchet starts lower | ✅ mypy strict on core now; `cli.py` explicit lax override; fail-new-errors ratchet |
+| **D4** | pydub: replace or keep-pinned | **Replace** (soundfile + ffmpeg-only-when-needed). audioop is gone in 3.13 → the 3.13 classifier is currently false, and the P9 matrix depends on this. | Keep-pinned → drop the 3.13 classifier forever + pip-audit flags forever. Either way: golden tests first (P10) kills silent-drift risk | ✅ Replace pydub (soundfile + ffmpeg-only-when-needed); golden behavior tests first (P10) |
+| **D5** | Provider ambition: when does `providers/` get real? | **One local provider (whisper-cpp) as the 2nd ABC instance** + NO plugin/entry-point system until a 3rd provider is actually wanted (P15 deferred). ABC + factory is already the right seam; plugins now = gold-plating. | If a local provider is never needed: skip P14, keep P15 closed, Tier C shrinks | ✅ One local provider (whisper-cpp) later as 2nd ABC instance (P14, post-release); P15 plugin system stays closed until a 3rd provider is wanted |
+| **B30** | Telemetry posture (bonus) | **Local SQLite stats only, zero network ever.** Revisit only with an explicit ADR + opt-in if a real audience materializes (ties to D1) | Non-local telemetry would require a full ADR + explicit opt-in — default is never | ✅ Local SQLite stats only, zero network telemetry ever |
 
 ---
 
