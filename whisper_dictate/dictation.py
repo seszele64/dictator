@@ -4,6 +4,8 @@ import logging
 from pathlib import Path
 from types import TracebackType
 
+import soundfile as sf
+
 from whisper_dictate.audio import AudioRecorder
 from whisper_dictate.audio_converter import AudioConverter
 from whisper_dictate.audio_storage import AudioStorage, StagedAudio
@@ -350,17 +352,178 @@ class DictationService:
                 except Exception as e:
                     logger.warning(f"Failed to clean up temporary file: {e}")
 
+    def transcribe_existing(
+        self,
+        recording_id: int | None,
+        audio_file: Path,
+        audio_format: str = "wav",
+        copy_to_clipboard: bool | None = None,
+    ) -> TranscriptionResult:
+        """Transcribe an already-recorded audio file (toggle flow).
+
+        WHY THIS EXISTS: the toggle duplicated the dictation persistence
+        logic (claim-first audio save, duration update, transcript rows)
+        with its own recording stack and raw SQL. This method is the shared
+        seam: the toggle keeps only its arecord/PID/state orchestration and
+        user notifications and hands the recorded file here.
+
+        Parity contract with the former ``toggle.transcribe_audio``:
+        - Claim-first save via ``_save_audio_claim_first`` (stage → claim
+          the row's ``file_path`` → finalize; a finalize failure rolls the
+          claim back to the empty-string sentinel).
+        - A save failure is warn-and-continue: the original ``audio_file``
+          is transcribed instead, the transcript is still stored, and the
+          text is still copied.
+        - Duration is always computed from the file that was actually
+          transcribed via ``soundfile.info`` and written with
+          ``update_recording_duration`` (best effort).
+        - Silence → empty transcript row + early return: no clipboard copy
+          and no log row.
+        - Non-silence → transcript row (confidence read via ``getattr`` —
+          not every provider response includes it) + clipboard copy unless
+          ``copy_to_clipboard`` is False (``None`` defers to
+          ``config.copy_to_clipboard``).
+        - No ``create_log()`` rows are ever written: the toggle flow logs
+          to the file logger, not the database.
+        - Any failure removes the in-progress recording row (kept when the
+          audio persisted or a transcript was stored) and re-raises.
+
+        Args:
+            recording_id: Recording row to claim and persist against
+                (persistence is skipped when None)
+            audio_file: Recorded audio file to transcribe and persist
+            audio_format: Audio format suffix (the toggle records WAV)
+            copy_to_clipboard: Force the clipboard copy on/off; None defers
+                to the configuration
+
+        Returns:
+            TranscriptionResult: The transcription result (check
+            ``silence_detected`` for the silence outcome)
+
+        Raises:
+            Exception: Re-raises any exceptions from underlying services
+        """
+        audio_saved = False
+        transcript_stored = False
+        try:
+            # Claim-first save: claim the row's file_path before finalizing
+            # so audio cleanup can never delete a just-saved file whose row
+            # still points elsewhere.
+            saved_path: Path | None = None
+            try:
+                saved_path = self._save_audio_claim_first(
+                    recording_id, audio_file, audio_format
+                )
+                audio_saved = True
+                logger.info(f"Audio saved to persistent storage: {saved_path}")
+            except Exception as e:
+                logger.warning(f"Failed to save audio to persistent storage: {e}")
+                # The claim rollback (row back to the "" sentinel) is handled
+                # inside _save_audio_claim_first; transcribe the source file.
+
+            audio_to_transcribe = saved_path if saved_path else audio_file
+
+            # Calculate and update the recording duration from the audio
+            # that was actually transcribed
+            if recording_id:
+                try:
+                    audio_info = sf.info(audio_to_transcribe)
+                    duration = audio_info.duration
+                    self.database.update_recording_duration(recording_id, duration)
+                    logger.debug(
+                        f"Updated recording {recording_id} with duration: {duration:.2f}s"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to calculate recording duration: {e}")
+
+            result = self.transcriber.transcribe_audio(audio_to_transcribe)
+
+            # Handle silence detection - skip clipboard, DB transcript text,
+            # and log; only the empty transcript row is written
+            if result.silence_detected:
+                logger.info(
+                    "Silence detected - skipping clipboard copy and transcript storage"
+                )
+
+                if recording_id:
+                    try:
+                        self.database.create_transcript(
+                            recording_id=recording_id,
+                            text="",
+                            language=result.language,
+                            model_used=self.config.openai.model,
+                            confidence=None,
+                        )
+                        transcript_stored = True
+                    except Exception as e:
+                        logger.warning(f"Failed to create empty transcript entry: {e}")
+
+                return result  # Early return: no clipboard copy
+
+            # Store transcript in database
+            if recording_id:
+                try:
+                    confidence = getattr(result, "confidence", None)
+                    self.database.create_transcript(
+                        recording_id=recording_id,
+                        text=result.text,
+                        language=result.language,
+                        model_used=self.config.openai.model,
+                        confidence=confidence,
+                    )
+                    transcript_stored = True
+                    logger.debug(
+                        f"Created transcript entry for recording {recording_id}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to create transcript entry: {e}")
+
+            # Copy to clipboard if enabled (never for silence)
+            should_copy = (
+                self.config.copy_to_clipboard
+                if copy_to_clipboard is None
+                else copy_to_clipboard
+            )
+            if should_copy:
+                success = self.clipboard.copy_to_clipboard(result.text)
+                if success:
+                    logger.info("Transcription copied to clipboard")
+                else:
+                    logger.warning("Failed to copy to clipboard")
+
+            logger.info(f"Transcription completed: {result.text}")
+            return result
+
+        except BaseException as e:
+            # BaseException (not just Exception) so an interrupted
+            # transcription also cleans up before propagating.
+            failure_label = str(e) or type(e).__name__
+            logger.error(f"Transcription workflow failed: {failure_label}")
+
+            # Remove the in-progress row so failed/interrupted transcriptions
+            # do not leave orphaned rows in history. The row is kept when the
+            # audio persisted OR a transcript was stored - deleting those
+            # would orphan real data.
+            self._cleanup_failed_recording(
+                recording_id, audio_saved or transcript_stored
+            )
+
+            raise
+
     def _cleanup_failed_recording(
         self, recording_id: int | None, recording_saved: bool
     ) -> None:
         """Delete the in-progress recording row after a failure or interruption.
 
         Rows that already received their persisted audio are kept - deleting
-        those would orphan the file on disk.
+        those would orphan the file on disk. Callers may also pass True when
+        a transcript row was stored (e.g. the toggle delegation flow), for
+        the same reason: the row is no longer "in progress".
 
         Args:
             recording_id: Recording row ID (None if never created)
-            recording_saved: True once the audio file was persisted and claimed
+            recording_saved: True once the audio file was persisted and
+                claimed (or the row is otherwise no longer in-progress)
         """
         if recording_id is None or recording_saved:
             return

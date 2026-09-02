@@ -2,12 +2,16 @@
 Dictation toggle for i3 - proper real-time recording with immediate start/stop.
 With database integration for persistence and state management.
 
-WHY THIS EXISTS: The toggle was a 455-line root script (``toggle_dictate.py``)
-outside the package, carrying the third copy of logging setup and its own
-recording/transcription stack. P5 folds it into the package as
-``whisper_dictate.toggle`` so it has one installable entry point (the
-``whisper-dictate-toggle`` console script and the ``whisper-dictate toggle``
-stub command) while the root script remains only as a deprecation shim.
+WHY THIS EXISTS: the toggle owns the background-recording lifecycle that no
+other entry point has - spawning and killing the ``arecord`` subprocess, the
+legacy PID/state dotfiles, and the start/stop state machine behind one
+Super+Z keypress. The transcription half is delegated: ``transcribe_audio``
+hands the recorded file to ``DictationService.transcribe_existing()``
+(claim-first save, duration update, transcript rows, clipboard copy) instead
+of duplicating that stack; the toggle's own raw SQL and its second
+recording/transcription stack were removed in the S4 cut-over. The third
+logging-setup copy (``setup_logging``) remains here and is absorbed into
+``util/logging_setup.py`` by S3.
 """
 
 import contextlib
@@ -19,13 +23,12 @@ import sys
 import time
 
 import click
-import soundfile as sf
 
 from whisper_dictate.app import bootstrap
 from whisper_dictate.audio_storage import AudioStorage
-from whisper_dictate.clipboard import ClipboardManager
 from whisper_dictate.config import AppPaths
 from whisper_dictate.database import Database
+from whisper_dictate.dictation import DictationService
 from whisper_dictate.dunst_monitor import ensure_dunst_running
 from whisper_dictate.notifications import (
     notify_error,
@@ -34,7 +37,6 @@ from whisper_dictate.notifications import (
     notify_recording_stopped,
     notify_stopping_transcription,
 )
-from whisper_dictate.transcription import create_transcriber
 
 # State and process tracking
 # Note: Using database for state management (preferred), with file fallbacks for compatibility
@@ -282,13 +284,17 @@ def stop_background_recording(config=None):
 def transcribe_audio(config, recording_id=None):
     """Transcribe the recorded audio.
 
+    Delegates the transcribe → clipboard → database half to
+    ``DictationService.transcribe_existing()`` (claim-first audio save,
+    duration update, transcript rows, clipboard copy). This wrapper keeps
+    only the toggle-specific AUDIO_FILE handling, the recording_id state
+    fallback, and the user notifications.
+
     Args:
         config: Configuration object
         recording_id: Optional recording ID. If not provided, will attempt to get from state.
     """
     db = None
-    audio_saved = False
-    transcript_stored = False
     try:
         if not AUDIO_FILE.exists():
             logging.error("No audio file found")
@@ -296,132 +302,37 @@ def transcribe_audio(config, recording_id=None):
 
         logging.info("Starting transcription")
 
-        # Get database and audio storage
-        db, audio_storage = get_db_and_storage(config)
+        # Database only for the recording_id fallback lookup; the service
+        # manages its own connection (closed by its context manager).
+        db, _ = get_db_and_storage(config)
 
         # Get recording ID from parameter or fall back to state lookup
         if recording_id is None:
             recording_id = db.get_state(STATE_KEY_RECORDING_ID)
 
-        # Save audio to persistent storage with claim-first ordering: claim
-        # the row's file_path before finalizing so audio cleanup can never
-        # delete a just-saved file whose row still points elsewhere.
-        saved_path = None
-        try:
-            staged = audio_storage.stage_audio(AUDIO_FILE)
-            if recording_id:
-                db.execute(
-                    "UPDATE recordings SET file_path = ? WHERE id = ?",
-                    (staged.relative_path, recording_id),
-                )
-            saved_path = audio_storage.finalize_audio(staged)
-            audio_saved = True
-            logging.info(f"Audio saved to persistent storage: {saved_path}")
-        except Exception as e:
-            logging.warning(f"Failed to save audio to persistent storage: {e}")
-            # Roll back the claim so the row does not point at an unwritten path
-            if recording_id:
-                try:
-                    db.execute(
-                        "UPDATE recordings SET file_path = '' WHERE id = ?",
-                        (recording_id,),
-                    )
-                except Exception as rollback_error:
-                    logging.warning(
-                        f"Failed to roll back file_path claim: {rollback_error}"
-                    )
+        with DictationService(config) as service:
+            # copy_to_clipboard=True preserves the legacy toggle quirk of
+            # always copying the transcribed text; revisit (defer to
+            # config.copy_to_clipboard) with the S3 layout move.
+            result = service.transcribe_existing(
+                recording_id, AUDIO_FILE, copy_to_clipboard=True
+            )
 
-        # Transcribe audio
-        transcriber = create_transcriber(config.openai)
-        audio_to_transcribe = saved_path if saved_path else AUDIO_FILE
-
-        # Calculate and update recording duration
-        if recording_id:
-            try:
-                audio_info = sf.info(audio_to_transcribe)
-                duration = audio_info.duration
-                db.execute(
-                    "UPDATE recordings SET duration = ? WHERE id = ?",
-                    (duration, recording_id),
-                )
-                logging.debug(
-                    f"Updated recording {recording_id} with duration: {duration:.2f}s"
-                )
-            except Exception as e:
-                logging.warning(f"Failed to calculate recording duration: {e}")
-
-        result = transcriber.transcribe_audio(audio_to_transcribe)
-
-        # Handle silence detection
+        # Handle silence detection for the notification/return contract
         if result.silence_detected:
-            logging.info("Silence detected - skipping clipboard copy and transcript storage")
-
-            # Create empty transcript entry
-            if recording_id:
-                try:
-                    db.create_transcript(
-                        recording_id=recording_id,
-                        text="",
-                        language=result.language,
-                        model_used=config.openai.model,
-                        confidence=None,
-                    )
-                    transcript_stored = True
-                except Exception as e:
-                    logging.warning(f"Failed to create empty transcript entry: {e}")
-
-            # Notify user
             notify_recording_stopped("Silence detected - no speech")
-
             return ""  # Return empty string instead of None
 
-        # Create transcript entry
-        if recording_id:
-            try:
-                db.create_transcript(
-                    recording_id=recording_id,
-                    text=result.text,
-                    language=result.language,
-                    model_used=config.openai.model,
-                    confidence=None,  # Whisper API doesn't always provide this
-                )
-                transcript_stored = True
-                logging.debug(f"Created transcript entry for recording {recording_id}")
-            except Exception as e:
-                logging.warning(f"Failed to create transcript entry: {e}")
-
-        # Copy to clipboard (only if not silence-detected)
-        if not result.silence_detected:
-            clipboard = ClipboardManager()
-            clipboard.copy_to_clipboard(result.text)
-
-        logging.info(f"Transcription completed: {result.text}")
         notify_recording_stopped(result.text)
-
         return result.text
 
     except Exception as e:
         logging.error(f"Transcription error: {e}")
         notify_error(f"Transcription failed: {e}")
-
-        # Remove the in-progress recording row so failed transcriptions do not
-        # leave orphaned rows in history. Rows with persisted audio or a stored
-        # transcript are kept - deleting those would orphan real data.
-        if db is not None and recording_id and not audio_saved and not transcript_stored:
-            try:
-                if db.delete_recording(recording_id):
-                    logging.info(
-                        f"Removed in-progress recording entry {recording_id}"
-                    )
-            except Exception as cleanup_error:
-                logging.warning(
-                    f"Failed to clean up in-progress recording entry: {cleanup_error}"
-                )
-
         return None
 
     finally:
-        # Close database connection
+        # Close the fallback-lookup database connection
         if db is not None:
             db.close()
         # Clean up audio file (it's been saved to persistent storage)
@@ -495,6 +406,6 @@ def cli() -> None:
     arguments) are answered by click WITHOUT invoking the toggle — the
     plain ``main()`` entry would start a recording, which is a surprising
     side effect for a help flag. The dedicated click command module lands
-    with the S4 cut-over.
+    with the S3 split into ``cli/commands/toggle.py``.
     """
     main()

@@ -1,6 +1,7 @@
 """Tests for dictation workflow integration."""
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
@@ -1056,3 +1057,204 @@ class TestKeepWavPersistence:
         )
         assert not wav_tmp.exists()
         assert not mp3_tmp.exists()
+
+
+class TestTranscribeExisting:
+    """S4: DictationService.transcribe_existing — the toggle delegation seam.
+
+    Parity contract with the former toggle.transcribe_audio: claim-first
+    save (rollback on finalize failure), warn-and-continue on save failure,
+    duration probe on the transcribed file, silence → empty transcript +
+    no clipboard + no log row, transcript + clipboard otherwise, no
+    create_log() rows ever, and in-progress row cleanup on failure.
+    """
+
+    AUDIO_FILE = Path("/tmp/audio.wav")
+    STAGED_REL = "2026/09/session.wav"
+    SAVED_PATH = Path("/recordings/2026/09/session.wav")
+
+    def _run(
+        self,
+        mock_config,
+        transcribe_return,
+        recording_id=42,
+        stage_error=None,
+        finalize_error=None,
+        transcribe_error=None,
+        **call_kwargs,
+    ):
+        """Drive transcribe_existing with a mocked Database seam.
+
+        Database/AudioStorage patches stay active for the whole call (the
+        lazy properties construct on first access inside the flow).
+        """
+        mock_db = MagicMock()
+        mock_db.path = Path("/tmp/test.db")
+        mock_db.initialize = Mock()
+        mock_db.create_transcript = Mock(return_value=1)
+        mock_db.delete_recording = Mock(return_value=True)
+        mock_db.close = Mock()
+        mock_db.update_recording_file_path = Mock(return_value=True)
+        mock_db.update_recording_duration = Mock(return_value=True)
+
+        mock_audio_storage = MagicMock()
+        staged = Mock()
+        staged.relative_path = Path(self.STAGED_REL)
+        mock_audio_storage.stage_audio.return_value = staged
+        if stage_error is not None:
+            mock_audio_storage.stage_audio.side_effect = stage_error
+        mock_audio_storage.finalize_audio.return_value = self.SAVED_PATH
+        if finalize_error is not None:
+            mock_audio_storage.finalize_audio.side_effect = finalize_error
+
+        audio_info = Mock()
+        audio_info.duration = 5.0
+
+        ctx = SimpleNamespace(db=mock_db, storage=mock_audio_storage)
+
+        with (
+            patch("whisper_dictate.dictation.Database", return_value=mock_db),
+            patch(
+                "whisper_dictate.dictation.AudioStorage",
+                return_value=mock_audio_storage,
+            ),
+            patch("whisper_dictate.dictation.sf.info", return_value=audio_info),
+            DictationService(mock_config) as service,
+            patch.object(service.transcriber, "transcribe_audio") as mock_transcribe,
+            patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
+        ):
+            mock_copy.return_value = True
+            mock_transcribe.return_value = transcribe_return
+            if transcribe_error is not None:
+                mock_transcribe.side_effect = transcribe_error
+
+            ctx.transcribe = mock_transcribe
+            ctx.copy = mock_copy
+            try:
+                ctx.returned = service.transcribe_existing(
+                    recording_id, self.AUDIO_FILE, **call_kwargs
+                )
+            except BaseException as e:  # noqa: BLE001 - test re-asserts below
+                ctx.raised = e
+
+        return ctx
+
+    def test_happy_path_claims_durations_transcribes_copies(
+        self, mock_config, mock_transcription_result
+    ):
+        """Non-silence: claim-first save, duration, transcript, clipboard."""
+        ctx = self._run(mock_config, mock_transcription_result)
+
+        assert ctx.returned is mock_transcription_result
+        # Claim-first: exactly one claim with the staged relative path
+        ctx.db.update_recording_file_path.assert_called_once_with(
+            42, self.STAGED_REL
+        )
+        ctx.storage.finalize_audio.assert_called_once()
+        # Duration probed on the SAVED file and written via the named method
+        ctx.transcribe.assert_called_once_with(self.SAVED_PATH)
+        ctx.db.update_recording_duration.assert_called_once_with(42, 5.0)
+        # Transcript row + clipboard copy
+        ctx.db.create_transcript.assert_called_once()
+        assert (
+            ctx.db.create_transcript.call_args.kwargs["text"]
+            == "This is a test transcription."
+        )
+        ctx.copy.assert_called_once_with("This is a test transcription.")
+
+    def test_silence_stores_empty_transcript_skips_clipboard(
+        self, mock_config, mock_silent_transcription_result
+    ):
+        """Silence: empty transcript row only - no clipboard, no log row."""
+        ctx = self._run(mock_config, mock_silent_transcription_result)
+
+        assert ctx.returned is mock_silent_transcription_result
+        ctx.db.create_transcript.assert_called_once()
+        assert ctx.db.create_transcript.call_args.kwargs["text"] == ""
+        ctx.copy.assert_not_called()
+
+    def test_save_failure_continues_with_source_file(
+        self, mock_config, mock_transcription_result
+    ):
+        """A stage failure warns, falls back to the source file, still stores."""
+        ctx = self._run(
+            mock_config, mock_transcription_result, stage_error=OSError("disk full")
+        )
+
+        assert ctx.returned is mock_transcription_result
+        # The claim never happened and the rollback branch was not reached
+        ctx.db.update_recording_file_path.assert_not_called()
+        # Transcription used the original audio file
+        ctx.transcribe.assert_called_once_with(self.AUDIO_FILE)
+        # Transcript still stored and text still copied
+        ctx.db.create_transcript.assert_called_once()
+        ctx.copy.assert_called_once_with("This is a test transcription.")
+
+    def test_finalize_failure_rolls_back_claim(
+        self, mock_config, mock_transcription_result
+    ):
+        """Finalize failure rolls the claim back to the empty sentinel."""
+        ctx = self._run(
+            mock_config,
+            mock_transcription_result,
+            finalize_error=OSError("finalize failed"),
+        )
+
+        assert ctx.returned is mock_transcription_result
+        claims = ctx.db.update_recording_file_path.call_args_list
+        assert [c.args for c in claims] == [(42, self.STAGED_REL), (42, "")]
+        # Continued with the source file
+        ctx.transcribe.assert_called_once_with(self.AUDIO_FILE)
+        ctx.db.create_transcript.assert_called_once()
+
+    def test_none_recording_id_skips_persistence_but_copies(
+        self, mock_config, mock_transcription_result
+    ):
+        """recording_id=None: no claim/duration/transcript, clipboard still runs."""
+        ctx = self._run(mock_config, mock_transcription_result, recording_id=None)
+
+        assert ctx.returned is mock_transcription_result
+        ctx.db.update_recording_file_path.assert_not_called()
+        ctx.db.update_recording_duration.assert_not_called()
+        ctx.db.create_transcript.assert_not_called()
+        ctx.copy.assert_called_once_with("This is a test transcription.")
+
+    def test_failure_cleans_up_unpersisted_row(self, mock_config):
+        """A failure with nothing persisted deletes the in-progress row.
+
+        The save fails (warn-and-continue, audio_saved stays False) and the
+        transcriber raises, so the row is still "in progress" and is removed.
+        """
+        ctx = self._run(
+            mock_config,
+            None,
+            stage_error=OSError("disk full"),
+            transcribe_error=RuntimeError("API down"),
+        )
+
+        assert isinstance(ctx.raised, RuntimeError)
+        ctx.db.delete_recording.assert_called_once_with(42)
+
+    def test_failure_keeps_row_once_audio_persisted(
+        self, mock_config, mock_silent_transcription_result
+    ):
+        """audio_saved=True keeps the row on a late failure (no orphaned file)."""
+        ctx = self._run(
+            mock_config,
+            mock_silent_transcription_result,
+            transcribe_error=RuntimeError("late boom"),
+        )
+        # The audio saved fine, so the failure cleanup must keep the row
+        assert isinstance(ctx.raised, RuntimeError)
+        ctx.db.delete_recording.assert_not_called()
+
+    def test_copy_to_clipboard_false_honored(
+        self, mock_config, mock_transcription_result
+    ):
+        """copy_to_clipboard=False overrides the config-enabled default."""
+        ctx = self._run(
+            mock_config, mock_transcription_result, copy_to_clipboard=False
+        )
+
+        assert ctx.returned is mock_transcription_result
+        ctx.copy.assert_not_called()

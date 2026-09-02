@@ -2,7 +2,11 @@
 
 Runs the real pipeline (start -> stop -> transcribe) against a real SQLite
 database and real filesystem audio storage, mocking only audio capture
-(arecord), the transcription API, the clipboard, and notifications.
+(arecord), the transcription API, the clipboard, and notifications. Since
+the S4 delegation the transcribe half runs through
+``DictationService.transcribe_existing()``, so the transcription API,
+clipboard, and soundfile seams are patched on ``whisper_dictate.dictation``
+while the toggle's arecord/PID/state seams stay on ``whisper_dictate.toggle``.
 """
 
 import contextlib
@@ -12,7 +16,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from whisper_dictate import toggle
+from whisper_dictate import dictation, toggle
 from whisper_dictate.config import DatabaseConfig
 from whisper_dictate.database import Database
 from whisper_dictate.transcription import TranscriptionResult
@@ -71,24 +75,28 @@ def e2e_env(tmp_path, monkeypatch, mock_config):
     # Mock os.kill to prevent real signals to the fake PID (12345)
     monkeypatch.setattr(toggle.os, "kill", Mock())
 
-    # Mock the transcription API factory
+    # Mock the transcription API factory (DictationService constructs its
+    # own transcriber since the S4 delegation)
     transcriber = Mock()
     transcriber.transcribe_audio.return_value = TranscriptionResult(
         text="Hello world", language="en"
     )
     monkeypatch.setattr(
-        toggle, "create_transcriber", Mock(return_value=transcriber)
+        dictation, "create_transcriber", Mock(return_value=transcriber)
     )
 
-    # Mock the clipboard
+    # Mock the clipboard (DictationService owns the ClipboardManager)
     clipboard = Mock()
     clipboard.copy_to_clipboard.return_value = True
-    monkeypatch.setattr(toggle, "ClipboardManager", Mock(return_value=clipboard))
+    monkeypatch.setattr(
+        dictation, "ClipboardManager", Mock(return_value=clipboard)
+    )
 
-    # Mock soundfile.info duration probe (real float for SQLite storage)
+    # Mock soundfile.info duration probe (real float for SQLite storage);
+    # probed by DictationService.transcribe_existing since S4
     audio_info = Mock()
     audio_info.duration = 2.5
-    monkeypatch.setattr(toggle.sf, "info", Mock(return_value=audio_info))
+    monkeypatch.setattr(dictation.sf, "info", Mock(return_value=audio_info))
 
     # Mock notifications (they invoke subprocess.run for dunstify)
     for name in (
