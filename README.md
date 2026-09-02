@@ -157,11 +157,8 @@ The toggle starts a background `arecord` process and returns immediately; the
 next invocation stops it, transcribes the recording, copies the text to the
 clipboard, and shows a dunst notification. This is the mode intended for i3
 keybindings — point `bindsym` at `whisper-dictate-toggle` (it is also exposed
-as `whisper-dictate toggle`).
-
-> **Deprecated:** the root `toggle_dictate.py` script still works as a
-> deprecation shim that forwards to `whisper-dictate-toggle`, but it will be
-> removed in an upcoming release.
+as `whisper-dictate toggle`). Run `setup_i3.sh` to (re)install the i3
+binding; it points at `whisper-dictate-toggle`.
 
 #### System Information
 

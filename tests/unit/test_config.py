@@ -403,9 +403,9 @@ class TestDotenvImportPurity:
     load_dotenv() used to run at module import time (config.py module
     level), so a bare ``import whisper_dictate.config`` could rewrite
     os.environ. Since S2 it runs only in the composition root
-    (whisper_dictate.app.bootstrap), which every entry point (CLI, root
-    toggle script) calls; the config module import and load_config() itself
-    stay side-effect-free.
+    (whisper_dictate.app.bootstrap), which every entry point (CLI, toggle
+    module/console script) calls; the config module import and load_config()
+    itself stay side-effect-free.
 
     Both tests run real subprocesses with a .env file present in the working
     directory, because in-process imports would already be cached.

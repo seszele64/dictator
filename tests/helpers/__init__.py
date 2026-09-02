@@ -1,5 +1,7 @@
 """Test helper package.
 
-Importable as ``tests.helpers`` because conftest.py puts the repository root
-on ``sys.path`` (see the sys.path hack at the top of tests/conftest.py).
+Importable as ``tests.helpers`` via pytest's rootdir-based import (the
+pytest import mode resolves ``tests.helpers.snapshot`` from the test
+package layout). Provides shared helpers such as the CLI snapshot
+drift-detection utilities in ``snapshot.py``.
 """

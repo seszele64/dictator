@@ -1,7 +1,7 @@
 """Unit tests for the kept dunst_monitor helpers (S1 purge survivors).
 
 After the S1 purge deleted the DunstMonitor class, the module keeps three
-standalone functions used by toggle_dictate.py: is_dunst_running(),
+standalone functions used by whisper_dictate.toggle: is_dunst_running(),
 start_dunst() and ensure_dunst_running(). These tests pin their actual
 branch contract with subprocess fully mocked — no pgrep/ps/dunst binaries
 are needed.
