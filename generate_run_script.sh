@@ -16,7 +16,7 @@ cat > run_whisper_dictate.sh << EOF
 #!/bin/bash
 cd "$CURRENT_DIR"
 source .venv/bin/activate
-python toggle_dictate.py
+exec whisper-dictate-toggle
 EOF
 
 # Make it executable

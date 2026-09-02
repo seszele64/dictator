@@ -1,9 +1,18 @@
 #!/bin/bash
 # Setup i3 global key binding for whisper-dictate
 
-SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/toggle_dictate.py"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 I3_CONFIG="$HOME/.config/i3/config"
-DICTATE_BINDING="bindsym \$mod+z exec --no-startup-id python3 $SCRIPT_PATH"
+
+# Prefer the repo-local venv's console script; fall back to PATH so a
+# system-wide install (`uv tool install whisper-dictate`) still works when
+# this script runs from a checkout without a .venv.
+if [ -x "$REPO_ROOT/.venv/bin/whisper-dictate-toggle" ]; then
+    TOGGLE_CMD="$REPO_ROOT/.venv/bin/whisper-dictate-toggle"
+else
+    TOGGLE_CMD="whisper-dictate-toggle"
+fi
+DICTATE_BINDING="bindsym \$mod+z exec --no-startup-id $TOGGLE_CMD"
 DUNST_CONTEXT_BINDING="bindsym Ctrl+Shift+. exec dunstctl context"
 
 echo "Setting up i3 global key binding for whisper-dictate..."
@@ -14,8 +23,13 @@ if [ ! -f "$I3_CONFIG" ]; then
     exit 1
 fi
 
+# Drop stale bindings pointing at the removed root toggle_dictate.py shim
+# (deleted in the S4 cut-over). The block below re-adds the binding pointing
+# at whisper-dictate-toggle if no new-style binding exists yet.
+sed -i "/toggle_dictate\.py/d" "$I3_CONFIG"
+
 # Check if dictation binding already exists
-if grep -q "toggle_dictate.py" "$I3_CONFIG"; then
+if grep -q "whisper-dictate-toggle" "$I3_CONFIG"; then
     echo "Key binding already exists in i3 config for whisper-dictate"
 else
     # Add the key binding
