@@ -865,9 +865,12 @@ def cleanup_audio(ctx: click.Context, dry_run: bool, confirm: bool) -> None:
     # configured recordings path before the orphan scan uses it.
     get_audio_storage(ctx.obj["config"].database)
 
-    # Determine actual dry_run value
-    # If --confirm is specified, dry_run becomes False
-    actual_dry_run = not confirm
+    # Data-driven, not hardcoded: an explicit --confirm deletes, everything
+    # else (plain invocation or explicit --dry-run) stays display-only. The
+    # --dry-run flag used to be defined but never read; its value now
+    # participates in the decision so the code path cannot silently diverge
+    # from the advertised flags.
+    actual_dry_run = dry_run and not confirm
 
     try:
         # First, just get the orphaned files to display
@@ -901,9 +904,10 @@ def cleanup_audio(ctx: click.Context, dry_run: bool, confirm: bool) -> None:
                 )
             )
         else:
-            # Perform the cleanup
+            # Perform the cleanup (actual_dry_run is False in this branch;
+            # passing the flag keeps the call site data-driven).
             deleted_count, size_freed = cleanup_orphaned_files(
-                ctx.obj["db"], dry_run=False
+                ctx.obj["db"], dry_run=actual_dry_run
             )
 
             size_freed_mb = size_freed / (1024 * 1024)
