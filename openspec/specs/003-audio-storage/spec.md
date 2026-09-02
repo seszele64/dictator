@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Audio Storage Specification
+
+## Purpose
+
+This specification defines the audio file storage capability of the whisper-dictate system: the recordings directory layout (including date-based subdirectories), saving audio recordings to the filesystem with unique filenames, retrieving recording file paths, and cleaning up audio files (single recordings and orphaned files).
+
+## Requirements
 
 ### Requirement: Audio file storage directory
 The system SHALL create and manage the audio storage directory structure.

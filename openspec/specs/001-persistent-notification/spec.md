@@ -1,4 +1,12 @@
-## MODIFIED Requirements
+# Persistent Notification Specification
+
+## Purpose
+
+This specification defines the persistent notification behavior of the whisper-dictate system during recording sessions. It covers closing the persistent notification when recording stops, graceful handling when the notification daemon (dunstify) is unavailable, and validation when stopping a persistent notification.
+
+> Note: this file was originally synced as a delta (`## MODIFIED Requirements`) from the archived change `fix-notification-persistent-dismiss` and has since been reformatted into the full spec format; the requirements below are unchanged.
+
+## Requirements
 
 ### Requirement: Persistent notification closes properly when recording stops
 The system SHALL close the persistent notification when recording stops, including checking for dunstify availability before attempting to close.

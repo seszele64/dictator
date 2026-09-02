@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Structured Logging Specification
+
+## Purpose
+
+This specification defines the structured logging capability of the whisper-dictate system: dual logging to file and database, structured database log entries with level/source/metadata, querying and filtering logs via the CLI, log export, and automatic log retention. It also documents the database lifecycle pattern that all database-using CLI commands must follow.
+
+## Requirements
 
 ### Requirement: Dual logging (file + database)
 The system SHALL write logs to BOTH file (stderr/stdout fallback) AND database for reliability.

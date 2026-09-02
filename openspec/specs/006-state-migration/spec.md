@@ -1,4 +1,10 @@
-## ADDED Requirements
+# State Migration Specification
+
+## Purpose
+
+This specification defines the state migration capability of the whisper-dictate system: detecting legacy state files on startup, migrating configuration from JSON into the database, migrating application state (including notification state), and handling migration failures gracefully (rollback, retry, and skip-if-already-migrated).
+
+## Requirements
 
 ### Requirement: Detect existing state files
 The system SHALL detect existing state files from previous versions.

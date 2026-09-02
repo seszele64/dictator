@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Transcript History Specification
+
+## Purpose
+
+This specification defines the transcript history capability of the whisper-dictate system: saving transcripts (with recording IDs) during the dictation workflow, listing/viewing/searching and deleting transcripts via the CLI, and ensuring history CLI commands exit cleanly. It also documents the database lifecycle pattern that all database-using CLI commands must follow.
+
+## Requirements
 
 ### Requirement: Save transcripts during dictation workflow
 The system SHALL automatically save transcripts to the database during the dictation workflow.

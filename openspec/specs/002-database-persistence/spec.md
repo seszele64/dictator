@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Database Persistence Specification
+
+## Purpose
+
+This specification defines the SQLite database persistence capability of the whisper-dictate system: database initialization on first run, the recordings/transcripts/logs/state schema, schema versioning, timestamp format, performance indexes, recording and transcript storage, integrity checks, state persistence, log retention, connection management, the synchronous operation pattern, and WAL mode for crash recovery.
+
+## Requirements
 
 ### Requirement: Database initialization on first run
 The system SHALL use Python's standard library `sqlite3` (instead of `aiosqlite`) for all database operations. All operations are synchronous — no `asyncio.run()` wrappers needed.

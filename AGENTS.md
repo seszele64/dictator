@@ -1,16 +1,18 @@
-# 001-persistent-notification Development Guidelines
+# whisper-dictate Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-02-15
+Auto-generated from all feature plans. Last updated: 2026-09-02
 
 ## Active Technologies
 
-- Python 3.11+ + dunstify (notifications), dunst (daemon), subprocess (for CLI) (001-persistent-notification)
+- Python 3.11+ + dunstify (notifications), dunst (daemon), subprocess (for CLI)
 
 ## Project Structure
 
 ```text
-src/
+whisper_dictate/   # flat package at repo root (no src/ layout)
 tests/
+openspec/          # OpenSpec changes + specs (single source of truth)
+specs/             # DEPRECATED stub — see specs/README.md; do not add specs here
 ```
 
 ## Commands
@@ -25,6 +27,7 @@ Python 3.11+: Follow standard conventions
 ## Recent Changes
 
 - 001-persistent-notification: Added Python 3.11+ + dunstify (notifications), dunst (daemon), subprocess (for CLI)
+- phase-1-truth (P3): archived completed OpenSpec changes; `openspec/specs/` is the single source of truth; legacy root `specs/` deprecated (see specs/README.md)
 
 <!-- MANUAL ADDITIONS START -->
 

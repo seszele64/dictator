@@ -1,6 +1,12 @@
-## ADDED Requirements
+# Synchronous Database Operations Specification
 
-> **Scope Note**: This spec defines the NEW synchronous database layer capabilities. It covers the "how" — the implementation approach using sqlite3. The `002-database-persistence` delta spec covers the "what changed" — the specific requirements modified by replacing aiosqlite with sqlite3. Together they form the complete specification for this migration.
+## Purpose
+
+This specification defines the synchronous database layer of the whisper-dictate system using Python's standard library `sqlite3`: database initialization, WAL mode for crash recovery, connection management, schema migrations, integrity verification, CRUD operations for recordings/transcripts/logs/state, and the synchronous (non-asyncio) operation pattern.
+
+> **Scope Note**: This spec covers the "how" — the implementation approach using sqlite3. The `002-database-persistence` spec covers the "what changed" — the specific requirements introduced by replacing aiosqlite with sqlite3. Together they form the complete specification for this migration.
+
+## Requirements
 
 ### Requirement: Database initialization with synchronous sqlite3
 The system SHALL use Python's standard library `sqlite3` for all database operations, providing a synchronous database layer.
