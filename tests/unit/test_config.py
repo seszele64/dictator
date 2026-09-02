@@ -303,7 +303,6 @@ class TestAppConfig:
         assert isinstance(app.database, DatabaseConfig)
         assert isinstance(app.audio, AudioConfig)
         assert isinstance(app.openai, WhisperConfig)
-        assert app.log_level == "INFO"
         assert app.copy_to_clipboard is True
 
     def test_openai_field_reads_env(self, monkeypatch):

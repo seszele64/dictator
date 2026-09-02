@@ -246,19 +246,6 @@ class AudioStorage:
                 "recordings_path": str(self._recordings_path),
             }
 
-    def get_recording_path(self, recording_id: int) -> Path | None:
-        """Get the absolute path for a recording by ID.
-
-        Args:
-            recording_id: Recording ID
-
-        Returns:
-            Optional[Path]: Absolute path to the recording file, or None if not found
-        """
-        # This is a placeholder - actual implementation will query database
-        # The database stores relative paths, this method resolves to absolute
-        return self._recordings_path / str(recording_id)
-
     def ensure_directory_exists(self, directory: Path) -> None:
         """Ensure a directory exists, creating it if necessary.
 

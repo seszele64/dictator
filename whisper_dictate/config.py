@@ -261,7 +261,6 @@ class AppConfig(BaseModel):
     database: DatabaseConfig = Field(default_factory=lambda: DatabaseConfig())
     audio: AudioConfig = Field(default_factory=AudioConfig)
     openai: OpenAIConfig = Field(default_factory=_load_whisper_config_from_env)
-    log_level: str = Field(default="INFO", description="Logging level")
     copy_to_clipboard: bool = Field(
         default=True, description="Copy transcription to clipboard"
     )

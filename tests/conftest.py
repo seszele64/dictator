@@ -74,7 +74,6 @@ def mock_cli_setup():
         mock_config.audio.duration = 1.0
         mock_config.audio.device = None
         mock_config.audio.mp3_enabled = False
-        mock_config.log_level = "DEBUG"
         mock_config.copy_to_clipboard = True
         mock_load_config.return_value = mock_config
 
@@ -172,30 +171,6 @@ def reset_persistence_singletons():
     audio_storage_module._audio_storage = None
 
 
-@pytest.fixture(autouse=True)
-def reset_persistent_notification_state():
-    """Reset PersistentNotification class variables before each test."""
-    import whisper_dictate.notifications as notifications_module
-
-    # Store original values
-    original_time = notifications_module.PersistentNotification._last_operation_time
-    original_recording = notifications_module._recording_notification
-
-    # Apply patch with explicit control
-    patcher = patch.object(notifications_module, "is_dunst_running", return_value=True)
-    patcher.start()
-
-    notifications_module.PersistentNotification._last_operation_time = 0.0
-    notifications_module._recording_notification = None
-
-    yield
-
-    # Explicit cleanup
-    patcher.stop()
-    notifications_module.PersistentNotification._last_operation_time = original_time
-    notifications_module._recording_notification = original_recording
-
-
 @pytest.fixture
 def temp_audio_file() -> Generator[Path, None, None]:
     """Create a temporary audio file for testing."""
@@ -233,7 +208,6 @@ def mock_config() -> AppConfig:
             silence_threshold_dbfs=-50.0,
             task=None,
         ),
-        log_level="DEBUG",
         copy_to_clipboard=True,
     )
 
@@ -258,7 +232,6 @@ def mock_config_mp3_enabled() -> AppConfig:
             silence_threshold_dbfs=-50.0,
             task=None,
         ),
-        log_level="DEBUG",
         copy_to_clipboard=True,
     )
 
@@ -283,7 +256,6 @@ def mock_config_mp3_keep_wav() -> AppConfig:
             silence_threshold_dbfs=-50.0,
             task=None,
         ),
-        log_level="DEBUG",
         copy_to_clipboard=True,
     )
 

@@ -141,7 +141,6 @@ def snapshot_ctx(env_isolator, monkeypatch, fake_provider, fake_recorder):
             timeout=10.0,
             silence_threshold_dbfs=-50.0,
         ),
-        log_level="INFO",
         copy_to_clipboard=True,
     )
 
@@ -449,7 +448,6 @@ def test_snapshot_legacy_v1_db_migrated_via_history_list(snapshot_ctx, legacy_db
         ),
         audio=ctx.config.audio,
         openai=ctx.config.openai,
-        log_level="INFO",
         copy_to_clipboard=True,
     )
     ctx.snap(

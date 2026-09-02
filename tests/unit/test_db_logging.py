@@ -1,28 +1,16 @@
 """Unit tests for the database-backed logging handler.
 
 These tests use mocked databases (``unittest.mock.Mock``) to verify the
-``DatabaseLogHandler`` and ``setup_dual_logging`` behaviors in isolation,
-without touching any real SQLite file.
+``DatabaseLogHandler`` behavior in isolation, without touching any real
+SQLite file.
 """
 
 import logging
 import sys
 from unittest.mock import Mock, patch
 
-import pytest
-
 from whisper_dictate.config import DatabaseConfig
-from whisper_dictate.db_logging import DatabaseLogHandler, setup_dual_logging
-
-
-@pytest.fixture
-def restore_root_logger():
-    root = logging.getLogger()
-    saved_handlers = root.handlers[:]
-    saved_level = root.level
-    yield
-    root.handlers = saved_handlers
-    root.level = saved_level
+from whisper_dictate.db_logging import DatabaseLogHandler
 
 
 def _make_record(
@@ -164,38 +152,3 @@ class TestClose:
         mock_get_database.assert_called_once()
         fresh_db.initialize.assert_called_once()
         fresh_db.create_log.assert_called_once()
-
-
-class TestSetupDualLogging:
-    """Tests for setup_dual_logging."""
-
-    def test_setup_dual_logging_with_db(self, tmp_path, database, restore_root_logger):
-        root = setup_dual_logging(database=database, log_file=str(tmp_path / "test.log"))
-        assert root is logging.getLogger()
-        assert len(root.handlers) == 3
-        assert any(isinstance(h, logging.FileHandler) for h in root.handlers)
-        assert any(isinstance(h, logging.StreamHandler) for h in root.handlers)
-        assert any(isinstance(h, DatabaseLogHandler) for h in root.handlers)
-
-    def test_setup_dual_logging_without_db(self, tmp_path, restore_root_logger):
-        root = setup_dual_logging(log_file=str(tmp_path / "test.log"))
-        assert len(root.handlers) == 2
-        assert not any(isinstance(h, DatabaseLogHandler) for h in root.handlers)
-
-    def test_setup_dual_logging_sets_level(self, tmp_path, restore_root_logger):
-        root = setup_dual_logging(level="WARNING", log_file=str(tmp_path / "test.log"))
-        assert root.level == logging.WARNING
-        assert all(h.level == logging.WARNING for h in root.handlers)
-
-    def test_setup_dual_logging_clears_existing_handlers(self, tmp_path, restore_root_logger):
-        root = logging.getLogger()
-        dummy = logging.Handler()
-        root.addHandler(dummy)
-        root = setup_dual_logging(log_file=str(tmp_path / "test.log"))
-        assert dummy not in root.handlers
-
-    def test_setup_dual_logging_creates_log_dir(self, tmp_path, monkeypatch, restore_root_logger):
-        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
-        setup_dual_logging(log_file=None)
-        expected = tmp_path / ".local" / "share" / "whisper-dictate" / "whisper-dictate.log"
-        assert expected.exists()

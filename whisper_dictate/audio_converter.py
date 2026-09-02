@@ -150,31 +150,3 @@ class AudioConverter:
                 f"The system will continue using the larger WAV file."
             )
             return wav_path
-
-    def convert_and_keep_wav(self, wav_path: Path | str) -> Path:
-        """Convert WAV to MP3 while preserving the original WAV file.
-
-        This is a convenience method that explicitly sets delete_source=False,
-        regardless of the keep_wav setting.
-
-        Args:
-            wav_path: Path to the input WAV file
-
-        Returns:
-            Path: Path to the converted MP3 file, or original WAV if conversion failed
-        """
-        return self.convert(wav_path, delete_source=False)
-
-    def convert_and_delete_wav(self, wav_path: Path | str) -> Path:
-        """Convert WAV to MP3 and delete the original WAV file.
-
-        This is a convenience method that explicitly sets delete_source=True,
-        regardless of the keep_wav setting.
-
-        Args:
-            wav_path: Path to the input WAV file
-
-        Returns:
-            Path: Path to the converted MP3 file, or original WAV if conversion failed
-        """
-        return self.convert(wav_path, delete_source=True)

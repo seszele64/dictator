@@ -220,30 +220,6 @@ class TestAudioConverter:
             with contextlib.suppress(OSError):
                 os.unlink(mp3_path_str)
 
-    def test_convert_and_keep_wav_method(self, temp_audio_file):
-        """Test convert_and_keep_wav convenience method."""
-        from whisper_dictate.audio_converter import AudioConverter
-
-        converter = AudioConverter(keep_wav=False)  # Default would delete
-
-        result = converter.convert_and_keep_wav(temp_audio_file)
-
-        # Source should be preserved
-        assert temp_audio_file.exists()
-        assert result.exists()
-
-    def test_convert_and_delete_wav_method(self, temp_audio_file):
-        """Test convert_and_delete_wav convenience method."""
-        from whisper_dictate.audio_converter import AudioConverter
-
-        converter = AudioConverter(keep_wav=True)  # Default would keep
-
-        result = converter.convert_and_delete_wav(temp_audio_file)
-
-        # Source should be deleted
-        assert not temp_audio_file.exists()
-        assert result.exists()
-
     def test_convert_with_path_object(self, temp_audio_file):
         """Test convert properly handles Path objects."""
         from whisper_dictate.audio_converter import AudioConverter

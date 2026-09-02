@@ -1,29 +1,15 @@
 """Integration tests for database-backed logging against a real SQLite database.
 
-These tests exercise the ``DatabaseLogHandler`` and ``setup_dual_logging``
-against a real SQLite database via the ``real_db`` fixture, verifying that
-log records are actually persisted to the ``logs`` table.
+These tests exercise the ``DatabaseLogHandler`` against a real SQLite database
+via the ``real_db`` fixture, verifying that log records are actually persisted
+to the ``logs`` table.
 """
 
 import json
 import logging
 import sys
-from unittest.mock import patch
 
-import pytest
-
-from whisper_dictate.config import DatabaseConfig
-from whisper_dictate.db_logging import DatabaseLogHandler, setup_dual_logging
-
-
-@pytest.fixture
-def restore_root_logger():
-    root = logging.getLogger()
-    saved_handlers = root.handlers[:]
-    saved_level = root.level
-    yield
-    root.handlers = saved_handlers
-    root.level = saved_level
+from whisper_dictate.db_logging import DatabaseLogHandler
 
 
 def _make_record(
@@ -159,41 +145,3 @@ class TestDatabaseLogHandlerLifecycleReal:
         assert handler1._database is db
         rows = _query_logs(db)
         assert len(rows) == 2
-
-
-class TestSetupDualLoggingReal:
-    """Tests for setup_dual_logging with a real database."""
-
-    def test_setup_dual_logging_real_db(self, real_db, tmp_path, restore_root_logger):
-        setup_dual_logging(database=real_db, log_file=str(tmp_path / "test.log"))
-        logging.getLogger("test_logger_real_db").info("hello")
-
-        rows = _query_logs(real_db)
-        assert any("hello" in row[1] for row in rows)
-
-        content = (tmp_path / "test.log").read_text()
-        assert "hello" in content
-
-    def test_setup_dual_logging_real_then_close(self, real_db, tmp_path, restore_root_logger):
-        setup_dual_logging(database=real_db, log_file=str(tmp_path / "test.log"))
-        logging.getLogger("test_logger_real_close").info("first log")
-
-        root = logging.getLogger()
-        db_handler = next(h for h in root.handlers if isinstance(h, DatabaseLogHandler))
-        db_handler.close()
-
-        # After close, the handler must not write to the configured database.
-        # The handler lazily re-creates a default DB on the next emit, so point
-        # that default at a throwaway DB to avoid touching the real home dir.
-        with patch(
-            "whisper_dictate.db_logging.DatabaseConfig",
-            return_value=DatabaseConfig(
-                path=tmp_path / "post_close.db",
-                recordings_path=tmp_path / "post_close_recordings",
-            ),
-        ):
-            logging.getLogger("test_logger_real_close").info("second log")
-
-        rows = _query_logs(real_db)
-        assert len(rows) == 1
-        assert rows[0][1] == "first log"
