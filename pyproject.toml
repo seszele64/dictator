@@ -28,6 +28,7 @@ dependencies = [
 
 [project.scripts]
 whisper-dictate = "whisper_dictate.cli:cli"
+whisper-dictate-toggle = "whisper_dictate.toggle:cli"
 
 [tool.hatch.version]
 path = "whisper_dictate/__init__.py"

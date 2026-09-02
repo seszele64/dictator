@@ -4,7 +4,7 @@ Covers:
 - XDG Base Directory resolution defaults (env unset)
 - XDG_DATA_HOME / XDG_STATE_HOME overrides
 - DatabaseConfig override precedence over the AppPaths defaults
-- The shared legacy dotfile contract between toggle_dictate and migration
+- The shared legacy dotfile contract between whisper_dictate.toggle and migration
 - AppConfig.paths call-time env semantics (computed property, not a snapshot)
 """
 
@@ -169,11 +169,10 @@ class TestSharedLegacyPaths:
     """The legacy dotfiles must be identical everywhere they are referenced."""
 
     def test_toggle_and_migration_share_exact_app_paths_constants(self):
-        """toggle_dictate's runtime files ARE migration's source files (single source of truth)."""
-        import toggle_dictate
-        from whisper_dictate import migration
+        """whisper_dictate.toggle's runtime files ARE migration's source files (single source of truth)."""
+        from whisper_dictate import migration, toggle
 
         paths = AppPaths()
-        assert toggle_dictate.STATE_FILE == migration.LEGACY_STATE_FILE == paths.legacy_state_file
-        assert toggle_dictate.PID_FILE == migration.LEGACY_PID_FILE == paths.legacy_pid_file
-        assert toggle_dictate.AUDIO_FILE == migration.LEGACY_AUDIO_FILE == paths.legacy_audio_file
+        assert toggle.STATE_FILE == migration.LEGACY_STATE_FILE == paths.legacy_state_file
+        assert toggle.PID_FILE == migration.LEGACY_PID_FILE == paths.legacy_pid_file
+        assert toggle.AUDIO_FILE == migration.LEGACY_AUDIO_FILE == paths.legacy_audio_file

@@ -12,7 +12,7 @@ BOUNDARIES:
 - DOES: Send desktop notifications with configurable urgency, timeout, and content
 - DOES NOT: Handle notification history, interactive notifications, or sound alerts
 - DEPENDS ON: notify-send command being available in the system
-- USED BY: toggle_dictate.py and other modules that need user feedback
+- USED BY: whisper_dictate/toggle.py and other modules that need user feedback
 
 🧠 ADHD CONTEXT: Having a single, well-documented function for notifications
 prevents the cognitive load of remembering notify-send syntax and parameters.

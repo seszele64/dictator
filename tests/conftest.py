@@ -11,17 +11,13 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from whisper_dictate.config import (  # noqa: E402
+from whisper_dictate.config import (
     AppConfig,
     AudioConfig,
     DatabaseConfig,
     OpenAIConfig,
 )
-from whisper_dictate.transcription import TranscriptionResult  # noqa: E402
-
-# Add project root to path for toggle_dictate module
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
+from whisper_dictate.transcription import TranscriptionResult
 
 # ============ Suite markers: auto-applied by directory ============
 # pyproject.toml registers unit/integration/e2e/contract markers and runs with

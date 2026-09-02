@@ -10,7 +10,7 @@ BOUNDARIES:
 - DOES: Check dunst status, start dunst if needed, provide status feedback
 - DOES NOT: Manage dunst configuration or handle dunst crashes after startup
 - DEPENDS ON: dunst binary being available in system PATH
-- USED BY: toggle_dictate.py and other modules that need notifications
+- USED BY: whisper_dictate/toggle.py and other modules that need notifications
 
 🧠 ADHD CONTEXT: Prevents the frustration of "why aren't notifications working?"
 by ensuring the notification system is always available when needed.

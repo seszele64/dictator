@@ -1025,5 +1025,18 @@ def migrate(ctx: click.Context, force: bool, status: bool) -> None:
         db.close()
 
 
+@cli.command()
+def toggle() -> None:
+    """Toggle dictation: start or stop background recording.
+
+    Stub entry (P5) that forwards to the same implementation as the
+    `whisper-dictate-toggle` console script; the dedicated toggle command
+    module lands with the S4 cut-over.
+    """
+    from whisper_dictate.toggle import main as toggle_main
+
+    toggle_main()
+
+
 if __name__ == "__main__":
     cli()

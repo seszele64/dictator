@@ -117,3 +117,27 @@ class TestDictateKeylessLocal:
             f"Configuration error (whisper-dictate v{__version__}): "
             "API key not found" in result.output
         )
+
+
+class TestToggleStubCommand:
+    """P5: the `whisper-dictate toggle` stub command forwards to the package
+    toggle module (the same implementation as the whisper-dictate-toggle
+    console script)."""
+
+    def test_toggle_command_is_registered(self):
+        """The stub shows up in the top-level command registry."""
+        assert "toggle" in cli.commands
+
+    def test_toggle_help_exits_zero(self, cli_runner):
+        """`whisper-dictate toggle --help` exits 0 (S4 gate precursor)."""
+        result = cli_runner.invoke(cli, ["toggle", "--help"])
+        assert result.exit_code == 0
+        assert "Toggle dictation" in result.output
+
+    def test_toggle_forwards_to_package_main(self, cli_runner):
+        """Invoking the stub calls whisper_dictate.toggle.main() exactly once."""
+        with patch("whisper_dictate.toggle.main") as toggle_main:
+            result = cli_runner.invoke(cli, ["toggle"])
+
+        assert result.exit_code == 0, result.output
+        toggle_main.assert_called_once_with()

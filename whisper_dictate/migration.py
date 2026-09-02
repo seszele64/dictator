@@ -25,7 +25,8 @@ from whisper_dictate.database import Database
 logger = logging.getLogger(__name__)
 
 # Legacy file paths — resolved through AppPaths (single source of truth) so
-# migration reads exactly the same dotfiles toggle_dictate writes at runtime.
+# migration reads exactly the same dotfiles whisper_dictate.toggle writes at
+# runtime.
 _paths = AppPaths()
 LEGACY_STATE_FILE = _paths.legacy_state_file
 LEGACY_PID_FILE = _paths.legacy_pid_file
