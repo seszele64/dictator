@@ -381,6 +381,9 @@ Clean up orphaned audio files not referenced in the database.
 - `--dry-run` - Show what would be deleted without actually deleting (default: True; plain `audio cleanup` is a dry run)
 - `--confirm` - Actually delete the orphaned files (default: False)
 
+If both flags are passed, `--confirm` wins (deletion is performed) —
+pinned by `test_confirm_wins_over_dry_run`.
+
 **Examples:**
 ```bash
 # Preview what would be deleted (default)
