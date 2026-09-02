@@ -52,7 +52,7 @@ Long story short: **the two-week plan takes the repo from "works for me" to a po
 | ☐ | **Tier B — Professional hygiene** | §2 | ☐ |
 | ☐ | **Tier C — Engineering rigor at scale** | §2, §9 | ☐ |
 | ✅ | **S0 — Characterization first** (Day 0–1) | §7 | ✅ |
-| ☐ | **S1 — Truth & dead-code purge** (Day 1–2) | §7 | ☐ |
+| ✅ | **S1 — Truth & dead-code purge** (Day 1–2) | §7 | ✅ |
 | ☐ | **S2 — Singleton removal** (Day 2–4) | §7 | ☐ |
 | ☐ | **S4 — Toggle merge** (starts Day 2–3, lands after S2) | §7 | ☐ |
 | ☐ | **S3 — God-module splits** (Week 2, Day 5–8) | §7 | ☐ |
@@ -244,10 +244,10 @@ One list, process and structural together, ordered by execution sequence within 
 | # | Done | ID | Type | Item (short) | Impact | Effort | Deps | Slot |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | ☐ | S0 | Structural | Characterization first: DB/storage invariants + CLI snapshot harness + formalized fakes | — | M | — | Day 0–1 |
-| 2 | ☐ | P1 | Process | Versioning: `__version__` + `--version` flag; hatchling dynamic version; version in failures; unit test | H | S | — | Day 1 |
-| 3 | ☐ | P3 | Process | OpenSpec archive+sync (`fix-provider-crash`, `fix-storage-safety`); legacy `specs/` → single deprecated README stub (streaming explicitly NOT planned); fix AGENTS.md stale `src/` layout | M | S | — | Day 1 |
-| 4 | ☐ | P4 | Process | Coverage fail_under=70 + branch; strict markers (unit/integration/e2e/contract) + `--strict-markers`; e2e skip-if-no-binaries (dunstify/xclip) autose; fix `.env.example` wrinkle | M | S | — | Day 1 |
-| 5 | ☐ | S1 | Structural | Truth & dead-code purge (deletions 1–8, 11, 13, 14; `--dry-run` implemented; README truth; agent dirs removed; log path → XDG state w/ P2 constants) | H | S | S0 | Day 1–2 |
+| 2 | ✅ | P1 | Process | Versioning: `__version__` + `--version` flag; hatchling dynamic version; version in failures; unit test | H | S | — | Day 1 |
+| 3 | ✅ | P3 | Process | OpenSpec archive+sync (`fix-provider-crash`, `fix-storage-safety`); legacy `specs/` → single deprecated README stub (streaming explicitly NOT planned); fix AGENTS.md stale `src/` layout | M | S | — | Day 1 |
+| 4 | ✅ | P4 | Process | Coverage fail_under=70 + branch; strict markers (unit/integration/e2e/contract) + `--strict-markers`; e2e skip-if-no-binaries (dunstify/xclip) autose; fix `.env.example` wrinkle | M | S | — | Day 1 |
+| 5 | ✅ | S1 | Structural | Truth & dead-code purge (deletions 1–8, 11, 13, 14; `--dry-run` implemented; README truth; agent dirs removed; log path → XDG state w/ P2 constants) | H | S | S0 | Day 1–2 |
 | 6 | ☐ | P2 | Process | Centralize path/state constants (`PathConfig`/`AppPaths` in `config.py`; replace literals `cli.py:34,208`, `db_logging.py:128`, `migration.py:28-33`, toggle; `get_audio_path` chokepoint stays the only path-construction site) | M | S | — | Day 2 |
 | 7 | ☐ | P5 | Process | Fold `toggle_dictate.py` into package (`toggle.py` + console script `whisper-dictate-toggle` + stub `whisper-dictate toggle`; root file kept as deprecation shim one release then deleted; toggle state-machine tests) | H | M | P2 | Day 2–3 |
 | 8 | ☐ | S2 | Structural | Singletons removal: `app.py` composition root; per-command Database + `with_database` required; AudioStorage DI-ed; orphan scan explicit params; `load_dotenv` into `app.py` | H | M | S1 | Day 2–4 |
