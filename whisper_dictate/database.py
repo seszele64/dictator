@@ -902,6 +902,43 @@ class Database:
         result = self.execute(query, params)
         return result.rowcount > 0
 
+    def update_recording_file_path(self, recording_id: int, file_path: str) -> bool:
+        """Update a recording's file path.
+
+        WHY a named method: the claim-first save ordering (stage → claim
+        ``file_path`` → finalize) and its rollback are called from both
+        dictation flows; naming the update keeps the claim SQL in one place
+        instead of raw ``UPDATE recordings`` strings scattered across callers.
+
+        Args:
+            recording_id: ID of the recording to update
+            file_path: New file path (empty string clears the stored path)
+
+        Returns:
+            bool: True if recording was found and updated, False otherwise
+        """
+        result = self.execute(
+            "UPDATE recordings SET file_path = ? WHERE id = ?",
+            (file_path, recording_id),
+        )
+        return result.rowcount > 0
+
+    def update_recording_duration(self, recording_id: int, duration: float) -> bool:
+        """Update a recording's duration.
+
+        Args:
+            recording_id: ID of the recording to update
+            duration: Recording duration in seconds
+
+        Returns:
+            bool: True if recording was found and updated, False otherwise
+        """
+        result = self.execute(
+            "UPDATE recordings SET duration = ? WHERE id = ?",
+            (duration, recording_id),
+        )
+        return result.rowcount > 0
+
     # ============ Log Operations ============
 
     def create_log(

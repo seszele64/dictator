@@ -862,12 +862,11 @@ class TestClaimFirstSaveOrdering:
 
         order = []
 
-        def db_execute(query, params=()):
-            if "UPDATE recordings" in query:
-                order.append("claim")
-            return Mock()
+        def db_claim(recording_id, file_path):
+            order.append("claim")
+            return True
 
-        mock_db.execute = Mock(side_effect=db_execute)
+        mock_db.update_recording_file_path = Mock(side_effect=db_claim)
 
         mock_audio_storage = MagicMock()
         mock_audio_storage.check_disk_space.return_value = (True, 500)
@@ -895,6 +894,54 @@ class TestClaimFirstSaveOrdering:
 
         assert "claim" in order and "finalize" in order
         assert order.index("claim") < order.index("finalize")
+
+    def test_finalize_failure_rolls_back_claim_to_empty(
+        self, mock_config, mock_transcription_result
+    ):
+        """A finalize failure must clear the claimed file_path to ``""``.
+
+        The rollback guarantees the row never points at a path that was
+        never written (empty string is the "no file" sentinel).
+        """
+        mock_db = MagicMock()
+        mock_db.path = Path("/tmp/test.db")
+        mock_db.initialize = Mock()
+        mock_db.create_recording = Mock(return_value=42)
+        mock_db.create_transcript = Mock(return_value=1)
+        mock_db.create_log = Mock(return_value=1)
+        mock_db.close = Mock()
+        mock_db.update_recording_file_path = Mock(return_value=True)
+
+        mock_audio_storage = MagicMock()
+        mock_audio_storage.check_disk_space.return_value = (True, 500)
+        staged = Mock()
+        staged.relative_path = Path("2026/09/session.wav")
+        mock_audio_storage.stage_audio.return_value = staged
+        mock_audio_storage.finalize_audio = Mock(
+            side_effect=OSError("finalize failed")
+        )
+
+        with (
+            patch("whisper_dictate.dictation.Database", return_value=mock_db),
+            patch(
+                "whisper_dictate.dictation.AudioStorage",
+                return_value=mock_audio_storage,
+            ),
+            DictationService(mock_config) as service,
+            patch.object(service.audio_recorder, "record_to_file") as mock_record,
+            patch.object(service.transcriber, "transcribe_audio") as mock_transcribe,
+            patch.object(service.clipboard, "copy_to_clipboard"),
+        ):
+            mock_record.return_value = Path("/tmp/test.wav")
+            mock_transcribe.return_value = mock_transcription_result
+            # Save failure is warn-and-continue: dictate() still completes.
+            assert service.dictate() is not None
+
+        claim_calls = mock_db.update_recording_file_path.call_args_list
+        assert list(claim_calls) == [
+            ((42, "2026/09/session.wav"), {}),
+            ((42, ""), {}),
+        ], f"expected claim then rollback-to-empty, got {claim_calls}"
 
 
 class TestKeepWavPersistence:
@@ -954,11 +1001,9 @@ class TestKeepWavPersistence:
         # Row records the WAV format and the claimed relative path
         create_kwargs = mock_db.create_recording.call_args.kwargs
         assert create_kwargs["format"] == "wav"
-        claim_calls = [
-            c for c in mock_db.execute.call_args_list if "UPDATE recordings" in c.args[0]
-        ]
+        claim_calls = mock_db.update_recording_file_path.call_args_list
         assert any(
-            str(c.args[1][0]).endswith(".wav") for c in claim_calls
+            str(c.args[1]).endswith(".wav") for c in claim_calls
         ), f"expected WAV relative path claim, got {claim_calls}"
 
         # No temp files leaked: both the WAV and the transient MP3 are gone

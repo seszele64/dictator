@@ -116,9 +116,8 @@ class DictationService:
 
         # Claim the final path before finalizing so cleanup can never race us
         if recording_id is not None:
-            self.database.execute(
-                "UPDATE recordings SET file_path = ? WHERE id = ?",
-                (staged.relative_path, recording_id),
+            self.database.update_recording_file_path(
+                recording_id, str(staged.relative_path)
             )
 
         try:
@@ -128,10 +127,7 @@ class DictationService:
             # never written.
             if recording_id is not None:
                 try:
-                    self.database.execute(
-                        "UPDATE recordings SET file_path = ? WHERE id = ?",
-                        ("", recording_id),
-                    )
+                    self.database.update_recording_file_path(recording_id, "")
                 except Exception as rollback_error:
                     logger.warning(
                         f"Failed to roll back file_path claim: {rollback_error}"

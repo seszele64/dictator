@@ -1,10 +1,18 @@
-"""Tests for database update_transcript method."""
+"""Tests for database update methods.
+
+Covers ``update_transcript`` (mock + CLI + legacy-migration integration)
+and, since S4, the named recording-update methods
+``update_recording_file_path`` / ``update_recording_duration`` that
+replaced the raw ``UPDATE recordings`` strings previously issued by the
+dictation and toggle flows (real SQLite below).
+"""
 
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
 from whisper_dictate.cli import cli
+from whisper_dictate.database import Database
 
 
 @pytest.fixture
@@ -426,3 +434,117 @@ class TestRowMappingStrictness:
         db.execute("ALTER TABLE recordings ADD COLUMN extra_col TEXT")
         with pytest.raises(ValueError):
             db.get_recording(rid)
+
+
+# ===========================================================================
+# S4: named recording-update methods (real SQLite)
+#
+# ``Database.update_recording_file_path`` / ``update_recording_duration``
+# are the named seam that replaced the raw ``UPDATE recordings`` strings
+# previously issued by the dictation claim-first save and the toggle
+# transcribe flow.
+# ===========================================================================
+
+
+class TestUpdateRecordingFilePath:
+    """update_recording_file_path: persist, roundtrip, and missing-id contract."""
+
+    def test_update_persists_and_roundtrips(self, real_db):
+        """The new file_path is stored and read back through get_recording."""
+        recording_id = real_db.create_recording(file_path="")
+        assert recording_id is not None
+
+        assert real_db.update_recording_file_path(recording_id, "2026/09/a.wav") is True
+
+        recording = real_db.get_recording(recording_id)
+        assert recording is not None
+        assert recording["file_path"] == "2026/09/a.wav"
+
+    def test_rollback_to_empty_sentinel(self, real_db):
+        """The claim rollback stores the empty-string "no file" sentinel."""
+        recording_id = real_db.create_recording(file_path="")
+        real_db.update_recording_file_path(recording_id, "claimed.wav")
+        assert real_db.update_recording_file_path(recording_id, "") is True
+        assert real_db.get_recording(recording_id)["file_path"] == ""
+
+    def test_missing_id_returns_false(self, real_db):
+        """An unknown recording id reports False (rowcount 0), no error."""
+        assert real_db.update_recording_file_path(999999, "ghost.wav") is False
+
+    def test_other_columns_untouched(self, real_db):
+        """Only file_path changes; duration/format/timestamps stay as created."""
+        recording_id = real_db.create_recording(
+            file_path="original.wav",
+            duration=1.5,
+            format="wav",
+            sample_rate=44100,
+            channels=2,
+        )
+        before = real_db.get_recording(recording_id)
+
+        assert real_db.update_recording_file_path(recording_id, "updated.wav") is True
+
+        after = real_db.get_recording(recording_id)
+        assert after["file_path"] == "updated.wav"
+        assert after["duration"] == before["duration"] == 1.5
+        assert after["format"] == before["format"] == "wav"
+        assert after["sample_rate"] == before["sample_rate"] == 44100
+        assert after["channels"] == before["channels"] == 2
+        assert after["timestamp"] == before["timestamp"]
+        assert after["created_at"] == before["created_at"]
+
+
+class TestUpdateRecordingDuration:
+    """update_recording_duration: persist and missing-id contract."""
+
+    def test_update_persists_duration(self, real_db):
+        """The computed duration is stored and read back."""
+        recording_id = real_db.create_recording(file_path="a.wav", duration=None)
+
+        assert real_db.update_recording_duration(recording_id, 5.0) is True
+        assert real_db.get_recording(recording_id)["duration"] == 5.0
+
+    def test_missing_id_returns_false(self, real_db):
+        """An unknown recording id reports False (rowcount 0), no error."""
+        assert real_db.update_recording_duration(999999, 5.0) is False
+
+    def test_other_columns_untouched(self, real_db):
+        """Only duration changes; file_path/format stay as created."""
+        recording_id = real_db.create_recording(
+            file_path="original.wav",
+            duration=None,
+            format="wav",
+        )
+
+        assert real_db.update_recording_duration(recording_id, 3.25) is True
+
+        after = real_db.get_recording(recording_id)
+        assert after["duration"] == 3.25
+        assert after["file_path"] == "original.wav"
+        assert after["format"] == "wav"
+
+
+class TestUpdateMethodsAutocommit:
+    """The named methods route through ``Database.execute`` (autocommit)."""
+
+    def test_updates_are_committed_without_explicit_transaction(self, real_db):
+        """Persist across connections: a fresh Database instance sees the rows.
+
+        Mirrors ``test_execute_autocommit_mode`` — execute() auto-commits,
+        so the named update methods must too.
+        """
+        recording_id = real_db.create_recording(file_path="")
+        real_db.update_recording_file_path(recording_id, "committed.wav")
+        real_db.update_recording_duration(recording_id, 2.5)
+
+        # A separate instance/connection must observe the committed values.
+        reopened = Database(real_db.config)
+        reopened.initialize()
+        try:
+            row = reopened.fetchone(
+                "SELECT file_path, duration FROM recordings WHERE id = ?",
+                (recording_id,),
+            )
+            assert row == ("committed.wav", 2.5)
+        finally:
+            reopened.close()
