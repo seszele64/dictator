@@ -22,6 +22,13 @@ COVERAGE_THRESHOLDS: dict[str, float] = {
     "whisper_dictate/migration.py": 50.0,
     "whisper_dictate/audio_storage.py": 80.0,
     "whisper_dictate/providers/openai_compatible.py": 80.0,
+    # Ratchets added after the S1 dead-code purge, which removed these
+    # modules' only direct test coverage (deleted PersistentNotification /
+    # DunstMonitor classes). Floors sit a few points BELOW the measured
+    # post-purge values (notifications 44.0%, dunst_monitor 66.67% with the
+    # new test_dunst_monitor.py) so they ratchet, not trip.
+    "whisper_dictate/notifications.py": 40.0,
+    "whisper_dictate/dunst_monitor.py": 60.0,
 }
 
 

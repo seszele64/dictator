@@ -30,6 +30,25 @@ def _make_file_entry(pct: float) -> dict:
     return {"summary": {"percent_covered": pct}}
 
 
+def _passing_files(prefix: str = "") -> dict[str, dict]:
+    """One passing entry per module in COVERAGE_THRESHOLDS.
+
+    Keeps the fixtures in sync with the threshold table: adding a module to
+    COVERAGE_THRESHOLDS without adding it here makes the pass-case fixtures
+    report MISSING modules (the gate counts missing data as failure).
+    """
+    return {
+        f"{prefix}whisper_dictate/database.py": _make_file_entry(94.53),
+        f"{prefix}whisper_dictate/config.py": _make_file_entry(100.0),
+        f"{prefix}whisper_dictate/db_logging.py": _make_file_entry(100.0),
+        f"{prefix}whisper_dictate/migration.py": _make_file_entry(83.27),
+        f"{prefix}whisper_dictate/audio_storage.py": _make_file_entry(88.82),
+        f"{prefix}whisper_dictate/providers/openai_compatible.py": _make_file_entry(96.72),
+        f"{prefix}whisper_dictate/notifications.py": _make_file_entry(44.0),
+        f"{prefix}whisper_dictate/dunst_monitor.py": _make_file_entry(66.67),
+    }
+
+
 @pytest.fixture
 def tmp_coverage_file(tmp_path):
     """Write a coverage.json to tmp_path and return its Path."""
@@ -44,15 +63,7 @@ class TestCheckCoverageRelativePaths:
     """Gate passes with relative path keys (the common case)."""
 
     def test_all_modules_pass_with_relative_keys(self, tmp_coverage_file):
-        data = _make_coverage_json({
-            "whisper_dictate/database.py": _make_file_entry(94.53),
-            "whisper_dictate/config.py": _make_file_entry(100.0),
-            "whisper_dictate/db_logging.py": _make_file_entry(100.0),
-            "whisper_dictate/migration.py": _make_file_entry(83.27),
-            "whisper_dictate/audio_storage.py": _make_file_entry(88.82),
-            "whisper_dictate/providers/openai_compatible.py": _make_file_entry(96.72),
-        })
-        path = tmp_coverage_file(data)
+        path = tmp_coverage_file(_make_coverage_json(_passing_files()))
         assert check_coverage.check_coverage(path) == 0
 
 
@@ -60,15 +71,8 @@ class TestCheckCoverageAbsolutePaths:
     """Gate passes with absolute path keys (the CI/wrong-CWD scenario)."""
 
     def test_all_modules_pass_with_absolute_keys(self, tmp_coverage_file):
-        data = _make_coverage_json({
-            "/root/programming/whisper-dictate/whisper_dictate/database.py": _make_file_entry(94.53),
-            "/root/programming/whisper-dictate/whisper_dictate/config.py": _make_file_entry(100.0),
-            "/root/programming/whisper-dictate/whisper_dictate/db_logging.py": _make_file_entry(100.0),
-            "/root/programming/whisper-dictate/whisper_dictate/migration.py": _make_file_entry(83.27),
-            "/root/programming/whisper-dictate/whisper_dictate/audio_storage.py": _make_file_entry(88.82),
-            "/root/programming/whisper-dictate/whisper_dictate/providers/openai_compatible.py": _make_file_entry(96.72),
-        })
-        path = tmp_coverage_file(data)
+        prefix = "/root/programming/whisper-dictate/"
+        path = tmp_coverage_file(_make_coverage_json(_passing_files(prefix)))
         assert check_coverage.check_coverage(path) == 0
 
 
@@ -76,15 +80,9 @@ class TestCheckCoverageFailures:
     """Gate fails correctly when thresholds aren't met or data is missing."""
 
     def test_below_threshold_fails(self, tmp_coverage_file, capsys):
-        data = _make_coverage_json({
-            "whisper_dictate/database.py": _make_file_entry(50.0),  # below 70%
-            "whisper_dictate/config.py": _make_file_entry(100.0),
-            "whisper_dictate/db_logging.py": _make_file_entry(100.0),
-            "whisper_dictate/migration.py": _make_file_entry(83.27),
-            "whisper_dictate/audio_storage.py": _make_file_entry(88.82),
-            "whisper_dictate/providers/openai_compatible.py": _make_file_entry(96.72),
-        })
-        path = tmp_coverage_file(data)
+        files = _passing_files()
+        files["whisper_dictate/database.py"] = _make_file_entry(50.0)  # below 70%
+        path = tmp_coverage_file(_make_coverage_json(files))
         assert check_coverage.check_coverage(path) == 1
         captured = capsys.readouterr()
         assert "FAILED" in captured.out
