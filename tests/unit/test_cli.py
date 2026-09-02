@@ -15,6 +15,7 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
+from whisper_dictate import __version__
 from whisper_dictate.cli import cli
 from whisper_dictate.config import load_config
 
@@ -112,4 +113,9 @@ class TestDictateKeylessLocal:
         result = cli_runner.invoke(cli, ["dictate"])
 
         assert result.exit_code == 1
-        assert "Configuration error: API key not found" in result.output
+        # Failure banner carries the version (P1): bug reports from this path
+        # are self-identifying without the reporter running --version.
+        assert (
+            f"Configuration error (whisper-dictate v{__version__}): "
+            "API key not found" in result.output
+        )

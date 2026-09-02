@@ -9,5 +9,5 @@
   "exception": null,
   "exit_code": 0,
   "stderr": "",
-  "stdout": "Usage: cli [OPTIONS] COMMAND [ARGS]...\n\n  Whisper-dictate: Voice-to-text dictation with clipboard integration.\n\nOptions:\n  --log-level TEXT  Logging level\n  --help            Show this message and exit.\n\nCommands:\n  audio    Manage audio storage and perform maintenance tasks.\n  dictate  Record audio and transcribe it to text.\n  history  Query and manage transcription history stored in the database.\n  info     Display system information and configuration.\n  logs     Query and manage application logs stored in the database.\n  migrate  Migrate legacy state files to database.\n"
+  "stdout": "Usage: cli [OPTIONS] COMMAND [ARGS]...\n\n  Whisper-dictate: Voice-to-text dictation with clipboard integration.\n\nOptions:\n  --version         Show the version and exit.\n  --log-level TEXT  Logging level\n  --help            Show this message and exit.\n\nCommands:\n  audio    Manage audio storage and perform maintenance tasks.\n  dictate  Record audio and transcribe it to text.\n  history  Query and manage transcription history stored in the database.\n  info     Display system information and configuration.\n  logs     Query and manage application logs stored in the database.\n  migrate  Migrate legacy state files to database.\n"
 }

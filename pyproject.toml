@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "whisper-dictate"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Voice dictation using OpenAI Whisper API with strong typing and logging"
 requires-python = ">=3.11"
 authors = [{name = "whisper-dictate contributors"}]
@@ -28,6 +28,9 @@ dependencies = [
 
 [project.scripts]
 whisper-dictate = "whisper_dictate.cli:cli"
+
+[tool.hatch.version]
+path = "whisper_dictate/__init__.py"
 
 [project.optional-dependencies]
 dev = [

@@ -856,7 +856,6 @@ wheels = [
 
 [[package]]
 name = "whisper-dictate"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

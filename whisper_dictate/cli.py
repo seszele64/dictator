@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 
+from whisper_dictate import __version__
 from whisper_dictate.audio_storage import check_disk_space
 from whisper_dictate.cli_helpers import with_database
 from whisper_dictate.config import DatabaseConfig, load_config, validate_api_key
@@ -107,6 +108,7 @@ def setup_logging(
 
 
 @click.group()
+@click.version_option(version=__version__, prog_name="whisper-dictate")
 @click.option("--log-level", default="INFO", help="Logging level")
 @click.pass_context
 def cli(ctx: click.Context, log_level: str) -> None:
@@ -120,7 +122,11 @@ def cli(ctx: click.Context, log_level: str) -> None:
     try:
         config = load_config(require_api_key=False)
     except ValueError as e:
-        click.echo(f"Configuration error: {e}", err=True)
+        # The version tag makes bug reports from this top-level failure path
+        # self-identifying without needing the reporter to run --version.
+        click.echo(
+            f"Configuration error (whisper-dictate v{__version__}): {e}", err=True
+        )
         sys.exit(1)
 
     db_log_handler = setup_logging(log_level, config.database)
@@ -144,7 +150,11 @@ def dictate(ctx: click.Context, duration: float | None) -> None:
         # Register cleanup to close the service (and its DB connection)
         ctx.call_on_close(service.close)
     except ValueError as e:
-        click.echo(f"Configuration error: {e}", err=True)
+        # Same failure banner as the top-level config load: version tag keeps
+        # dictate-path bug reports self-identifying too.
+        click.echo(
+            f"Configuration error (whisper-dictate v{__version__}): {e}", err=True
+        )
         sys.exit(1)
 
     try:
