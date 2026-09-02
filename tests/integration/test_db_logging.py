@@ -102,7 +102,7 @@ class TestDatabaseLogHandlerEmitReal:
 class TestDatabaseLogHandlerLifecycleReal:
     """Tests for DatabaseLogHandler lifecycle against a real database."""
 
-    def test_close_then_reopen_real_db(self, real_db, real_db_config, db_singleton_reset):
+    def test_close_then_reopen_real_db(self, real_db, real_db_config):
         from whisper_dictate.database import Database
 
         handler = DatabaseLogHandler(database=real_db)

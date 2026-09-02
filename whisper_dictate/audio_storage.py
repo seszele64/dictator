@@ -179,15 +179,14 @@ class AudioStorage:
     - DOES NOT: Handle transcription, database operations, or audio recording
     """
 
-    def __init__(self, config: DatabaseConfig | None = None):
+    def __init__(self, config: DatabaseConfig):
         """Initialize audio storage with configuration.
 
         Args:
-            config: Database configuration containing recordings path
+            config: Database configuration containing recordings path (REQUIRED:
+                a None config used to silently fall back to default paths,
+                which broke user-configured recordings directories)
         """
-        if config is None:
-            config = DatabaseConfig()
-
         self._config = config
         self._recordings_path = config.get_recordings_path()
         logger.debug(f"AudioStorage initialized with path: {self._recordings_path}")
@@ -672,31 +671,10 @@ class AudioStorage:
         }
 
 
-# Global audio storage instance
-_audio_storage: AudioStorage | None = None
-
-
-def get_audio_storage(config: DatabaseConfig | None = None) -> AudioStorage:
-    """Get or create the global audio storage instance.
-
-    Args:
-        config: Optional database configuration
-
-    Returns:
-        AudioStorage: Audio storage instance
-    """
-    global _audio_storage
-
-    if _audio_storage is None:
-        _audio_storage = AudioStorage(config)
-
-    return _audio_storage
-
-
 # ============ Orphaned File Cleanup Functions ============
 
 
-def get_orphaned_files(db) -> list[dict]:
+def get_orphaned_files(db, storage: AudioStorage) -> list[dict]:
     """Scan for orphaned audio files not referenced in the database.
 
     Compares files in the recordings directory against database records
@@ -704,6 +682,10 @@ def get_orphaned_files(db) -> list[dict]:
 
     Args:
         db: Database instance (must have list_recordings method)
+        storage: AudioStorage instance providing the recordings root. Explicit
+            (not a global): this fixes a default-configuration bug where the
+            scan silently used DEFAULT recordings paths regardless of what
+            the user configured.
 
     Returns:
         list[dict]: List of orphaned file info with keys:
@@ -712,15 +694,13 @@ def get_orphaned_files(db) -> list[dict]:
             - size: File size in bytes
             - modified: Last modified timestamp
     """
-    # Get audio storage to access recordings path
-    audio_storage = get_audio_storage()
     # Compare resolved-vs-resolved: the DB side canonicalizes stored paths
     # through get_audio_path() (resolve()), so the scan root must be
     # canonicalized too. With the raw configured root (e.g. a symlinked
     # recordings directory), every resolved DB path fails relative_to() and
     # gets dropped from db_files — making all real recordings look orphaned
     # and exposing them to mass deletion via `audio cleanup --confirm`.
-    recordings_path = audio_storage.recordings_path.resolve()
+    recordings_path = storage.recordings_path.resolve()
 
     if not recordings_path.exists():
         logger.info("Recordings directory does not exist, no orphaned files")
@@ -764,7 +744,7 @@ def get_orphaned_files(db) -> list[dict]:
                 # Empty file_path is the "no file" sentinel
                 continue
             try:
-                resolved = audio_storage.get_audio_path(file_path)
+                resolved = storage.get_audio_path(file_path)
             except AudioPathError as e:
                 logger.warning(
                     f"Recording path {file_path!r} not accessible "
@@ -801,11 +781,15 @@ def get_orphaned_files(db) -> list[dict]:
     return orphaned_files
 
 
-def cleanup_orphaned_files(db, dry_run: bool = True) -> tuple[int, int]:
+def cleanup_orphaned_files(
+    db, storage: AudioStorage, dry_run: bool = True
+) -> tuple[int, int]:
     """Clean up orphaned audio files not referenced in the database.
 
     Args:
         db: Database instance with sync methods
+        storage: AudioStorage instance providing the recordings root (explicit,
+            not a global - see get_orphaned_files)
         dry_run: If True, only return what would be deleted without deleting
 
     Returns:
@@ -813,7 +797,7 @@ def cleanup_orphaned_files(db, dry_run: bool = True) -> tuple[int, int]:
             - deleted_count: Number of files deleted (or would be deleted)
             - total_size_freed: Total size in bytes freed (or would be freed)
     """
-    orphaned_files = get_orphaned_files(db)
+    orphaned_files = get_orphaned_files(db, storage)
 
     deleted_count = 0
     total_size_freed = 0

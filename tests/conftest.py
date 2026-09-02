@@ -153,25 +153,6 @@ def _cleanup_sounddevice():
 atexit.register(_cleanup_sounddevice)
 
 
-@pytest.fixture(autouse=True)
-def reset_persistence_singletons():
-    """Reset the once-only audio-storage singleton around each test.
-
-    The CLI initializes this singleton with the loaded configuration on first
-    use. Without a reset, one test's configuration (or a Mock) leaks into
-    every later test that touches the singleton.
-
-    (The Database singleton was removed in S2 - Database instances are now
-    constructed per command/service - so only audio storage still needs this.
-    It is scheduled for deletion in the same phase.)
-    """
-    import whisper_dictate.audio_storage as audio_storage_module
-
-    audio_storage_module._audio_storage = None
-    yield
-    audio_storage_module._audio_storage = None
-
-
 @pytest.fixture
 def temp_audio_file() -> Generator[Path, None, None]:
     """Create a temporary audio file for testing."""
@@ -367,27 +348,6 @@ def database():
 
 
 @pytest.fixture
-def db_singleton_reset():
-    """Reset module-level Database and AudioStorage singletons before and after test."""
-    import whisper_dictate.audio_storage as storage_mod
-    import whisper_dictate.database as db_mod
-
-    # Reset before
-    db_mod._database = None
-    storage_mod._audio_storage = None
-
-    yield
-
-    # Clean up any instances created during the test
-    if db_mod._database is not None:
-        with contextlib.suppress(Exception):
-            db_mod._database.close()
-        db_mod._database = None
-    if storage_mod._audio_storage is not None:
-        storage_mod._audio_storage = None
-
-
-@pytest.fixture
 def real_db_config(tmp_path) -> DatabaseConfig:
     """Create a DatabaseConfig pointing to temp directories."""
     return DatabaseConfig(
@@ -397,8 +357,12 @@ def real_db_config(tmp_path) -> DatabaseConfig:
 
 
 @pytest.fixture
-def real_db(real_db_config, db_singleton_reset):
-    """Create a real Database instance with a temp SQLite file, auto-initialized and closed."""
+def real_db(real_db_config):
+    """Create a real Database instance with a temp SQLite file, auto-initialized and closed.
+
+    No singleton reset needed: each fixture call constructs its own Database,
+    which is exactly the S2 invariant under test.
+    """
     from whisper_dictate.database import Database
 
     db = Database(real_db_config)

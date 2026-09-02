@@ -14,7 +14,7 @@ import time
 import soundfile as sf
 
 from whisper_dictate.app import bootstrap
-from whisper_dictate.audio_storage import get_audio_storage
+from whisper_dictate.audio_storage import AudioStorage
 from whisper_dictate.clipboard import ClipboardManager
 from whisper_dictate.config import AppPaths
 from whisper_dictate.database import Database
@@ -102,7 +102,7 @@ def get_db_and_storage(config=None):
     db_config = config.database
     db = Database(db_config)
     db.initialize()
-    audio_storage = get_audio_storage(db_config)
+    audio_storage = AudioStorage(db_config)
     return db, audio_storage
 
 

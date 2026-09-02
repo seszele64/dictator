@@ -271,7 +271,7 @@ class TestHistoryShowClose:
             mock_database_cls.return_value = mock_db_with_data
 
             with patch(
-                "whisper_dictate.audio_storage.get_audio_storage"
+                "whisper_dictate.audio_storage.AudioStorage"
             ) as mock_storage:
                 mock_storage.return_value.get_audio_path.return_value = Path(
                     "/fake/path"
@@ -340,7 +340,7 @@ class TestHistoryDeleteClose:
             mock_database_cls.return_value = mock_db_with_data
 
             with patch(
-                "whisper_dictate.audio_storage.get_audio_storage"
+                "whisper_dictate.audio_storage.AudioStorage"
             ) as mock_storage:
                 mock_audio_path = Mock()
                 mock_audio_path.exists.return_value = False
@@ -814,7 +814,7 @@ class TestConnectionLeak:
             with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
                 mock_database_cls.return_value = mock_db
 
-                with patch("whisper_dictate.audio_storage.get_audio_storage"):
+                with patch("whisper_dictate.audio_storage.AudioStorage"):
                     cli_runner.invoke(cli, cmd)
 
                 assert mock_db.close.called, (
@@ -994,7 +994,7 @@ class TestHistoryDeleteFileFirst:
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
             with patch(
-                "whisper_dictate.audio_storage.get_audio_storage"
+                "whisper_dictate.audio_storage.AudioStorage"
             ) as mock_storage:
                 result = cli_runner.invoke(cli, ["history", "delete", "1", "--yes"])
         return result, mock_storage
@@ -1009,7 +1009,7 @@ class TestHistoryDeleteFileFirst:
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
             with patch(
-                "whisper_dictate.audio_storage.get_audio_storage"
+                "whisper_dictate.audio_storage.AudioStorage"
             ) as mock_storage:
                 mock_audio_path = Mock()
                 mock_audio_path.unlink.side_effect = (
@@ -1051,7 +1051,7 @@ class TestHistoryDeleteFileFirst:
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
             with patch(
-                "whisper_dictate.audio_storage.get_audio_storage"
+                "whisper_dictate.audio_storage.AudioStorage"
             ) as mock_storage:
                 mock_storage.return_value.get_audio_path.side_effect = (
                     UnsafeAudioPathError("escapes the recordings root")
@@ -1072,7 +1072,7 @@ class TestHistoryDeleteFileFirst:
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
             with patch(
-                "whisper_dictate.audio_storage.get_audio_storage"
+                "whisper_dictate.audio_storage.AudioStorage"
             ) as mock_storage:
                 mock_path = Mock()
                 mock_path.unlink.side_effect = PermissionError("denied")
@@ -1092,7 +1092,7 @@ class TestHistoryDeleteFileFirst:
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
             with patch(
-                "whisper_dictate.audio_storage.get_audio_storage"
+                "whisper_dictate.audio_storage.AudioStorage"
             ) as mock_storage:
                 mock_path = Mock()
                 mock_path.unlink.side_effect = FileNotFoundError()
@@ -1133,7 +1133,7 @@ class TestHistoryDeleteFileFirst:
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
             with patch(
-                "whisper_dictate.audio_storage.get_audio_storage", return_value=storage
+                "whisper_dictate.audio_storage.AudioStorage", return_value=storage
             ):
                 # Out-of-root absolute path: row-only delete
                 result1 = cli_runner.invoke(cli, ["history", "delete", "1", "--yes"])

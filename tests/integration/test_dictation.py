@@ -268,7 +268,7 @@ class TestDictationService:
         with (
             patch("whisper_dictate.dictation.Database", return_value=mock_db),
             patch(
-                "whisper_dictate.dictation.get_audio_storage",
+                "whisper_dictate.dictation.AudioStorage",
                 return_value=mock_audio_storage,
             ),DictationService(mock_config) as service, patch.object(
                 service.audio_recorder, "record_to_file"
@@ -342,7 +342,7 @@ class TestDictationServiceMP3Integration:
         with (
             patch("whisper_dictate.dictation.Database", return_value=mock_db),
             patch(
-                "whisper_dictate.dictation.get_audio_storage",
+                "whisper_dictate.dictation.AudioStorage",
                 return_value=mock_audio_storage,
             ),DictationService(mock_config_mp3_enabled) as service, patch.object(
                 service.audio_recorder, "record_to_file"
@@ -403,7 +403,7 @@ class TestDictationServiceMP3Integration:
         with (
             patch("whisper_dictate.dictation.Database", return_value=mock_db),
             patch(
-                "whisper_dictate.dictation.get_audio_storage",
+                "whisper_dictate.dictation.AudioStorage",
                 return_value=mock_audio_storage,
             ),DictationService(mock_config) as service, patch.object(
                 service.audio_recorder, "record_to_file"
@@ -462,7 +462,7 @@ class TestDictationServiceMP3Integration:
         with (
             patch("whisper_dictate.dictation.Database", return_value=mock_db),
             patch(
-                "whisper_dictate.dictation.get_audio_storage",
+                "whisper_dictate.dictation.AudioStorage",
                 return_value=mock_audio_storage,
             ),DictationService(mock_config_mp3_keep_wav) as service, patch.object(
                 service.audio_recorder, "record_to_file"
@@ -520,7 +520,7 @@ class TestDictationServiceMP3Integration:
         with (
             patch("whisper_dictate.dictation.Database", return_value=mock_db),
             patch(
-                "whisper_dictate.dictation.get_audio_storage",
+                "whisper_dictate.dictation.AudioStorage",
                 return_value=mock_audio_storage,
             ),DictationService(mock_config_mp3_enabled) as service, patch.object(
                 service.audio_recorder, "record_to_file"
@@ -577,7 +577,7 @@ class TestDictationServiceMP3Integration:
         with (
             patch("whisper_dictate.dictation.Database", return_value=mock_db),
             patch(
-                "whisper_dictate.dictation.get_audio_storage",
+                "whisper_dictate.dictation.AudioStorage",
                 return_value=mock_audio_storage,
             ),DictationService(mock_config_mp3_enabled) as service, patch.object(
                 service.audio_recorder, "record_to_file"
@@ -649,7 +649,7 @@ class TestDictationServiceSilenceDetection:
 
         with (  # noqa: SIM117
             patch("whisper_dictate.dictation.Database", return_value=mock_db),
-            patch("whisper_dictate.dictation.get_audio_storage", return_value=mock_audio_storage),
+            patch("whisper_dictate.dictation.AudioStorage", return_value=mock_audio_storage),
         ):
             with DictationService(mock_config) as service:
                 with (
@@ -689,7 +689,7 @@ class TestDictationServiceSilenceDetection:
 
         with (  # noqa: SIM117
             patch("whisper_dictate.dictation.Database", return_value=mock_db),
-            patch("whisper_dictate.dictation.get_audio_storage", return_value=mock_audio_storage),
+            patch("whisper_dictate.dictation.AudioStorage", return_value=mock_audio_storage),
         ):
             with DictationService(mock_config) as service:
                 with (
@@ -725,7 +725,7 @@ class TestDictationServiceSilenceDetection:
 
         with (  # noqa: SIM117
             patch("whisper_dictate.dictation.Database", return_value=mock_db),
-            patch("whisper_dictate.dictation.get_audio_storage", return_value=mock_audio_storage),
+            patch("whisper_dictate.dictation.AudioStorage", return_value=mock_audio_storage),
         ):
             with DictationService(mock_config) as service:
                 with (
@@ -771,7 +771,7 @@ class TestDictationFailureCleanup:
         with (
             patch("whisper_dictate.dictation.Database", return_value=mock_db),
             patch(
-                "whisper_dictate.dictation.get_audio_storage",
+                "whisper_dictate.dictation.AudioStorage",
                 return_value=mock_audio_storage,
             ),
             DictationService(mock_config) as service,
@@ -855,7 +855,7 @@ class TestClaimFirstSaveOrdering:
         with (
             patch("whisper_dictate.dictation.Database", return_value=mock_db),
             patch(
-                "whisper_dictate.dictation.get_audio_storage",
+                "whisper_dictate.dictation.AudioStorage",
                 return_value=mock_audio_storage,
             ),
             DictationService(mock_config) as service,

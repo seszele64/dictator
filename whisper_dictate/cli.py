@@ -513,7 +513,7 @@ def show_history(ctx: click.Context, transcript_id: int, audio: bool) -> None:
         whisper-dictate history show 42
         whisper-dictate history show 42 --audio
     """
-    from whisper_dictate.audio_storage import get_audio_storage
+    from whisper_dictate.audio_storage import AudioStorage, NoAudioFileError, UnsafeAudioPathError
 
     db = ctx.obj["db"]
     db_config = ctx.obj["config"].database
@@ -558,7 +558,7 @@ def show_history(ctx: click.Context, transcript_id: int, audio: bool) -> None:
         if audio:
             from whisper_dictate.audio_storage import NoAudioFileError, UnsafeAudioPathError
 
-            audio_storage = get_audio_storage(db_config)
+            audio_storage = AudioStorage(db_config)
             try:
                 audio_path = audio_storage.get_audio_path(
                     transcription["file_path"], verify_exists=True
@@ -659,9 +659,9 @@ def delete_history(ctx: click.Context, transcript_id: int, confirm_yes: bool) ->
         whisper-dictate history delete 42 --yes
     """
     from whisper_dictate.audio_storage import (
+        AudioStorage,
         NoAudioFileError,
         UnsafeAudioPathError,
-        get_audio_storage,
     )
 
     db = ctx.obj["db"]
@@ -705,7 +705,7 @@ def delete_history(ctx: click.Context, transcript_id: int, confirm_yes: bool) ->
         # root) are never accessed - those recordings are deleted row-only.
         unlink_path = None
         if stored_path:
-            audio_storage = get_audio_storage(db_config)
+            audio_storage = AudioStorage(db_config)
             try:
                 unlink_path = audio_storage.get_audio_path(stored_path)
             except NoAudioFileError:
@@ -859,14 +859,14 @@ def cleanup_audio(ctx: click.Context, dry_run: bool, confirm: bool) -> None:
         whisper-dictate audio cleanup --confirm       # Actually delete them
     """
     from whisper_dictate.audio_storage import (
+        AudioStorage,
         cleanup_orphaned_files,
-        get_audio_storage,
         get_orphaned_files,
     )
 
-    # Ensure the once-only audio storage singleton is initialized with the
-    # configured recordings path before the orphan scan uses it.
-    get_audio_storage(ctx.obj["config"].database)
+    # Explicit per-command storage, built from the loaded configuration:
+    # the orphan scan must use the user's configured recordings path.
+    storage = AudioStorage(ctx.obj["config"].database)
 
     # Data-driven, not hardcoded: an explicit --confirm deletes, everything
     # else (plain invocation or explicit --dry-run) stays display-only. The
@@ -877,7 +877,7 @@ def cleanup_audio(ctx: click.Context, dry_run: bool, confirm: bool) -> None:
 
     try:
         # First, just get the orphaned files to display
-        orphaned_files = get_orphaned_files(ctx.obj["db"])
+        orphaned_files = get_orphaned_files(ctx.obj["db"], storage)
 
         if not orphaned_files:
             click.echo("No orphaned audio files found.")
@@ -910,7 +910,7 @@ def cleanup_audio(ctx: click.Context, dry_run: bool, confirm: bool) -> None:
             # Perform the cleanup (actual_dry_run is False in this branch;
             # passing the flag keeps the call site data-driven).
             deleted_count, size_freed = cleanup_orphaned_files(
-                ctx.obj["db"], dry_run=actual_dry_run
+                ctx.obj["db"], storage, dry_run=actual_dry_run
             )
 
             size_freed_mb = size_freed / (1024 * 1024)

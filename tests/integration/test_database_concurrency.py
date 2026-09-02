@@ -15,7 +15,7 @@ from whisper_dictate.database import Database
 class TestThreadSafeDatabase:
     """Tests verifying cross-thread database access after the concurrency fix."""
 
-    def test_cross_thread_use_works_after_fix(self, real_db_config, db_singleton_reset):
+    def test_cross_thread_use_works_after_fix(self, real_db_config):
         """Cross-thread database access works after the concurrency fix.
 
         The fix adds check_same_thread=False to sqlite3.connect() and uses
@@ -47,7 +47,7 @@ class TestThreadSafeDatabase:
         finally:
             db.close()
 
-    def test_same_thread_use_works(self, real_db_config, db_singleton_reset):
+    def test_same_thread_use_works(self, real_db_config):
         """The thread that created the connection can use it normally."""
         db = Database(real_db_config)
         try:
@@ -56,7 +56,7 @@ class TestThreadSafeDatabase:
         finally:
             db.close()
 
-    def test_lock_serializes_cross_thread_access(self, real_db_config, db_singleton_reset):
+    def test_lock_serializes_cross_thread_access(self, real_db_config):
         """The RLock serializes cross-thread database access.
 
         Three threads each perform a database operation; the RLock ensures
@@ -124,7 +124,7 @@ class TestThreadSafeDatabase:
         assert row is not None
         assert real_db.get_state("migration_status") == "in_progress"
 
-    def test_sequential_operations_work(self, real_db_config, db_singleton_reset):
+    def test_sequential_operations_work(self, real_db_config):
         """Sequential operations on one thread work with the RLock.
 
         The RLock is reentrant, and each db method acquires it via
@@ -145,7 +145,7 @@ class TestThreadSafeDatabase:
             db.close()
 
     def test_execute_result_survives_later_statements_and_close(
-        self, real_db_config, db_singleton_reset
+        self, real_db_config
     ):
         """CursorResult from execute() remains valid after later statements and close().
 

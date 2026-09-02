@@ -6,7 +6,7 @@ from types import TracebackType
 
 from whisper_dictate.audio import AudioRecorder
 from whisper_dictate.audio_converter import AudioConverter
-from whisper_dictate.audio_storage import AudioStorage, StagedAudio, get_audio_storage
+from whisper_dictate.audio_storage import AudioStorage, StagedAudio
 from whisper_dictate.clipboard import ClipboardManager
 from whisper_dictate.config import AppConfig
 from whisper_dictate.database import Database
@@ -48,9 +48,9 @@ class DictationService:
             bitrate=config.audio.mp3_bitrate, keep_wav=config.audio.keep_wav
         )
 
-        # Initialize database and audio storage
+        # Initialize audio storage (per instance; database is lazy below)
         self._db: Database | None = None
-        self._audio_storage: AudioStorage | None = None
+        self._storage: AudioStorage | None = None
 
     @property
     def database(self) -> Database:
@@ -74,9 +74,9 @@ class DictationService:
         Returns:
             AudioStorage: Initialized audio storage instance
         """
-        if self._audio_storage is None:
-            self._audio_storage = get_audio_storage(self.config.database)
-        return self._audio_storage
+        if self._storage is None:
+            self._storage = AudioStorage(self.config.database)
+        return self._storage
 
     def check_disk_space(self) -> tuple[bool, int]:
         """Check if there's enough disk space for recording.

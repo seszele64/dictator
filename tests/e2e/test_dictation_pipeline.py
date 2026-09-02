@@ -38,12 +38,14 @@ class E2EEnv:
 
 
 @pytest.fixture
-def e2e_env(tmp_path, monkeypatch, db_singleton_reset, mock_config):
+def e2e_env(tmp_path, monkeypatch, mock_config):
     """Set up the full E2E environment.
 
     Uses a real SQLite database and real audio storage in temp directories.
     Only audio capture (arecord), the transcription API, the clipboard, and
-    notifications are mocked. Singleton reset is handled by db_singleton_reset.
+    notifications are mocked. No singleton reset needed: since S2 every test
+    constructs its own Database/AudioStorage instances from the patched
+    config.
     """
     # Redirect module-level file paths to the temp directory
     monkeypatch.setattr(toggle_dictate, "STATE_FILE", tmp_path / "state")
@@ -107,7 +109,8 @@ def e2e_env(tmp_path, monkeypatch, db_singleton_reset, mock_config):
         popen=popen_mock,
         tmp_path=tmp_path,
     )
-    # Teardown: db_singleton_reset closes/resets the database and audio storage singletons
+    # Teardown: the pipeline's per-call Database/Storage instances are closed
+    # by the code under test; no module state to reset since S2.
 
 
 @contextlib.contextmanager

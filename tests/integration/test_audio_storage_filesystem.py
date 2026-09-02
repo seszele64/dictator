@@ -17,7 +17,6 @@ from whisper_dictate.audio_storage import (
     _generate_random_suffix,
     _generate_unique_filename,
     _get_date_based_path,
-    get_audio_storage,
 )
 from whisper_dictate.config import DatabaseConfig
 
@@ -95,8 +94,10 @@ class TestAudioStorageInit:
         assert storage.recordings_path == tmp_path / "recordings"
 
     def test_init_default_config(self, env_isolator):
-        """Default config resolves XDG-based recordings path."""
-        storage = AudioStorage()
+        """Explicit default config resolves XDG-based recordings path.
+
+        (Config is REQUIRED since S2: no silent default-config fallback.)"""
+        storage = AudioStorage(DatabaseConfig())
         assert storage.recordings_path == env_isolator / "data" / "whisper-dictate" / "recordings"
 
     def test_recordings_path_property(self, tmp_path):
@@ -337,28 +338,3 @@ class TestGetStorageStats:
         stats = storage.get_storage_stats()
         assert stats["total_files"] == 0
         assert stats["total_size_bytes"] == 0
-
-
-class TestSingleton:
-    """Tests for the get_audio_storage singleton."""
-
-    def test_get_audio_storage_singleton(self, db_singleton_reset, tmp_path):
-        """Repeated calls return the same instance."""
-        config = DatabaseConfig(recordings_path=tmp_path / "rec")
-        first = get_audio_storage(config)
-        second = get_audio_storage(config)
-        assert first is second
-
-    def test_get_audio_storage_ignores_config_after_first(self, db_singleton_reset, tmp_path):
-        """Subsequent calls ignore new configs and keep the first path."""
-        config_a = DatabaseConfig(recordings_path=tmp_path / "rec-a")
-        config_b = DatabaseConfig(recordings_path=tmp_path / "rec-b")
-        first = get_audio_storage(config_a)
-        second = get_audio_storage(config_b)
-        assert first is second
-        assert first.recordings_path == tmp_path / "rec-a"
-
-    def test_get_audio_storage_creates_with_config(self, db_singleton_reset, tmp_path):
-        """The first call creates an instance with the given config."""
-        storage = get_audio_storage(DatabaseConfig(recordings_path=tmp_path / "rec"))
-        assert storage.recordings_path == tmp_path / "rec"
