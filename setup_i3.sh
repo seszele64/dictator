@@ -23,10 +23,13 @@ if [ ! -f "$I3_CONFIG" ]; then
     exit 1
 fi
 
-# Drop stale bindings pointing at the removed root toggle_dictate.py shim
-# (deleted in the S4 cut-over). The block below re-adds the binding pointing
-# at whisper-dictate-toggle if no new-style binding exists yet.
-sed -i "/toggle_dictate\.py/d" "$I3_CONFIG"
+# Drop stale dictation bindings pointing at the removed root
+# toggle_dictate.py shim (deleted in the S4 cut-over). The pattern matches
+# the old python3-based binding format only, so a user line that merely
+# mentions the old script name in a comment is left alone. The block below
+# re-adds the binding pointing at whisper-dictate-toggle if no new-style
+# binding exists yet.
+sed -i "/python3 .*toggle_dictate\.py/d" "$I3_CONFIG"
 
 # Check if dictation binding already exists
 if grep -q "whisper-dictate-toggle" "$I3_CONFIG"; then

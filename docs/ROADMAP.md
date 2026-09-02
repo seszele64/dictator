@@ -81,10 +81,10 @@ Ordering rule: **A → B → C**. Complete an entire tier before making progress
 |---|---|---|---|
 | `database.py` | 1,148 | God class + module singleton + facade mixing schema, CRUD, migrations, logging, orphan logic | `_database` global at `:1101`; getter/closers at `:1137-1148`; lazy audio import at `:593-597` (cycle) |
 | `audio_storage.py` | 861 | Storage mixes path logic, I/O, orphan scan, placeholder | `_audio_storage` global `:689` + getter `:692-706`; `get_recording_path` placeholder `:249-260`; orphan scan `:729` (DEFAULT-config bug) + re-scan `:829` + per-invocation scan `:864` & `:895-897` |
-| `cli.py` | 1,004 | Flat command monolith + setup_logging owns sole-canonical logging | logging `:17-106` (duped in `db_logging.py:101-164` + `toggle.py:54-100` — the sole remaining dup; S3 absorbs into `util/logging_setup.py`); literal paths `:34`, `:208`; `--dry-run` `:822-827` not honored, inverted `:860` |
+| `cli.py` | 1,004 | Flat command monolith + setup_logging owns sole-canonical logging | logging `:17-106` (duped in `db_logging.py:101-164` + `toggle.py:56-102` — the sole remaining dup; S3 absorbs into `util/logging_setup.py`); literal paths `:34`, `:208`; `--dry-run` `:822-827` not honored, inverted `:860` |
 | `notifications.py` | 650 | `PersistentNotification` mutable class state, zero prod callers | class `:323-635` (313L) + helpers `:572-650` + global `:569` |
 | `dunst_monitor.py` | 206 | Wraps a 30-L helper in a class + getter | `DunstMonitor :24`, `get_dunst_monitor :180` |
-| `toggle.py` (package) | 411 | Third logging copy remains (S3 absorbs into `util/logging_setup.py`); transcription half delegated | raw SQL gone (S4: claim/duration via named `Database` methods); transcribe delegates to `DictationService.transcribe_existing`; logging copy `:54-100` |
+| `toggle.py` (package) | 416 | Third logging copy remains (S3 absorbs into `util/logging_setup.py`); transcription half delegated | raw SQL gone (S4: claim/duration via named `Database` methods); transcribe delegates to `DictationService.transcribe_existing`; logging copy `:56-102` |
 | `cli_helpers.py` | 45 | `with_database` decorator builds DB from global, asymmetric close | `:9-45`; `close()` vs `close_database()` |
 | `dictation.py` | 436 | Core service is fine — keep near-verbatim as house template | dictation loop `:140-354`; no notifier wiring (P6), no named logger |
 | `config.py` | 350 | Side-effect import + unused field | `load_dotenv()` at `:10`; `log_level` at `:264` (zero prod readers) |

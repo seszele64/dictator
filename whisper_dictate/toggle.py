@@ -310,6 +310,11 @@ def transcribe_audio(config, recording_id=None):
         if recording_id is None:
             recording_id = db.get_state(STATE_KEY_RECORDING_ID)
 
+        # Accepted edge-only drift (S3 revisit): DictationService constructs
+        # its transcriber/clipboard up-front, BEFORE the claim-first save
+        # inside transcribe_existing, so in the double-failure case (save
+        # fails AND construction raises) the in-progress row is left behind
+        # where the old inline flow would have deleted it.
         with DictationService(config) as service:
             # copy_to_clipboard=True preserves the legacy toggle quirk of
             # always copying the transcribed text; revisit (defer to
