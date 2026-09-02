@@ -1,7 +1,7 @@
 # whisper-dictate — Process Quality & Structural Refactoring Roadmap
 
 **Repo:** `whisper-dictate` — a Python 3.11+ CLI dictation tool (~6.9k LOC, 16 modules; `uv` + hatchling packaging; OpenSpec-driven development).
-**Current state:** `v0.1.0`. Test discipline is strong (~600 test functions, 32 test files) and the feature work is largely done, but structural debt is real: several god modules (1,148-line `database.py`, 1,004-line `cli.py`, 861-line `audio_storage.py`), module-level singletons, an import cycle, stale specifications, ADRs and README content, plus agent tool directories tracked in git.
+**Current state:** `v0.1.0`. Test discipline is strong (~600 test functions, 32 test files) and the feature work is largely done, but structural debt remains in the god modules (1,148-line `database.py`, 1,004-line `cli.py`, 861-line `audio_storage.py`) and in the stale ADRs (P12).
 
 **What this roadmap covers — and how it merges two deliverables:**
 
@@ -17,9 +17,9 @@ Long story short: **the two-week plan takes the repo from "works for me" to a po
 ## How to use this document
 
 - **Track progress** with the status table in [§1](#1-current-state--executive-summary) (phases and tiers) and the *Done* column in the [master work list](#5-prioritized-work-items--merged-master-list). Each item belongs to exactly one of the three tiers; tiers are completed in order **A → B → C** (Tier C items may be explicitly deferred, but may not jump ahead of A/B).
-- **Read order for newcomers:** §1 (state) → §2 (tiers) → §6 (quick wins) → §7 (the 2-week plan). §3–§5 are the structural deep-dive you consult when a phase references it; §10 decisions gate several items (D1 gates P13, D3 gates P7, D4 gates P10/P9, D5 gates P14/P15).
+- **Read order for newcomers:** §1 (state) → §2 (tiers) → §7 (the 2-week plan). §3–§5 are the structural deep-dive you consult when a phase references it; §10 decisions gate several items (D1 gates P13, D3 gates P7, D4 gates P10/P9, D5 gates P14/P15).
 - **Conventions:** `P#` = process/quality item; `S#` = structural refactoring phase; `D#` = owner decision (human gates, see §10). Impact: H/M/L. Effort: S/M/L (ranges like `M-L` mean "M to L"). File references use current `file:line` locations; structural splits may change them (that's the point).
-- **Owner actions are only two:** (a) tick items off the tracking tables as gates pass; (b) make the decisions in §10 — D1/D4 must be locked *in writing* by Day 4, all others by the point their dependent items start.
+- **Owner actions:** (a) tick items off the tracking tables as gates pass; (b) all six §10 decisions were locked in writing on 2026-09-02 — none outstanding.
 
 ---
 
@@ -33,15 +33,10 @@ Long story short: **the two-week plan takes the repo from "works for me" to a po
 - ~600 test functions across `tests/` (unit + integration), with singleton-reset and notification-state fixtures (`conftest.py:130-161`).
 - OpenSpec workflow in place with un-archived changes `fix-provider-crash` and `fix-storage-safety` (`openspec/changes/`) and synced specs under `openspec/specs/`.
 
-**What is wrong (this roadmap fixes it):**
+**What is wrong (remaining debt — the landed items are pruned from this list):**
 
-- **God modules:** `database.py` (1,148L), `cli.py` (1,004L), `audio_storage.py` (861L), `notifications.py` (650L), root `toggle_dictate.py` (455L), `dunst_monitor.py` (206L).
-- **Singletons / hidden globals:** `_database` (`database.py:1101`), `_audio_storage` (`audio_storage.py:689`, getter `:692-706`), `PersistentNotification` mutable class state + `_recording_notification` (`notifications.py:569`).
-- **Import cycle:** `database.py:593-597` lazily imports `audio_storage` (persistence → audio edge).
-- **Stale specs/ADRs/README:** `specs/002-streaming-transcription` (Draft, never implemented — ghost weight); ADR 0001/0002 "Proposed" citing non-existent files; README documents env var defaults that drift from `config.py`; AGENTS.md shows a stale `src/` layout (package is actually flat `whisper_dictate/` at repo root).
-- **Dead / test-only code:** `setup_dual_logging` (`db_logging.py:101-164`), `convert_and_keep_wav` / `convert_and_delete_wav` (`audio_converter.py:154-180`), `get_recording_path` placeholder (`audio_storage.py:249-260`), `PersistentNotification` (313L, zero prod callers), empty `tests/contract/`, and 42 git-tracked files under `.opencode/`, `.specify/`, `.memories/` despite `.gitignore`.
-- **`--dry-run` is not honored** (`cli.py:822-827` — flag exists, `actual_dry_run` inverted at `:860`, hardcoded calls at `:895-897`).
-- **Logging setup is duplicated three times** (`cli.py:17-106`, `db_logging.py:101-164`, `toggle_dictate.py:42-83`).
+- **God modules:** `database.py` (1,148L), `cli.py` (1,004L), `audio_storage.py` (861L) — the S3 splits.
+- **Stale ADRs:** ADR 0001/0002 "Proposed" citing non-existent files; new ADRs 0003–0007 still to write (P12).
 - **pydub dependency** (audioop removed in 3.13 → the 3.13 classifier is currently false; the test matrix can't include 3.13 while it remains).
 
 ### 1.2 Priority & status tracking (tick off as you go)
@@ -51,10 +46,7 @@ Long story short: **the two-week plan takes the repo from "works for me" to a po
 | ☐ | **Tier A — Polished production tool** | §2 | ☐ |
 | ☐ | **Tier B — Professional hygiene** | §2 | ☐ |
 | ☐ | **Tier C — Engineering rigor at scale** | §2, §9 | ☐ |
-| ✅ | **S0 — Characterization first** (Day 0–1) | §7 | ✅ |
-| ✅ | **S1 — Truth & dead-code purge** (Day 1–2) | §7 | ✅ |
-| ✅ | **S2 — Singleton removal** (Day 2–4) | §7 | ✅ `4b51915`+`ce09424`+`286bd60` |
-| ☐ | **S4 — Toggle merge** (starts Day 2–3, lands after S2) | §7 | ☐ |
+| ☐ | **S4 — Toggle merge** (unblocked — S2 done) | §7 | ☐ |
 | ☐ | **S3 — God-module splits** (Week 2, Day 5–8) | §7 | ☐ |
 | ☐ | **S5 — Notifier wiring** (Day 8) | §7 | ☐ |
 | ☐ | **S6 — Release freeze + v0.1.0** (Day 9–10) | §7, §12 | ☐ |
@@ -68,12 +60,12 @@ Ordering rule: **A → B → C**. Complete an entire tier before making progress
 ### Tier A — Polished production tool
 *A stranger can install it, use it via i3, and get an actionable error.*
 
-- **P1** Versioning | **P13** Release pipeline + LICENSE + CHANGELOG | **P6** Exception audit + traceback logging | **P2** Constants centralization | **P5** Toggle folding | **P3** Spec/AGENTS sync | **P10** pydub removal | **P9** pip-audit | README/docs pass
+- **P13** Release pipeline + LICENSE + CHANGELOG | **P6** Exception audit + traceback logging | **P10** pydub removal | **P9** pip-audit
 
 ### Tier B — Professional hygiene
 *The repo behaves like a maintained open-source project.*
 
-- **P9** CI matrix 3.11/3.12/3.13 | **P7** mypy strict incremental | **P3** OpenSpec single-source | **P12** ADR fixup + new ADRs | **P8** pre-commit + ruff format | **P4** markers / fail_under / e2e skip | **P11** contracts resolution
+- **P9** CI matrix 3.11/3.12/3.13 | **P7** mypy strict incremental | **P12** ADR fixup + new ADRs | **P8** pre-commit + ruff format | **P11** contracts resolution
 
 ### Tier C — Engineering rigor at scale
 *Only after A and B. Items may be deferred by design.*
@@ -101,26 +93,14 @@ Ordering rule: **A → B → C**. Complete an entire tier before making progress
 | `db_logging.py` | 164 | Duplicate logging | `setup_dual_logging :101-164` (zero callers) |
 | `audio_converter.py` | 180 | Test-only converters | `convert_and_keep_wav` / `convert_and_delete_wav` `:154-180` |
 
-### 3.2 Dead / stale code — the 16-item purge list
+### 3.2 Dead / stale code — remaining purge items
+
+Of the original 16-item purge list, items 1–9, 11, 13–16 landed with S1/S2/P3; the two outstanding items keep their original IDs:
 
 | # | Target | Action | Rationale / notes | Tests touched |
 |---|---|---|---|---|
-| 1 | `PersistentNotification` + 4 helpers (`notifications.py:323-635`, `:572-650`) + `_recording_notification` (`:569`) | **Delete now** | Zero prod callers; mutable class state | notification tests rewritten to Notifier protocol |
-| 2 | `DunstMonitor` + `get_dunst_monitor` (`dunst_monitor.py:24`, `:180`) | **Delete now** | `ensure_dunst_running` → `notifications/dunst.py` | dunst tests re-homed |
-| 3 | `setup_dual_logging` (`db_logging.py:101-164`) | **Delete now** | Zero callers; dup of `cli.py:17-106` | logging tests target new `util/logging_setup.py` |
-| 4 | `convert_and_keep_wav` / `convert_and_delete_wav` (`audio_converter.py:154-180`) | **Delete now** | Tests-only | golden behavior tests in P10 cover |
-| 5 | `get_recording_path` (`audio_storage.py:249-260`) | **Delete now** | Placeholder | storage tests use real path resolver |
-| 6 | `AppConfig.log_level` (`config.py:264`) | **Delete now** | Zero prod readers (`-v/--verbose` is the real switch, P6) | config tests updated |
-| 7 | `--dry-run` (`cli.py:822-827`) | **IMPLEMENT, not delete** | Honor it: no DB writes / clipboard / notification when set; fix inverted `actual_dry_run` (`:860`) + hardcoded `:895-897`; add behavior tests | new `--dry-run` behavior tests |
-| 8 | `tests/contract/` | **Delete dir** | Empty; contract tests live in `tests/unit/test_provider_contract.py` (P11) | — |
-| 9 | `specs/002-streaming-transcription` | **Deprecate via P3** (not delete-now) | Never implemented; not in openspec; ghost weight | — |
 | 10 | Root `toggle_dictate.py` | **Delete AFTER P5 cut-over** (phase 4 = S4) | Replaced by package `ToggleService` | old toggle tests deleted with it |
-| 11 | `.opencode/` + `.specify/` + `.memories/` | **git rm -r now** | Git-tracked despite `.gitignore` (42 files) | — |
 | 12 | ADR 0001/0002 "Proposed", citing non-existent files | **P12** + new ADR 0003 | ADR 0003 (composition root over lazy singletons) supersedes 0002 explicitly | — |
-| 13 | README env vars + default drifts | **Fix phase 1 truth restoration** | README docs env vars that config doesn't read; defaults drift from `config.py` (e.g. via `migration.py`/`cli.py` literals, §3.1) | — |
-| 14 | `load_dotenv()` import-time side effect (`config.py:10`) | **Move to app.py** | Importing config must not touch env | config import tests |
-| 15 | `database.py:593-597` lazy `audio_storage` import | **Remove via path hoist** (phase 3) | Kills the cli↔storage cycle (see §4.4) | storage tests |
-| 16 | `_database` / `_audio_storage` / `with_database`-on-global / `get_orphaned_files` DEFAULT-config | **Delete** (phase 2) | Singletons die in S2; orphan scan gets explicit config (fixes `:729` bug) | conftest.py:130-161 resets deleted; `test_cli_database_close (46) green` |
 
 ---
 
@@ -242,46 +222,32 @@ database.py:593-597 → audio_storage edge removed by: path hoist to util/paths.
 One list, process and structural together, ordered by execution sequence within the 2-week plan (see §7). *Impact*: H/M/L. *Effort*: S/M/L. *Done* column is for the owner.
 
 | # | Done | ID | Type | Item (short) | Impact | Effort | Deps | Slot |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | ☐ | S0 | Structural | Characterization first: DB/storage invariants + CLI snapshot harness + formalized fakes | — | M | — | Day 0–1 |
-| 2 | ✅ | P1 | Process | Versioning: `__version__` + `--version` flag; hatchling dynamic version; version in failures; unit test | H | S | — | Day 1 |
-| 3 | ✅ | P3 | Process | OpenSpec archive+sync (`fix-provider-crash`, `fix-storage-safety`); legacy `specs/` → single deprecated README stub (streaming explicitly NOT planned); fix AGENTS.md stale `src/` layout | M | S | — | Day 1 |
-| 4 | ✅ | P4 | Process | Coverage fail_under=70 + branch; strict markers (unit/integration/e2e/contract) + `--strict-markers`; e2e runs WITHOUT a skip-if-no-binaries guard — deliberately: the e2e suite mocks all system binaries at their seams (see `tests/e2e/conftest.py`), so a path-based guard would only skip 7 real tests on every CI container; fix `.env.example` wrinkle | M | S | — | Day 1 |
-| 5 | ✅ | S1 | Structural | Truth & dead-code purge (deletions 1–8, 11, 13, 14; `--dry-run` implemented; README truth; agent dirs removed; "log path → XDG state" deferred to P2 with the other path constants) | H | S | S0 | Day 1–2 |
-| 6 | ✅ | P2 | Process | Centralize path/state constants (`PathConfig`/`AppPaths` in `config.py`; replace literals `cli.py:34,208`, `db_logging.py:128`, `migration.py:28-33`, toggle; `get_audio_path` chokepoint stays the only path-construction site) | M | S | — | Day 2 | `85a3267` |
-| 7 | ✅ | P5 | Process | Fold `toggle_dictate.py` into package (`toggle.py` + console script `whisper-dictate-toggle` + stub `whisper-dictate toggle`; root file kept as deprecation shim one release then deleted; toggle state-machine tests) | H | M | P2 | Day 2–3 | `8ebc467` |
-| 8 | ✅ | S2 | Structural | Singletons removal: `app.py` composition root; per-command Database + `with_database` required; AudioStorage DI-ed; orphan scan explicit params; `load_dotenv` into `app.py` | H | M | S1 | Day 2–4 | `4b51915`+`ce09424`+`286bd60` |
-| 9 | ☐ | S4 | Structural | Toggle merge (P5 cut-over): `ToggleService` + `cli/commands/toggle.py`; delegation to `DictationService`; entry-point switch `setup_i3.sh:4` + `generate_run_script.sh:19`; delete root script + old tests; `conftest.py:23` removed | H | M-L | S1+S2, P5 | starts Day 2–3, lands after S2 |
-| 10 | ☐ | P12 | Process | ADR finalization: fix 0001/0002 refs to real files (`tests/conftest.py`, `whisper_dictate/dictation.py`), status Accepted, dates; new ADRs 0003 Provider ABC+factory, 0004 Centralized config after P2, 0005 pydub removal after P10, 0006 Distribution model after D1, 0007 Local provider after P14 | M | S | P2, P10-adjacent | Day 3 |
-| 11 | ☐ | P7 | Process | Typing gate core modules: mypy strict = true (py3.11), files = `whisper_dictate`; per-module overrides opt-out `cli.py` + `dunst_monitor.py` initially; `warn_unused_ignores`; CI job; ratchet policy (never loosens) | H | M | S2 | Day 4 |
-| 12 | ☐ | P8 | Process | pre-commit + ruff format (`.pre-commit-config.yaml` ruff lint + format + EOF/whitespace/yaml/toml/merge-conflict checks; decide ruff format repo-wide one commit; `.editorconfig`; optional dependabot) | M | S | — | Day 5 |
-| 13 | ☐ | P11 | Process | Resolve `tests/contract/` honestly (Option A recommended: move provider-contract tests into `tests/contract/test_openai_compatible.py`? — see §3.2/8 — actually: tests live in `tests/unit/test_provider_contract.py`; update spec 008; add contract marker; optional live-mode `@mark.contract-live` behind `WHISPER_DICTATE_LIVE_CONTRACT` skip-by-default; Option B: delete dir + amend spec) | M | S | — | Day 5 |
-| 14 | ☐ | S3 | Structural | God-module splits: Database → ConnectionManager/Repos/Migrations; `cli.py` → `cli/` package; `audio_storage` → `util/paths` + `storage/audio_storage` + `orphan_scan`; cycle fix | H | L | S2 | Week 2, Day 5–8 (after mypy locked) |
-| 15 | ☐ | P10 | Process | Remove pydub (golden behavior tests first — sample rate, frame counts, duration, silence-trim boundaries; replace w/ soundfile + ffmpeg subprocess where needed; remove dep; prove 3.13 import-clean; README/AGENTS tech line) | H | M | golden tests first (S0/P16) | Day 6 |
-| 16 | ☐ | P9 | Process | CI matrix 3.11/3.12/3.13 (astral-sh/setup-uv@v8+ enable-cache; `uv sync --frozen --extra dev`; pytest on matrix without `--cov`; separate coverage job on 3.12 w/ `check_coverage.py` + artefact; lint job ruff check + format check + mypy job; pip-audit step; drop pip-based lint) | H | M | P7, P10 (for 3.13) | Day 7 |
-| 17 | ☐ | P6 | Process | Exception audit + traceback logging (rotating file handler at `{state_dir}/logs/whisper-dictate.log`, XDG-state; `-v/--verbose` → DEBUG; categorize ~49 excepts; top-level = notify + `logger.exception()`; fault-injection tests) | H | M | — | Day 8 |
-| 18 | ☐ | S5 | Structural | Notifier wiring: optional `Notifier` into `DictationService`; dunst smoke tests default off | M | S | S1 + S3 | Day 8 |
-| 19 | ☐ | P13 | Process | Release pipeline: LICENSE MIT (owner = D1); CHANGELOG (Keep-a-Changelog backfill + Unreleased); tag==version CI assert; `release.yml` on push tags v* → `uv build` + `uvx twine check` + `uv publish --trusted-publishing always (PyPI OIDC); env: pypi + fork guard; optional test.pypi dry-run; README install split (pipx / uv tool vs from-source) | H | M-L | P1, P9, D1 (human) | Day 9 |
-| 20 | ☐ | S6 | Structural | Release freeze — no structural work; only P1 versioning + P13 pipeline | H | S | S0–S5, P1 | Day 9–10 |
-| 21 | ☐ | P16 | Process | Hypothesis property tests (seeds on Day 10; full suite in Tier C): audio_storage containment + roundtrip invariants; database concurrent append/read ordering + CRUD invariants; migration v1→v2 idempotency + backup non-destructive; config env-var strategies parse to valid models or clean errors | M-H | M-L | S0 | Day 10 seed → Tier C |
-| 22 | ☐ | P17 | Process | Fuzz/security review (quick subprocess/secret audit on Day 10 → `docs/security.md`; full corpus tests in Tier C): subprocess audit: arg-vectors no `shell=True`, timeouts, env scrubbed of secrets — provider key must NOT reach child env; malformed-input corpus (truncated wav, provider JSON wrong types/huge strings); pip-audit in CI; `docs/security.md` table of call sites | M | M-L | P6, P16 | Day 10 quick → Tier C |
-| 23 | ☐ | P14 | Process | Local whisper.cpp provider — **normalized**: `providers/whisper_cpp.py` subprocess `whisper-cli` or `pywhispercpp`; model storage XDG data; download documented, not bundled; contract tests via P11 live-mode; `provider = "whisper-cpp"` in config + README; offline + privacy | M-H | L | P7, P11, D5 | Buffer (see §7) — only if scope fits; otherwise Tier C |
-| 24 | ☐ | P15 | Process | Plugin discovery via `importlib.metadata` entry-points — **DEFERRED BY DESIGN** until a 3rd provider is actually wanted | M | L | P14 | Deferred |
-| 25 | ☐ | P18 | Process | Performance baselines (`scripts/bench.py`: cold-start `whisper-dictate --help` wall time ×N, record-path latency mock device, full roundtrip mock provider; `--durations=10` in pytest; `docs/perf.md` baseline committed) | M | M | — | Tier C |
-| 26 | ☐ | P19 | Process | Local metrics / stats (`whisper-dictate stats` subcommand: per-day count, avg/p95 latency per provider, error counts from existing SQLite; NO network telemetry ever; opt-in needs ADR + env default off) | L-M | M | P1 | Tier C |
-| 27 | ☐ | P20 | Process | i18n / multi-language UX / a11y / packaging eval (gettext pass on `notifications.py` + `cli.py` strings, stdlib gettext, `.pot` extraction; language/translate provider params wired through CLI + README; screen-reader flow doc; `spd-say` optional hook; packaging eval: CLI + system deps → flatpak poor fit → documented `uv tool install` as supported path) | M | L | P13 | Tier C |
+|---|---|---|---|---|---|---|---|---|
+| 1 | ☐ | S4 | Structural | Toggle merge (P5 cut-over): `ToggleService` + `cli/commands/toggle.py`; delegation to `DictationService`; entry-point switch `setup_i3.sh:4` + `generate_run_script.sh:19`; delete root script + old tests; `conftest.py:23` removed | H | M-L | S1+S2+P5 (done) | unblocked — lands now that S2 is done |
+| 2 | ☐ | P12 | Process | ADR finalization: fix 0001/0002 refs to real files (`tests/conftest.py`, `whisper_dictate/dictation.py`), status Accepted, dates; new ADRs 0003 Provider ABC+factory, 0004 Centralized config after P2, 0005 pydub removal after P10, 0006 Distribution model after D1, 0007 Local provider after P14 | M | S | P2 (done), P10-adjacent | Day 3 |
+| 3 | ☐ | P7 | Process | Typing gate core modules: mypy strict = true (py3.11), files = `whisper_dictate`; per-module overrides opt-out `cli.py` + `dunst_monitor.py` initially; `warn_unused_ignores`; CI job; ratchet policy (never loosens) | H | M | S2 (done) | Day 4 |
+| 4 | ☐ | P8 | Process | pre-commit + ruff format (`.pre-commit-config.yaml` ruff lint + format + EOF/whitespace/yaml/toml/merge-conflict checks; decide ruff format repo-wide one commit; `.editorconfig`; optional dependabot) | M | S | — | Day 5 |
+| 5 | ☐ | P11 | Process | Resolve `tests/contract/` honestly (Option A recommended: move provider-contract tests into `tests/contract/test_openai_compatible.py`? — see §3.2/8 — actually: tests live in `tests/unit/test_provider_contract.py`; update spec 008; add contract marker; optional live-mode `@mark.contract-live` behind `WHISPER_DICTATE_LIVE_CONTRACT` skip-by-default; Option B: delete dir + amend spec) | M | S | — | Day 5 |
+| 6 | ☐ | S3 | Structural | God-module splits: Database → ConnectionManager/Repos/Migrations; `cli.py` → `cli/` package; `audio_storage` → `util/paths` + `storage/audio_storage` + `orphan_scan` | H | L | S2 (done) | Week 2, Day 5–8 (after mypy locked) |
+| 7 | ☐ | P10 | Process | Remove pydub (golden behavior tests first — sample rate, frame counts, duration, silence-trim boundaries; replace w/ soundfile + ffmpeg subprocess where needed; remove dep; prove 3.13 import-clean; README/AGENTS tech line) | H | M | golden tests first (S0 done / P16) | Day 6 |
+| 8 | ☐ | P9 | Process | CI matrix 3.11/3.12/3.13 (astral-sh/setup-uv@v8+ enable-cache; `uv sync --frozen --extra dev`; pytest on matrix without `--cov`; separate coverage job on 3.12 w/ `check_coverage.py` + artefact; lint job ruff check + format check + mypy job; pip-audit step; drop pip-based lint) | H | M | P7, P10 (for 3.13) | Day 7 |
+| 9 | ☐ | P6 | Process | Exception audit + traceback logging (rotating file handler at `{state_dir}/logs/whisper-dictate.log`, XDG-state; `-v/--verbose` → DEBUG; categorize ~49 excepts; top-level = notify + `logger.exception()`; fault-injection tests) | H | M | — | Day 8 |
+| 10 | ☐ | S5 | Structural | Notifier wiring: optional `Notifier` into `DictationService`; dunst smoke tests default off | M | S | S1 (done) + S3 | Day 8 |
+| 11 | ☐ | P13 | Process | Release pipeline: LICENSE MIT (owner = D1); CHANGELOG (Keep-a-Changelog backfill + Unreleased); tag==version CI assert; `release.yml` on push tags v* → `uv build` + `uvx twine check` + `uv publish --trusted-publishing always (PyPI OIDC); env: pypi + fork guard; optional test.pypi dry-run; README install split (pipx / uv tool vs from-source) | H | M-L | P1 (done), P9, D1 (locked) | Day 9 |
+| 12 | ☐ | S6 | Structural | Release freeze — no structural work; only P1 versioning + P13 pipeline | H | S | S3–S5 (S0–S2, P1 done) | Day 9–10 |
+| 13 | ☐ | P16 | Process | Hypothesis property tests (seeds on Day 10; full suite in Tier C): audio_storage containment + roundtrip invariants; database concurrent append/read ordering + CRUD invariants; migration v1→v2 idempotency + backup non-destructive; config env-var strategies parse to valid models or clean errors | M-H | M-L | S0 (done) | Day 10 seed → Tier C |
+| 14 | ☐ | P17 | Process | Fuzz/security review (quick subprocess/secret audit on Day 10 → `docs/security.md`; full corpus tests in Tier C): subprocess audit: arg-vectors no `shell=True`, timeouts, env scrubbed of secrets — provider key must NOT reach child env; malformed-input corpus (truncated wav, provider JSON wrong types/huge strings); pip-audit in CI; `docs/security.md` table of call sites | M | M-L | P6, P16 | Day 10 quick → Tier C |
+| 15 | ☐ | P14 | Process | Local whisper.cpp provider — **normalized**: `providers/whisper_cpp.py` subprocess `whisper-cli` or `pywhispercpp`; model storage XDG data; download documented, not bundled; contract tests via P11 live-mode; `provider = "whisper-cpp"` in config + README; offline + privacy | M-H | L | P7, P11, D5 | Buffer (see §7) — only if scope fits; otherwise Tier C |
+| 16 | ☐ | P15 | Process | Plugin discovery via `importlib.metadata` entry-points — **DEFERRED BY DESIGN** until a 3rd provider is actually wanted | M | L | P14 | Deferred |
+| 17 | ☐ | P18 | Process | Performance baselines (`scripts/bench.py`: cold-start `whisper-dictate --help` wall time ×N, record-path latency mock device, full roundtrip mock provider; `--durations=10` in pytest; `docs/perf.md` baseline committed) | M | M | — | Tier C |
+| 18 | ☐ | P19 | Process | Local metrics / stats (`whisper-dictate stats` subcommand: per-day count, avg/p95 latency per provider, error counts from existing SQLite; NO network telemetry ever; opt-in needs ADR + env default off) | L-M | M | P1 (done) | Tier C |
+| 19 | ☐ | P20 | Process | i18n / multi-language UX / a11y / packaging eval (gettext pass on `notifications.py` + `cli.py` strings, stdlib gettext, `.pot` extraction; language/translate provider params wired through CLI + README; screen-reader flow doc; `spd-say` optional hook; packaging eval: CLI + system deps → flatpak poor fit → documented `uv tool install` as supported path) | M | L | P13 | Tier C |
 
 ---
 
-## 6. Short-term quick wins (Day 0–1)
+## 6. Short-term quick wins — landed
 
-Everything here is zero- or low-risk and pays back immediately; most are S0 + the first batch of S1.
-
-- **S0 characterization:** DB schema/transaction invariant tests (table list + rollback-on-error), storage path containment + atomicity tests (if absent), CLI snapshot harness (~12 snapshots: stdout/exit-code/DB-state for dictate, history, audio clean/cleanup, config, migrate, toggle = drift detector), formalize the fake-recorder/transcriber fixture.
-- **Delete the dead now (S1 items 1–8, 11):** PersistentNotification + helpers + global; DunstMonitor + getter; `setup_dual_logging`; `convert_and_keep/delete_wav`; `get_recording_path`; `AppConfig.log_level`; empty `tests/contract/`; `git rm -r .opencode/ .specify/ .memories/` (42 tracked files).
-- **Implement `--dry-run` for real** (S1 item 7): no DB writes / clipboard / notification; fix the inverted `actual_dry_run` and hardcoded calls; behavior tests.
-- **P1 versioning:** `__version__` + `--version` flag + hatchling dynamic version + version in failure messages + unit test.
-- **README truth restoration** (S1 item 13): phantom env vars and default drifts documented away; keep `get_audio_path` as the single path-construction site.
+Every quick win in this section (S0 characterization, the S1 dead-code purge incl. `--dry-run`, P1 versioning, README truth restoration) is deployed and pruned from this roadmap. Section numbering is retained so cross-references stay stable; the remaining plan continues in §7.
 
 ---
 
@@ -291,9 +257,9 @@ Structural phases (S0–S6) are interleaved with the process items (P1–P20) �
 
 ### Critical path & coupling
 
-- **Structural spine:** S0 → S1 → S2 → S3.
-- **Toggle spine:** S1 → S4.
-- **S2 and S4 are the only real coupling** — S4 (toggle merge) waits for S2 (singletons gone, composition root in place); S2 must be done **before mypy lands on Day 4** (P7 would otherwise type-check code that is about to change).
+- **Structural spine:** S0 → S1 → S2 are landed (composition root + per-command Database via `with_database` are in place); **S3** is the remaining split.
+- **Toggle spine:** S4 is the remaining cut-over — P5's package toggle + console script exist, and the root shim plus `conftest.py:23` sys.path hack await deletion.
+- **Remaining coupling:** land **P7 (mypy, Day 4) before the big S3 splits (Day 5–8)** so mypy does not type-check code that is about to move; S4 is unblocked (S2 done) and independent.
 
 ### Release-window rules (Day 9–10)
 
@@ -302,14 +268,12 @@ Structural phases (S0–S6) are interleaved with the process items (P1–P20) �
 - **Never** delete `toggle_dictate.py` before the scripts point at the new entry.
 - **Never** delete a test before its replacement is green.
 
-### Week 1 — truth, structure, typing
+### Week 1 — cut-over, ADRs, typing (remaining)
 
 | Day | Focus | Work | Gate |
 |---|---|---|---|
-| **1** | Truth restoration | **P3** (OpenSpec archive+sync, AGENTS, legacy specs stub); **P4** (markers, fail_under, .env); **P1** (versioning) + **S1** dead-code purge start (deletions first) | `openspec validate` green; pytest green with strict markers; `whisper-dictate --version` works; specs/ stub |
-| **2** | Single source of truth | **P2** constants centralization → **P5** toggle folding start (**S2** singletons removal also starts / composition root) | grep: no duplicated path literals; `whisper-dictate-toggle` installed + documented; toggle unit tests green |
-| **3** | Finish toggle + ADR pass | **P5** remainder; **S2** remainder; **P12** ADR fixes + 0003/0004 | fresh-env toggle works from i3 config; `docs/adr` references only existing files |
-| **4** | Type-checking foundation | **P7** mypy strict core (`cli.py` deferred explicit override) | `uv run mypy` clean; decisions **D1/D4 locked in writing** |
+| **3** | Toggle cut-over + ADR pass | **S4** toggle merge (root shim deletion + entry-point switch; unblocked — S2 done); **P12** ADR fixes + 0003/0004 | `whisper-dictate-toggle` wired in i3 config; `docs/adr` references only existing files |
+| **4** | Type-checking foundation | **P7** mypy strict core (`cli.py` deferred explicit override) | `uv run mypy` clean |
 | **5** | Hygiene | **P8** pre-commit + ruff format decision/landing; **P11** contracts move; **S3** starts (god-module splits can start once mypy locked) | End-Week-1 gate: full local suite + mypy + ruff green; one logic change per day |
 
 ### Week 2 — supply chain, CI, observability, release
@@ -376,9 +340,6 @@ Each phase lands **only when its gate passes.** Additionally, every phase lands 
 
 | Phase | Gate (pass = tick) |
 |---|---|
-| **S0** | ☐ `uv run pytest -q` green with new characterization/snapshot tests; snapshot baseline committed |
-| **S1** | ✅ `grep -rEn "PersistentNotification\|DunstMonitor\|setup_dual_logging\|convert_and_keep_wav\|convert_and_delete_wav\|get_recording_path\|\.log_level" whisper_dictate/` → 0 result; ✅ `git ls-files \| grep -E '\.opencode\|\.specify\|\.memories'` → 0; ✅ pytest + ruff green; ✅ `--dry-run` leaves DB unmodified |
-| **S2** | ✅ `grep -rn "_database\|_audio_storage" whisper_dictate/ tests/` → only benign substring families (`with_database`, `get_database_path`/`close_database`, `test_database_*`, `mock_audio_storage` locals) — these are name-collision families, **not** singleton state (genuine `self._database =` / `self._audio_storage =` / `global` hits: 0); ✅ `test_cli_database_close 46 green`; ✅ `python -c "import whisper_dictate.config"` changes no env vars — landed `4b51915`+`ce09424`+`286bd60` |
 | **S3** | ☐ no `src/**/*.py` ≥ 600 lines; ☐ import graph acyclic (`import-linter` in CI as a lint step; forbidden rule: storage → audio); ☐ per-module coverage gates ≥ current (P4 fail_under); ☐ CLI snapshot diffs = empty |
 | **S4** | ☐ `whisper-dictate toggle --help` exits 0; ☐ `setup_i3.sh` + `generate_run_script.sh` produce valid entries; ☐ root `toggle_dictate.py` absent; ☐ `conftest.py:23` absent; ☐ toggle integration green; ☐ `grep ".execute("` outside `storage/` → 0 |
 | **S5** | ☐ notifications enabled smoke → dunst message; ☐ default → no message; ☐ full suite green |
@@ -394,8 +355,6 @@ The release is done when **all** of the following hold:
 - ☐ `whisper-dictate --version` works and all installed console scripts (incl. `whisper-dictate-toggle`) run from a fresh `uv tool install`.
 - ☐ CI green on 3.11/3.12/3.13: lint, format, mypy core-strict, full tests, coverage gate, pip-audit.
 - ☐ No pydub in the dep tree.
-- ☐ No duplicate path constants (grep clean, P2).
-- ☐ No empty `tests/contract/`; no stale `specs/`; AGENTS truthful (P3).
 - ☐ Fault injection produces a traceback in `{state_dir}/logs/` **and** a useful dunst notification (P6).
 - ☐ `docs/adr` all Accepted, referencing only existing files (P12).
 - ☐ LICENSE + CHANGELOG + tag-publishing workflow live (P13, D1).
