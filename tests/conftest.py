@@ -501,3 +501,33 @@ def legacy_db_path(tmp_path):
     finally:
         conn.close()
     return db_path
+
+
+# ============ Formalized fakes (implementations live in tests/fakes.py) ============
+
+
+@pytest.fixture
+def fake_recorder(tmp_path):
+    """Deterministic recorder fake writing minimal WAVs under tmp_path/fake-audio.
+
+    Drop-in replacement for the AudioRecorder seam of DictationService:
+    record_to_file() produces a real (minimal) WAV file at a stable path and
+    every call is recorded for assertions. See tests/fakes.py.
+    """
+    from tests.fakes import FakeRecorder
+
+    return FakeRecorder(tmp_path / "fake-audio")
+
+
+@pytest.fixture
+def fake_provider():
+    """Deterministic transcription provider fake with a default scripted result.
+
+    Drop-in replacement for the TranscriptionProvider seam: returns scripted
+    TranscriptionResults in order and records every call (path + kwargs).
+    Pass ``fake_provider.results = [...]`` / ``fake_provider.error = ...`` to
+    script success or failure sequences. See tests/fakes.py.
+    """
+    from tests.fakes import FakeTranscriptionProvider
+
+    return FakeTranscriptionProvider()

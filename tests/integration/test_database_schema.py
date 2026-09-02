@@ -121,6 +121,33 @@ class TestSchemaCreation:
         )
         assert version == (CURRENT_SCHEMA_VERSION,)
 
+    def test_schema_versions_table_columns(self, real_db):
+        """schema_versions tracks applied migrations: (id, version, applied_at)
+        with a UNIQUE constraint on version.
+
+        Characterization for the S2-S3 persistence refactors: reshaping this
+        table (column renames, dropped applied_at, lost UNIQUE) would
+        silently break _get_schema_version() and every future migration
+        step, and nothing else in the suite pins its shape.
+        """
+        info = real_db.fetchall("PRAGMA table_info(schema_versions)")
+        columns = [row[1] for row in info]
+        assert columns == ["id", "version", "applied_at"]
+        # id is the primary key; version is a plain (non-PK) integer column
+        pk_columns = [row[1] for row in info if row[5]]
+        assert pk_columns == ["id"]
+
+        # The UNIQUE constraint on version yields exactly one auto index
+        unique_indexes = [
+            row for row in real_db.fetchall("PRAGMA index_list(schema_versions)") if row[2]
+        ]
+        assert len(unique_indexes) == 1
+        index_columns = [
+            row[2]
+            for row in real_db.fetchall(f"PRAGMA index_info('{unique_indexes[0][1]}')")
+        ]
+        assert index_columns == ["version"]
+
     def test_recordings_table_columns(self, real_db):
         """recordings has 8 columns and no updated_at column."""
         columns = [row[1] for row in real_db.fetchall("PRAGMA table_info(recordings)")]

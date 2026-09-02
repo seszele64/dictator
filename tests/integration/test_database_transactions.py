@@ -36,6 +36,33 @@ class TestTransactions:
         )
         assert row is None
 
+    def test_transaction_rolls_back_on_sql_failure_midway(self, real_db):
+        """A SQL error on the 2nd statement rolls back the 1st statement's work.
+
+        Characterization for the S2 singleton-removal / S3 god-module-split
+        refactors: Database.transaction() must keep its BEGIN IMMEDIATE +
+        ROLLBACK semantics no matter how the failure surfaces - not only for
+        Python exceptions raised by the caller (covered above) but also for
+        raw sqlite3 errors raised mid-transaction. Claim-first audio saves
+        (dictation._save_audio_claim_first) depend on exactly this behavior.
+        """
+        with pytest.raises(sqlite3.IntegrityError), real_db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO recordings (file_path) VALUES (?)", ("first.wav",)
+            )
+            # 2nd statement violates the FK constraint: recordings row
+            # 999999 can never exist, so this INSERT always fails.
+            conn.execute(
+                "INSERT INTO transcripts (recording_id, text) VALUES (999999, 'orphan')"
+            )
+        # The 1st statement's insert must have been rolled back as well
+        assert (
+            real_db.fetchone(
+                "SELECT id FROM recordings WHERE file_path = ?", ("first.wav",)
+            )
+            is None
+        )
+
     def test_transaction_rollback_re_raises_exception(self, real_db):
         """The exception that triggered the rollback is re-raised."""
         with pytest.raises(ValueError, match="test"), real_db.transaction() as conn:
