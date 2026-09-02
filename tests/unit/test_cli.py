@@ -119,6 +119,68 @@ class TestDictateKeylessLocal:
         )
 
 
+class TestDictateAndInfoCloseService:
+    """S2: each command owns its DictationService and must close it on exit.
+
+    dictate/info register ``ctx.call_on_close(service.close)``. If that
+    wiring regresses, the SQLite connection stays open and later commands
+    hang - the same failure mode the history/logs suites pin. These tests
+    pin the close contract for the two DictationService-owning commands
+    across success, failure, and interrupt paths.
+    """
+
+    def test_dictate_closes_service_on_success(
+        self, cli_runner, real_load_config, clean_provider_env
+    ):
+        """A completed dictate run must close the service (and its DB)."""
+        with patch("whisper_dictate.cli.DictationService") as mock_service_cls:
+            mock_service = mock_service_cls.return_value
+            mock_result = mock_service.dictate.return_value
+            mock_result.text = "hello from local"
+            mock_result.language = "en"
+
+            result = cli_runner.invoke(cli, ["dictate"])
+
+            assert result.exit_code == 0, result.output
+            mock_service.close.assert_called_once()
+
+    def test_dictate_closes_service_on_failure(self, cli_runner, real_load_config, clean_provider_env):
+        """A failed dictate run (no result) must still close the service."""
+        with patch("whisper_dictate.cli.DictationService") as mock_service_cls:
+            mock_service_cls.return_value.dictate.return_value = None
+
+            result = cli_runner.invoke(cli, ["dictate"])
+
+            assert result.exit_code == 1
+            mock_service_cls.return_value.close.assert_called_once()
+
+    def test_dictate_closes_service_on_keyboard_interrupt(
+        self, cli_runner, real_load_config, clean_provider_env
+    ):
+        """Ctrl+C mid-recording must still close the service - not leak it."""
+        with patch("whisper_dictate.cli.DictationService") as mock_service_cls:
+            mock_service_cls.return_value.dictate.side_effect = KeyboardInterrupt
+
+            result = cli_runner.invoke(cli, ["dictate"])
+
+            assert result.exit_code == 0, result.output
+            mock_service_cls.return_value.close.assert_called_once()
+
+    def test_info_closes_service(self, cli_runner, real_load_config, clean_provider_env):
+        """The info command must close its service too."""
+        with patch("whisper_dictate.cli.DictationService") as mock_service_cls:
+            mock_service_cls.return_value.get_system_info.return_value = {
+                "audio_devices": ["default"],
+                "clipboard_tools": ["xclip"],
+                "config": {"copy_to_clipboard": True},
+            }
+
+            result = cli_runner.invoke(cli, ["info"])
+
+            assert result.exit_code == 0, result.output
+            mock_service_cls.return_value.close.assert_called_once()
+
+
 class TestToggleStubCommand:
     """P5: the `whisper-dictate toggle` stub command forwards to the package
     toggle module (the same implementation as the whisper-dictate-toggle

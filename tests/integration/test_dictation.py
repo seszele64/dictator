@@ -306,6 +306,32 @@ class TestDictationService:
             call_args = mock_db.create_transcript.call_args
             assert call_args.kwargs["recording_id"] == 42
 
+    def test_context_exit_closes_created_database(self, mock_config):
+        """S2: leaving the service context closes the lazily created Database.
+
+        The service must close the Database it created (and reset its
+        reference) so a long-lived process never leaks the connection.
+        """
+        mock_db = MagicMock()
+        mock_db.path = Path("/tmp/test.db")
+        mock_db.initialize = Mock()
+        mock_db.connection = Mock()
+        mock_db.close = Mock()
+
+        with (
+            patch("whisper_dictate.dictation.Database", return_value=mock_db),
+            patch("whisper_dictate.dictation.AudioStorage"),
+            DictationService(mock_config) as service,
+        ):
+            # Force lazy creation, mirroring the dictate() workflow
+            assert service.database is mock_db
+            mock_db.initialize.assert_called_once()
+            mock_db.close.assert_not_called()
+
+        # Leaving the context closes the database and forgets the reference
+        mock_db.close.assert_called_once()
+        assert service._db is None
+
 
 class TestDictationServiceMP3Integration:
     """Integration tests for MP3 transcription flow.
