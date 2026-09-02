@@ -9,7 +9,7 @@ from whisper_dictate.audio_converter import AudioConverter
 from whisper_dictate.audio_storage import AudioStorage, StagedAudio, get_audio_storage
 from whisper_dictate.clipboard import ClipboardManager
 from whisper_dictate.config import AppConfig
-from whisper_dictate.database import Database, get_database
+from whisper_dictate.database import Database
 from whisper_dictate.transcription import (
     TranscriptionResult,
     create_transcriber,
@@ -60,8 +60,9 @@ class DictationService:
             Database: Initialized database instance
         """
         if self._db is None:
-            # Use the user-configured database settings, never defaults
-            self._db = get_database(self.config.database)
+            # Construct a dedicated database for this service instance from
+            # the user-configured settings, never module-level defaults
+            self._db = Database(self.config.database)
             # Initialize database connection
             self._db.initialize()
         return self._db

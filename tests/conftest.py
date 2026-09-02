@@ -155,19 +155,20 @@ atexit.register(_cleanup_sounddevice)
 
 @pytest.fixture(autouse=True)
 def reset_persistence_singletons():
-    """Reset the once-only database/audio-storage singletons around each test.
+    """Reset the once-only audio-storage singleton around each test.
 
-    The CLI initializes these singletons with the loaded configuration on first
-    use. Without a reset, one test's configuration (or a Mock) leaks into every
-    later test that touches the singleton.
+    The CLI initializes this singleton with the loaded configuration on first
+    use. Without a reset, one test's configuration (or a Mock) leaks into
+    every later test that touches the singleton.
+
+    (The Database singleton was removed in S2 - Database instances are now
+    constructed per command/service - so only audio storage still needs this.
+    It is scheduled for deletion in the same phase.)
     """
     import whisper_dictate.audio_storage as audio_storage_module
-    import whisper_dictate.database as database_module
 
-    database_module.close_database()
     audio_storage_module._audio_storage = None
     yield
-    database_module.close_database()
     audio_storage_module._audio_storage = None
 
 

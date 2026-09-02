@@ -48,8 +48,8 @@ class TestWithDatabaseInitializes:
             # Command just succeeds
             ctx.exit(0)
 
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_database
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_database
 
             runner = CliRunner()
             runner.invoke(test_command)
@@ -60,7 +60,7 @@ class TestWithDatabaseInitializes:
             )
 
     def test_with_database_gets_database_instance(self, mock_database):
-        """Verify decorator gets database instance from get_database()."""
+        """Verify decorator constructs a Database instance."""
 
         @click.command()
         @with_database
@@ -68,14 +68,14 @@ class TestWithDatabaseInitializes:
         def test_command(ctx):
             ctx.exit(0)
 
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_database
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_database
 
             runner = CliRunner()
             runner.invoke(test_command)
 
-            # Verify get_database was called with a DatabaseConfig
-            mock_get_db.assert_called_once()
+            # Verify Database was constructed once
+            mock_database_cls.assert_called_once()
 
 
 class TestWithDatabaseCloses:
@@ -90,8 +90,8 @@ class TestWithDatabaseCloses:
         def test_command(ctx):
             ctx.exit(0)
 
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_database
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_database
 
             runner = CliRunner()
             runner.invoke(test_command)
@@ -110,8 +110,8 @@ class TestWithDatabaseCloses:
         def test_command(ctx):
             raise ValueError("Test exception")
 
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_database
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_database
 
             runner = CliRunner()
             runner.invoke(test_command)
@@ -131,8 +131,8 @@ class TestWithDatabaseCloses:
             # Use Click's.Abort to simulate user cancellation
             raise click.Abort()
 
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_database
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_database
 
             runner = CliRunner()
             runner.invoke(test_command)
@@ -166,8 +166,8 @@ class TestWithDatabaseContext:
             stored_db.append(ctx.obj.get("db"))
             ctx.exit(0)
 
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_database
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_database
 
             runner = CliRunner()
             runner.invoke(parent_group, ["test"])
@@ -190,8 +190,8 @@ class TestWithDatabaseContext:
             # Verify db is already in context at this point
             assert "db" in ctx.obj
 
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_database
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_database
 
             runner = CliRunner()
             runner.invoke(test_command)
@@ -253,8 +253,8 @@ class TestWithDatabaseEdgeCases:
         def test_command(ctx):
             ctx.exit(0)
 
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_database
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_database
 
             runner = CliRunner()
             runner.invoke(test_command)
@@ -271,8 +271,8 @@ class TestWithDatabaseEdgeCases:
         def test_command(ctx):
             raise RuntimeError("Test error")
 
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_database
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_database
 
             runner = CliRunner()
             runner.invoke(test_command)
@@ -305,8 +305,8 @@ class TestWithDatabaseEdgeCases:
         def test_command(ctx):
             ctx.exit(0)
 
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_database
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_database
 
             runner = CliRunner()
             runner.invoke(test_command)
@@ -331,8 +331,8 @@ class TestWithDatabaseSyncMethods:
         def test_command(ctx):
             ctx.exit(0)
 
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_database
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_database
 
             runner = CliRunner()
             runner.invoke(test_command)
@@ -349,8 +349,8 @@ class TestWithDatabaseSyncMethods:
         def test_command(ctx):
             ctx.exit(0)
 
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_database
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_database
 
             runner = CliRunner()
             runner.invoke(test_command)

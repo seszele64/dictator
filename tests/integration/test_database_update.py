@@ -149,8 +149,8 @@ class TestHistoryUpdateCLI:
         mock_db.close = Mock()
 
         # Patch at database module level where the decorator imports from
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_db
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_db
 
             # Simulate user confirming with 'y'
             result = cli_runner.invoke(
@@ -182,8 +182,8 @@ class TestHistoryUpdateCLI:
         mock_db.close = Mock()
 
         # Patch at database module level
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_db
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_db
 
             # Simulate user cancelling with 'n'
             result = cli_runner.invoke(
@@ -204,8 +204,8 @@ class TestHistoryUpdateCLI:
         mock_db.close = Mock()
 
         # Patch at database module level
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_db
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_db
 
             result = cli_runner.invoke(
                 cli, ["history", "update", "999", "--text", "Updated text"]
@@ -235,8 +235,8 @@ class TestHistoryUpdateCLI:
         mock_db.close = Mock()
 
         # Patch at database module level
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_db
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_db
 
             result = cli_runner.invoke(
                 cli,
@@ -268,8 +268,8 @@ class TestHistoryUpdateCLI:
         mock_db.close = Mock()
 
         # Patch at database module level
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_db
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_db
 
             result = cli_runner.invoke(cli, ["history", "update", "1"])
 
@@ -297,8 +297,8 @@ class TestHistoryUpdateCLI:
         mock_db.close = Mock()
 
         # Patch at database module level
-        with patch("whisper_dictate.cli_helpers.get_database") as mock_get_db:
-            mock_get_db.return_value = mock_db
+        with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
+            mock_database_cls.return_value = mock_db
 
             result = cli_runner.invoke(
                 cli, ["history", "update", "1", "--text", "New text"], input="y\n"

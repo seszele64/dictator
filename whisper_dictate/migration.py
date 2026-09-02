@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from whisper_dictate.config import AppPaths, DatabaseConfig
-from whisper_dictate.database import get_database
+from whisper_dictate.database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -56,14 +56,24 @@ class MigrationManager:
     - DOES NOT: Handle database schema creation or other migrations
     """
 
-    def __init__(self, db_config: DatabaseConfig | None = None):
+    def __init__(
+        self,
+        db: Database | None = None,
+        db_config: DatabaseConfig | None = None,
+    ):
         """Initialize migration manager.
 
         Args:
-            db_config: Optional database configuration (uses default if not provided)
+            db: Database instance to operate on. Constructed by the caller
+                (the CLI migrate command) from the loaded config so the
+                user's configured database path is honored. When None, a
+                Database is constructed here from db_config (or defaults).
+            db_config: Database configuration used only when db is None
+                (standalone callers). Defaults to DatabaseConfig().
         """
-        self._db_config = db_config or DatabaseConfig()
-        self._db = get_database(self._db_config)
+        if db is None:
+            db = Database(db_config or DatabaseConfig())
+        self._db = db
         self._backup_dir = BACKUP_DIR
         self._migration_log: list[dict[str, Any]] = []
 
@@ -467,13 +477,19 @@ class MigrationManager:
         self._db.close()
 
 
-def run_migration(force: bool = False) -> dict[str, Any]:
+def run_migration(
+    force: bool = False,
+    db: Database | None = None,
+    db_config: DatabaseConfig | None = None,
+) -> dict[str, Any]:
     """Run state migration.
 
     This is a convenience function for CLI usage.
 
     Args:
         force: If True, force re-migration even if already completed
+        db: Database instance to operate on (constructed from db_config when None)
+        db_config: Database configuration used only when db is None
 
     Returns:
         dict: Migration result
@@ -481,7 +497,7 @@ def run_migration(force: bool = False) -> dict[str, Any]:
     Raises:
         MigrationError: If migration fails
     """
-    manager = MigrationManager()
+    manager = MigrationManager(db=db, db_config=db_config)
     try:
         manager.initialize()
         return manager.run_migration(force=force)
@@ -489,13 +505,20 @@ def run_migration(force: bool = False) -> dict[str, Any]:
         manager.close()
 
 
-def check_migration_status() -> dict[str, Any]:
+def check_migration_status(
+    db: Database | None = None,
+    db_config: DatabaseConfig | None = None,
+) -> dict[str, Any]:
     """Check migration status.
+
+    Args:
+        db: Database instance to operate on (constructed from db_config when None)
+        db_config: Database configuration used only when db is None
 
     Returns:
         dict: Status information including whether migration is needed
     """
-    manager = MigrationManager()
+    manager = MigrationManager(db=db, db_config=db_config)
     try:
         manager.initialize()
 

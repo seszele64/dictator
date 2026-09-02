@@ -7,9 +7,10 @@ SQLite file.
 
 import logging
 import sys
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
-from whisper_dictate.config import DatabaseConfig
+import pytest
+
 from whisper_dictate.db_logging import DatabaseLogHandler
 
 
@@ -41,25 +42,25 @@ class TestDatabaseLogHandlerInit:
     """Tests for DatabaseLogHandler.__init__."""
 
     def test_init_defaults(self):
-        handler = DatabaseLogHandler()
-        assert handler._database is None
-        assert handler._config is None
+        mock_db = Mock()
+        handler = DatabaseLogHandler(database=mock_db)
+        assert handler._db is mock_db
         assert handler._source_prefix == "whisper_dictate"
         assert handler._initialized is False
 
     def test_init_with_database(self):
         mock_db = Mock()
         handler = DatabaseLogHandler(database=mock_db)
-        assert handler._database is mock_db
+        assert handler._db is mock_db
 
-    def test_init_with_config(self):
-        config = DatabaseConfig()
-        handler = DatabaseLogHandler(config=config)
-        assert handler._config is config
-        assert handler._database is None
+    def test_init_requires_database(self):
+        """DatabaseLogHandler now requires a Database instance: no silent
+        default-config fallback exists anymore."""
+        with pytest.raises(TypeError):
+            DatabaseLogHandler()
 
     def test_init_with_source_prefix(self):
-        handler = DatabaseLogHandler(source_prefix="myapp")
+        handler = DatabaseLogHandler(database=Mock(), source_prefix="myapp")
         assert handler._source_prefix == "myapp"
 
 
@@ -133,12 +134,15 @@ class TestClose:
         handler = DatabaseLogHandler(database=database)
         handler.close()
         database.close.assert_called_once()
-        assert handler._database is None
+        assert handler._db is None
         assert handler._initialized is False
 
-    def test_close_with_no_database(self):
-        handler = DatabaseLogHandler()
-        handler.close()  # must not raise
+    def test_close_then_emit_does_not_raise(self):
+        """After close() the handler has no database left; a later emit must
+        not raise (the failure is swallowed like any other db error)."""
+        handler = DatabaseLogHandler(database=Mock())
+        handler.close()
+        handler.emit(_make_record())  # must not raise
 
     def test_close_then_emit_reinitializes(self, database):
         handler = DatabaseLogHandler(database=database)
@@ -146,9 +150,8 @@ class TestClose:
         handler.close()
 
         fresh_db = Mock()
-        with patch("whisper_dictate.db_logging.get_database", return_value=fresh_db) as mock_get_database:
-            handler.emit(_make_record())
+        handler._db = fresh_db
+        handler.emit(_make_record())
 
-        mock_get_database.assert_called_once()
         fresh_db.initialize.assert_called_once()
         fresh_db.create_log.assert_called_once()

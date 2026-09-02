@@ -17,7 +17,7 @@ from whisper_dictate.app import bootstrap
 from whisper_dictate.audio_storage import get_audio_storage
 from whisper_dictate.clipboard import ClipboardManager
 from whisper_dictate.config import AppPaths
-from whisper_dictate.database import get_database
+from whisper_dictate.database import Database
 from whisper_dictate.dunst_monitor import ensure_dunst_running
 from whisper_dictate.notifications import (
     notify_error,
@@ -100,7 +100,7 @@ def get_db_and_storage(config=None):
         # storage paths); honors the user's configured database paths.
         config = bootstrap()
     db_config = config.database
-    db = get_database(db_config)
+    db = Database(db_config)
     db.initialize()
     audio_storage = get_audio_storage(db_config)
     return db, audio_storage

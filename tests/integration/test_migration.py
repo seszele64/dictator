@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
+from whisper_dictate.database import Database
 from whisper_dictate.migration import (
     MIGRATION_COMPLETED,
     MIGRATION_FAILED,
@@ -20,7 +21,7 @@ from whisper_dictate.migration import (
 
 
 @pytest.fixture
-def migration_manager(real_db_config, db_singleton_reset, tmp_path, monkeypatch):
+def migration_manager(real_db_config, tmp_path, monkeypatch):
     """Create a real MigrationManager backed by a temp SQLite DB and temp files."""
     state = tmp_path / "state"
     pid = tmp_path / "pid"
@@ -30,7 +31,10 @@ def migration_manager(real_db_config, db_singleton_reset, tmp_path, monkeypatch)
     monkeypatch.setattr("whisper_dictate.migration.LEGACY_PID_FILE", pid)
     monkeypatch.setattr("whisper_dictate.migration.LEGACY_AUDIO_FILE", audio)
     monkeypatch.setattr("whisper_dictate.migration.BACKUP_DIR", backup)
-    manager = MigrationManager(db_config=real_db_config)
+    # Per-instance Database (no singleton): the manager owns this one, and
+    # tests needing check_migration_status() pass the same instance via db=.
+    db = Database(real_db_config)
+    manager = MigrationManager(db=db)
     manager.initialize()
     yield manager
     manager.close()
@@ -159,7 +163,7 @@ class TestCheckMigrationStatusReal:
     """Integration tests for check_migration_status() with a real database."""
 
     def test_status_no_files_real(self, migration_manager):
-        result = check_migration_status()
+        result = check_migration_status(db=migration_manager._db)
         assert result["migration_needed"] is False
         assert result["has_legacy_files"] is False
         assert result["migration_completed"] is False
@@ -168,7 +172,7 @@ class TestCheckMigrationStatusReal:
         (tmp_path / "state").write_text("recording")
         (tmp_path / "pid").write_text("12345")
 
-        result = check_migration_status()
+        result = check_migration_status(db=migration_manager._db)
 
         assert result["migration_needed"] is True
         assert result["has_legacy_files"] is True
@@ -179,7 +183,7 @@ class TestCheckMigrationStatusReal:
         (tmp_path / "pid").write_text("12345")
 
         migration_manager.run_migration()
-        result = check_migration_status()
+        result = check_migration_status(db=migration_manager._db)
 
         assert result["migration_needed"] is False
         assert result["migration_completed"] is True

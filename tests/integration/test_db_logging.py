@@ -120,28 +120,44 @@ class TestDatabaseLogHandlerLifecycleReal:
         assert rows[0][1] == "first message"
         assert rows[1][1] == "second message"
 
-    def test_handler_with_config_uses_singleton(self, real_db_config, db_singleton_reset):
-        from whisper_dictate.database import get_database
-
-        handler = DatabaseLogHandler(config=real_db_config)
+    def test_handler_with_database_writes_rows(self, real_db, real_db_config):
+        handler = DatabaseLogHandler(database=real_db)
         handler.emit(_make_record(logging.INFO, "singleton message"))
 
-        db = get_database(real_db_config)
-        assert handler._database is db
-        rows = _query_logs(db)
+        rows = _query_logs(real_db)
+        assert handler._db is real_db
         assert len(rows) == 1
         assert rows[0][1] == "singleton message"
 
-    def test_multiple_handlers_share_singleton(self, real_db_config, db_singleton_reset):
-        from whisper_dictate.database import get_database
+    def test_multiple_handlers_each_own_their_database(
+        self, real_db_config, tmp_path
+    ):
+        """Per-invocation instances: two handlers constructed with separate
+        Database instances write through their own connections to their own
+        files."""
+        from whisper_dictate.config import DatabaseConfig
+        from whisper_dictate.database import Database
 
-        handler1 = DatabaseLogHandler(config=real_db_config)
-        handler2 = DatabaseLogHandler(config=real_db_config)
+        db1 = Database(real_db_config)
+        db2 = Database(
+            DatabaseConfig(
+                path=tmp_path / "other.db",
+                recordings_path=real_db_config.recordings_path,
+            )
+        )
+        handler1 = DatabaseLogHandler(database=db1)
+        handler2 = DatabaseLogHandler(database=db2)
         handler1.emit(_make_record(logging.INFO, "from handler1"))
         handler2.emit(_make_record(logging.INFO, "from handler2"))
 
-        db = get_database(real_db_config)
-        assert handler1._database is handler2._database
-        assert handler1._database is db
-        rows = _query_logs(db)
-        assert len(rows) == 2
+        assert handler1._db is not handler2._db
+        assert real_db_config.get_database_path().exists()
+        assert (tmp_path / "other.db").exists()
+        rows1 = _query_logs(db1)
+        assert len(rows1) == 1
+        assert rows1[0][1] == "from handler1"
+        rows2 = _query_logs(db2)
+        assert len(rows2) == 1
+        assert rows2[0][1] == "from handler2"
+        db1.close()
+        db2.close()

@@ -7,7 +7,7 @@ import sqlite3
 
 import pytest
 
-from whisper_dictate.database import Database, close_database, get_database, initialize_database
+from whisper_dictate.database import Database
 
 
 class TestTransactions:
@@ -158,7 +158,7 @@ class TestForeignKeyCascade:
 
 
 class TestConnectionLifecycle:
-    """Tests for connection management and the module-level singleton."""
+    """Tests for connection management on per-instance Database objects."""
 
     def test_connection_property_yields_valid_connection(self, real_db):
         """The connection() context manager yields a usable connection."""
@@ -169,27 +169,12 @@ class TestConnectionLifecycle:
         """db.path matches the configured database path."""
         assert real_db.path == real_db_config.get_database_path()
 
-    def test_singleton_get_database(self, real_db_config, db_singleton_reset):
-        """get_database() returns the same instance on repeated calls."""
-        first = get_database(real_db_config)
-        second = get_database(real_db_config)
-        assert isinstance(first, Database)
-        assert first is second
-
-    def test_singleton_close_database(self, real_db_config, db_singleton_reset):
-        """close_database() closes the singleton and resets it to None."""
-        import whisper_dictate.database as db_mod
-
-        db = initialize_database(real_db_config)
-        assert db.path.exists()
-        assert db_mod._database is db
-
-        close_database()
-        assert db_mod._database is None
-        # A subsequent get_database() returns a fresh instance
-        assert get_database(real_db_config) is not db
-
-    def test_singleton_close_database_idempotent(self, db_singleton_reset):
-        """close_database() does not error when the singleton is already None."""
-        close_database()
-        close_database()
+    def test_separate_instances_have_separate_connections(self, real_db_config):
+        """Two Database instances never share connection state."""
+        first = Database(real_db_config)
+        second = Database(real_db_config)
+        first.initialize()
+        second.initialize()
+        assert first._connection is not second._connection
+        first.close()
+        second.close()

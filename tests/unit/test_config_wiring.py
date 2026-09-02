@@ -107,7 +107,7 @@ class TestConfiguredLogRetention:
         with (
             patch("whisper_dictate.cli.bootstrap", return_value=custom_config),
             patch("whisper_dictate.cli.setup_logging", return_value=None),
-            patch("whisper_dictate.cli_helpers.get_database", return_value=db),
+            patch("whisper_dictate.cli_helpers.Database", return_value=db),
         ):
             result = cli_runner.invoke(cli, ["logs", "cleanup"])
 

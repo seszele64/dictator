@@ -92,6 +92,20 @@ class Database:
         """
         return self._db_path
 
+    @property
+    def config(self) -> DatabaseConfig:
+        """Get the configuration this instance was constructed with.
+
+        WHY a public accessor: callers that receive a Database instance (the
+        composition root's per-command construction) sometimes need sibling
+        settings from the same config (e.g. log_retention_days for the
+        database log handler) without passing the config object around twice.
+
+        Returns:
+            DatabaseConfig: The configuration given to __init__.
+        """
+        return self._config
+
     def initialize(self) -> None:
         """Initialize the database (idempotent).
 
@@ -574,43 +588,6 @@ class Database:
                 ],
             )
         return None
-
-    def get_recording_with_audio_path(
-        self, recording_id: int, verify_exists: bool = False
-    ) -> dict[str, Any] | None:
-        """Get a recording by ID with resolved absolute audio path.
-
-        Args:
-            recording_id: Recording ID
-            verify_exists: If True, verify the audio file exists on filesystem
-
-        Returns:
-            Optional[dict]: Recording data with absolute_path field, or None
-
-        Raises:
-            FileNotFoundError: If verify_exists is True and file doesn't exist
-        """
-        from whisper_dictate.audio_storage import (
-            NoAudioFileError,
-            UnsafeAudioPathError,
-            get_audio_storage,
-        )
-
-        recording = self.get_recording(recording_id)
-        if recording:
-            audio_storage = get_audio_storage(self._config)
-            try:
-                absolute_path = audio_storage.get_audio_path(
-                    recording["file_path"], verify_exists=verify_exists
-                )
-            except NoAudioFileError:
-                recording["absolute_path"] = None
-            except UnsafeAudioPathError as e:
-                logger.warning(f"Recording {recording_id} has an unsafe stored path: {e}")
-                recording["absolute_path"] = None
-            else:
-                recording["absolute_path"] = str(absolute_path)
-        return recording
 
     def list_recordings(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
         """List recordings with pagination.
@@ -1095,54 +1072,3 @@ class Database:
             dict: Row as dictionary
         """
         return dict(zip(columns, row, strict=True))
-
-
-# Global database instance
-_database: Database | None = None
-
-
-def get_database(config: DatabaseConfig | None = None) -> Database:
-    """Get or create the global database instance.
-
-    Args:
-        config: Optional database configuration
-
-    Returns:
-        Database: Database instance
-    """
-    global _database
-
-    if _database is None:
-        if config is None:
-            config = DatabaseConfig()
-        _database = Database(config)
-
-    return _database
-
-
-def initialize_database(config: DatabaseConfig | None = None) -> Database:
-    """Initialize the database.
-
-    Args:
-        config: Optional database configuration
-
-    Returns:
-        Database: Initialized database instance
-    """
-    db = get_database(config)
-    db.initialize()
-    return db
-
-
-def close_database() -> None:
-    """Close the global database connection.
-
-    This should be called during application shutdown to ensure
-    all database connections are properly closed.
-    """
-    global _database
-
-    if _database is not None:
-        _database.close()
-        _database = None
-        logger.debug("Global database connection closed")

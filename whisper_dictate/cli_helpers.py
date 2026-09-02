@@ -1,20 +1,33 @@
 """Helper functions and decorators for CLI commands."""
 
+import functools
+
 import click
 
 from whisper_dictate.config import DatabaseConfig
-from whisper_dictate.database import get_database
+from whisper_dictate.database import Database
 
 
 def with_database(f):
-    """Decorator that handles database initialization and cleanup.
+    """Decorator that provides a fresh, per-invocation Database instance.
 
-    Uses the database configuration loaded by the CLI group callback so that
-    user-configured database paths and settings are honored instead of
-    silently falling back to defaults.
+    Constructs a new Database from the configuration loaded by the CLI group
+    callback (so user-configured database paths and settings are honored),
+    initializes it, stashes it in ``ctx.obj["db"]``, and closes it when the
+    command returns - on success or on any exception.
+
+    WHY a fresh instance per invocation instead of a module-level singleton:
+    a shared global couples every command to hidden mutable state, leaks its
+    configuration to whatever calls it first, and made close-on-exit
+    asymmetric (``close()`` vs ``close_database()``). A per-invocation
+    instance has exactly one owner: this decorator.
+
+    Patch seam for tests: patch ``whisper_dictate.cli_helpers.Database`` (the
+    constructor used inside the decorator), not a module-level getter.
     """
 
     @click.pass_context
+    @functools.wraps(f)
     def wrapper(ctx, *args, **kwargs):
         # Prefer the configuration loaded by the CLI group callback
         db_config = None
@@ -25,8 +38,8 @@ def with_database(f):
             # Standalone usage outside the CLI group (tools, direct tests)
             db_config = DatabaseConfig()
 
-        # Initialize database
-        db = get_database(db_config)
+        # Construct and initialize a dedicated database for this invocation
+        db = Database(db_config)
         db.initialize()
 
         ctx.obj = ctx.obj or {}
@@ -36,10 +49,7 @@ def with_database(f):
             # Invoke the command
             return ctx.invoke(f, ctx, *args, **kwargs)
         finally:
-            # Close database
+            # Close database - always, even when the command raises
             db.close()
 
-    # Preserve function metadata
-    wrapper.__name__ = f.__name__
-    wrapper.__doc__ = f.__doc__
     return wrapper

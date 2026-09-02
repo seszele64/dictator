@@ -7,8 +7,7 @@ in addition to file-based logging. This enables structured log querying and filt
 import logging
 from typing import Any
 
-from whisper_dictate.config import DatabaseConfig
-from whisper_dictate.database import Database, get_database
+from whisper_dictate.database import Database
 
 
 class DatabaseLogHandler(logging.Handler):
@@ -19,37 +18,32 @@ class DatabaseLogHandler(logging.Handler):
     by writing to both file and database.
 
     Attributes:
-        _database: Database instance for log storage
+        _db: Database instance for log storage
         _source_prefix: Prefix for log source names
     """
 
     def __init__(
         self,
-        database: Database | None = None,
-        config: DatabaseConfig | None = None,
+        database: Database,
         source_prefix: str = "whisper_dictate",
     ):
         """Initialize the database log handler.
 
         Args:
-            database: Optional database instance (will create if not provided)
-            config: Optional database configuration
+            database: Database instance for log storage (constructed by the
+                caller - setup_logging / the CLI group callback - which also
+                owns closing it via this handler's close())
             source_prefix: Prefix for log source names
         """
         super().__init__()
-        self._database = database
-        self._config = config
+        self._db = database
         self._source_prefix = source_prefix
         self._initialized = False
 
     def _ensure_initialized(self) -> None:
         """Ensure database is initialized synchronously."""
         if not self._initialized:
-            if self._database is None:
-                if self._config is None:
-                    self._config = DatabaseConfig()
-                self._database = get_database(self._config)
-            self._database.initialize()
+            self._db.initialize()
             self._initialized = True
 
     def emit(self, record: logging.LogRecord) -> None:
@@ -78,7 +72,7 @@ class DatabaseLogHandler(logging.Handler):
                 metadata = metadata or {}
                 metadata["exception"] = self.format(record)
 
-            self._database.create_log(
+            self._db.create_log(
                 level=record.levelname,
                 message=record.getMessage(),
                 source=source,
@@ -92,7 +86,7 @@ class DatabaseLogHandler(logging.Handler):
     def close(self) -> None:
         """Close the handler and cleanup resources."""
         super().close()
-        if self._database:
-            self._database.close()
-            self._database = None
+        if self._db:
+            self._db.close()
+            self._db = None
             self._initialized = False

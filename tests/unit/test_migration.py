@@ -21,7 +21,7 @@ from whisper_dictate.migration import (
 
 @pytest.fixture
 def mock_migration_db():
-    """Provide a mocked database and patch get_database() to return it."""
+    """Provide a mocked database and patch Database() to return it."""
     db = Mock()
     db.initialize = Mock()
     db.close = Mock()
@@ -31,7 +31,7 @@ def mock_migration_db():
     db.transaction = MagicMock()
     db.transaction.return_value.__enter__ = Mock(return_value=None)
     db.transaction.return_value.__exit__ = Mock(return_value=False)
-    with patch("whisper_dictate.migration.get_database", return_value=db):
+    with patch("whisper_dictate.migration.Database", return_value=db):
         yield db
 
 

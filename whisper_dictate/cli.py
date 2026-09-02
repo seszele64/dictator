@@ -12,23 +12,27 @@ from whisper_dictate.app import bootstrap
 from whisper_dictate.audio_storage import check_disk_space
 from whisper_dictate.cli_helpers import with_database
 from whisper_dictate.config import AppPaths, DatabaseConfig, validate_api_key
-from whisper_dictate.database import get_database
+from whisper_dictate.database import Database
 from whisper_dictate.dictation import DictationService
 
 
 def setup_logging(
-    level: str, db_config: DatabaseConfig | None = None, enable_db_logging: bool = True
+    level: str, db: Database | None = None, enable_db_logging: bool = True
 ):
     """Configure application logging with file and optional database output.
 
     Args:
         level: Logging level name (e.g. "INFO")
-        db_config: Database configuration for the database log handler; when
-            None, default configuration is used (only for standalone callers)
+        db: Database instance to back the database log handler. The caller
+            (the CLI group callback) constructs it from the loaded config so
+            user-configured paths are honored. When None, a Database is
+            constructed from default configuration (standalone callers only).
         enable_db_logging: Whether to attach the database log handler
 
     Returns:
         The DatabaseLogHandler if database logging was enabled, otherwise None.
+        On success the handler owns closing the database via close(); on
+        failure this function closes the database it created before returning.
     """
     # Log directory from the single source of truth (XDG state home)
     paths = AppPaths()
@@ -68,10 +72,10 @@ def setup_logging(
         try:
             from whisper_dictate.db_logging import DatabaseLogHandler
 
-            # Get or create database (with the configured values)
-            if db_config is None:
-                db_config = DatabaseConfig()
-            db = get_database(db_config)
+            # Standalone callers (no database passed in) get an explicit
+            # default-configuration instance; the CLI always passes one.
+            if db is None:
+                db = Database(DatabaseConfig())
 
             # Initialize database synchronously for logging
             db.initialize()
@@ -83,8 +87,7 @@ def setup_logging(
             root_logger.addHandler(db_handler)
 
             # Run log retention cleanup
-            retention_days = db_config.log_retention_days
-            deleted = db.cleanup_old_logs(retention_days)
+            deleted = db.cleanup_old_logs(db.config.log_retention_days)
             if deleted > 0:
                 root_logger.info(f"Cleaned up {deleted} old log entries")
 
@@ -95,13 +98,17 @@ def setup_logging(
             root_logger.debug(f"Database logging not available: {e}")
 
             # If the handler was attached to the root logger before the
-            # failure, detach it and close its connection. Otherwise it stays
-            # registered with an open SQLite connection that the caller never
-            # closes, because the except path returns None.
+            # failure, detach it and close its connection (handler.close()
+            # closes its database). Otherwise nothing was attached and no
+            # callback will ever close the database - close it directly so
+            # no SQLite connection leaks on the failure path either way.
             if db_handler is not None:
                 with contextlib.suppress(Exception):
                     root_logger.removeHandler(db_handler)
                     db_handler.close()
+            elif db is not None:
+                with contextlib.suppress(Exception):
+                    db.close()
 
     return None
 
@@ -128,7 +135,8 @@ def cli(ctx: click.Context, log_level: str) -> None:
         )
         sys.exit(1)
 
-    db_log_handler = setup_logging(log_level, config.database)
+    log_db = Database(config.database)
+    db_log_handler = setup_logging(log_level, db=log_db)
     if db_log_handler is not None:
         ctx.call_on_close(db_log_handler.close)
     ctx.ensure_object(dict)
@@ -929,11 +937,10 @@ cli.add_command(audio)
 
 
 @cli.command()
-@click.option(
-    "--force", is_flag=True, help="Force re-migration even if already completed"
-)
+@click.option("--force", is_flag=True, help="Force re-migration even if already completed")
 @click.option("--status", is_flag=True, help="Check migration status only")
-def migrate(force: bool, status: bool) -> None:
+@click.pass_context
+def migrate(ctx: click.Context, force: bool, status: bool) -> None:
     """Migrate legacy state files to database.
 
     This command migrates legacy state files to the database:
@@ -953,10 +960,16 @@ def migrate(force: bool, status: bool) -> None:
         run_migration,
     )
 
+    # Construct the migration database explicitly from the loaded config.
+    # This fixes a default-configuration bug: the migration manager used to
+    # reach the (deleted) global getter with no config, silently operating on
+    # DEFAULT database paths instead of the user's configured ones.
+    db = Database(ctx.obj["config"].database)
+
     try:
         if status:
             # Just check and display status
-            result = check_migration_status()
+            result = check_migration_status(db=db)
 
             click.echo("Migration Status:")
             click.echo("=" * 40)
@@ -982,7 +995,7 @@ def migrate(force: bool, status: bool) -> None:
         # Run migration
         click.echo("Starting migration...")
 
-        result = run_migration(force=force)
+        result = run_migration(force=force, db=db)
 
         if result.get("skipped"):
             click.echo(f"⚠️  {result['message']}")
@@ -1007,6 +1020,9 @@ def migrate(force: bool, status: bool) -> None:
     except Exception as e:
         click.echo(f"❌ Unexpected error: {e}", err=True)
         sys.exit(1)
+    finally:
+        # The migration database belongs to this command invocation alone
+        db.close()
 
 
 if __name__ == "__main__":
