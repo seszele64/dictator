@@ -9,7 +9,7 @@ Auto-generated from all feature plans. Last updated: 2026-09-02
 ## Project Structure
 
 ```text
-whisper_dictate/   # flat package at repo root (no src/ layout)
+src/whisper_dictate/   # src layout (landed Day 5)
 tests/
 openspec/          # OpenSpec changes + specs (single source of truth)
 specs/             # DEPRECATED stub — see specs/README.md; do not add specs here
@@ -70,5 +70,8 @@ openspec/
 
 ### Type checking
 - `uv run mypy` — strict core gate (P7, Day 4+): must stay clean. Ratchet policy lives in `pyproject.toml` `[tool.mypy]` (strict by default for all `whisper_dictate` modules; opt-out only via explicit per-module override, never added without owner approval — currently only `cli.py`, per D3).
+
+### Pre-commit
+- `uv run pre-commit run --all-files` — local gate mirror (ruff lint+format, whitespace/EOF, YAML/TOML, merge-conflict checks); hooks pinned (ruff v0.16.1, pre-commit-hooks v6.0.0); `tests/snapshots/` excluded from file-modifying hooks.
 
 <!-- MANUAL ADDITIONS END -->

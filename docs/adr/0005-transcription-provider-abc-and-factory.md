@@ -17,21 +17,22 @@ interfaces only at real boundaries).
 
 Transcription is an ABC + factory seam:
 
-- `TranscriptionProvider` (ABC in `whisper_dictate/transcription.py`)
+- `TranscriptionProvider` (ABC in `src/whisper_dictate/transcription.py`)
   defines the provider contract: `transcribe_audio(audio_file)` returning
   a `TranscriptionResult` (text, language, duration, provider,
   silence_detected).
 - `OpenAICompatibleProvider`
-  (`whisper_dictate/providers/openai_compatible.py`) is the first
+  (`src/whisper_dictate/providers/openai_compatible.py`) is the first
   implementation: the Whisper-compatible HTTP API client.
 - `create_transcriber(config)` is the factory: configuration-driven
   provider selection, returning the `TranscriptionProvider` the user
   configured. Services (`DictationService`, and since S4 the toggle's
   delegation flow through it) never import a concrete provider - they
   receive whatever the factory builds.
-- Provider contract tests (`tests/unit/test_provider_contract.py`) are
+- Provider contract tests (`tests/contract/test_openai_compatible.py`) are
   authoritative for behavior any provider must honor (P11 resolution:
-  the contract tests live in `tests/unit/`, not `tests/contract/`).
+  the provider seam tests live in `tests/contract/`; the TranscriptionResult
+  and TranscriptionError unit tests stay in `tests/unit/`).
 - This seam is the designated extension point for a future local
   whisper.cpp provider (P14) as the second ABC instance; plugin/entry-point
   discovery (P15) stays closed until a third provider is actually wanted.
@@ -49,6 +50,6 @@ Transcription is an ABC + factory seam:
 
 ## Related Files
 
-- `whisper_dictate/transcription.py` - TranscriptionProvider ABC, TranscriptionResult, create_transcriber factory
-- `whisper_dictate/providers/openai_compatible.py` - OpenAICompatibleProvider
-- `tests/unit/test_provider_contract.py` - authoritative provider contract tests (P11)
+- `src/whisper_dictate/transcription.py` - TranscriptionProvider ABC, TranscriptionResult, create_transcriber factory
+- `src/whisper_dictate/providers/openai_compatible.py` - OpenAICompatibleProvider
+- `tests/contract/test_openai_compatible.py` - authoritative provider contract tests (P11)

@@ -45,6 +45,7 @@ This specification covers:
 - Given: the existing flat tests/ directory with all test files at root
 - When: the reorganization is complete
 - Then: unit tests are in tests/unit/, integration tests in tests/integration/, contract tests in tests/contract/, and e2e tests in tests/e2e/
+- And: contract tests cover the provider seam (ABC conformance, provider construction/properties, error wrapping, parameter forwarding, task routing, factory selection) in `tests/contract/test_openai_compatible.py`, while TranscriptionResult and TranscriptionError unit tests stay in `tests/unit/`
 
 #### Scenario: All tests still pass after reorganization
 - Given: the test directory has been reorganized
@@ -107,6 +108,13 @@ This specification covers:
 - Given: a provider instance with a mocked OpenAI client that raises an API error
 - When: transcribe() is called
 - Then: the error is wrapped in the appropriate domain exception type
+
+#### Scenario: Live-mode contract test behind WHISPER_DICTATE_LIVE_CONTRACT
+- Given: a live provider contract test in tests/contract/
+- When: the suite runs without `WHISPER_DICTATE_LIVE_CONTRACT` set (the default)
+- Then: the live test is skipped
+- When: `WHISPER_DICTATE_LIVE_CONTRACT` is set and a real provider API key is configured
+- Then: the live test synthesizes a minimal WAV, performs a real transcription through the provider seam, and asserts a TranscriptionResult is returned
 
 ### Requirement: Audio Storage Filesystem Tests
 **SHALL** test audio_storage.py with real filesystem operations in temporary directories.

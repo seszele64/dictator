@@ -47,7 +47,9 @@ Long story short: **the two-week plan takes the repo from "works for me" to a po
 | ☐ | **Tier C — Engineering rigor at scale** | §2, §9 | ☐ |
 | ✅ | **S4 — Toggle merge** (unblocked — S2 done) | §7 | ✅ done (Day 3) |
 | ✅ | **P7 — mypy strict core** (Day 4) | §7 | ✅ done (Day 4) |
-| ☐ | **S3 — God-module splits** (Week 2, Day 5–8) | §7 | ☐ |
+| ✅ | **P8 — pre-commit + ruff format** (Day 5) | §7 | ✅ done (Day 5) |
+| ✅ | **P11 — contracts resolution** (Day 5) | §7 | ✅ done (Day 5) |
+| ☐ | **S3 — God-module splits** (Week 2, Day 5–8) | §7 | ☐ started (Day 5): src/ layout landed; god-splits Days 5–8 |
 | ☐ | **S5 — Notifier wiring** (Day 8) | §7 | ☐ |
 | ☐ | **S6 — Release freeze + v0.1.0** (Day 9–10) | §7, §12 | ☐ |
 
@@ -115,7 +117,7 @@ All 16 items of the original purge list have landed: items 1–9, 11, 13–16 vi
 ### 4.2 Target package layout
 
 ```text
-src/whisper_dictate/           # NOTE: current tree is flat whisper_dictate/ at root — src/ is the intended package location (decided in S3)
+src/whisper_dictate/           # NOTE: src/ layout landed Day 5 (S3 slice 1); god-module splits pending (Days 5–8)
 ├── __init__.py                # __version__ (P1)
 ├── __main__.py
 ├── app.py                    # COMPOSITION ROOT: load_dotenv → Config → build service graph → dispatch
@@ -156,7 +158,7 @@ src/whisper_dictate/           # NOTE: current tree is flat whisper_dictate/ at 
 │   ├── notifier.py             # Notifier Protocol + DunstNotifier (dunstify wrapper ~40L) (REPLACES PersistentNotification 313L)
 │   └── dunst.py               # ensure_dunst_running (FROM dunst_monitor.py ~30L; DunstMonitor class DELETED)
 └── clipboard.py               # xclip wrapper (unchanged)
-Root deletions: toggle_dictate.py (after P5 cut-over), tests/contract/ (empty), .opencode/ + .specify/ + .memories/ (git rm). specs/002 → deprecated via P3.
+Root deletions: toggle_dictate.py (after P5 cut-over), .opencode/ + .specify/ + .memories/ (git rm). specs/002 → deprecated via P3.
 ```
 
 ### 4.3 Before → after
@@ -221,9 +223,9 @@ One list, process and structural together, ordered by execution sequence within 
 | 1 | ✅ | S4 | Structural | Toggle merge (P5 cut-over): `ToggleService` + `cli/commands/toggle.py`; delegation to `DictationService`; entry-point switch `setup_i3.sh:4` + `generate_run_script.sh:19`; delete root script + old tests; `conftest.py:23` removed (H, M-L) — **Done (Day 3)**: cut-over, entry-point switch, shim deleted, raw SQL out, transcribe delegation; `ToggleService` + `cli/commands/toggle.py` land with S3's layout move | H | M-L | S1+S2+P5 (done) | unblocked — lands now that S2 is done |
 | 2 | ✅ | P12 | Process | ADR finalization: 0001 rewritten to what exists + Accepted; 0002 → Superseded by ADR 0003; new ADRs: 0003 Composition root (supersedes 0002), 0004 Centralized config, 0005 Provider ABC+factory; future 0006 pydub (P10), 0007 distribution (P13/D1), 0008 local provider (P14) (M, S) — **Done (Day 3)** | M | S | P2 (done), P10-adjacent | Day 3 |
 | 3 | ✅ | P7 | Process | Typing gate core modules: mypy strict = true (py3.11), files = `whisper_dictate`; per-module overrides opt-out `cli.py` + `dunst_monitor.py` initially; `warn_unused_ignores`; CI job; ratchet policy (never loosens) — **Done (Day 4)**: strict on all 21 modules, 0 errors; `cli.py` sole explicit-flag lax override (D3; bodies still checked); `dunst_monitor.py` needed no override (strict-clean at introduction); CI job deferred to P9 (Day 7 — includes the mypy job; no CI existed at Day 4); 2 coded ignores (db_logging assignment, openai language wire-payload) | H | M | S2 (done) | Day 4 |
-| 4 | ☐ | P8 | Process | pre-commit + ruff format (`.pre-commit-config.yaml` ruff lint + format + EOF/whitespace/yaml/toml/merge-conflict checks; decide ruff format repo-wide one commit; `.editorconfig`; optional dependabot) | M | S | — | Day 5 |
-| 5 | ☐ | P11 | Process | Resolve `tests/contract/` honestly (Option A recommended: move provider-contract tests into `tests/contract/test_openai_compatible.py`? — see §3.2/8 — actually: tests live in `tests/unit/test_provider_contract.py`; update spec 008; add contract marker; optional live-mode `@mark.contract-live` behind `WHISPER_DICTATE_LIVE_CONTRACT` skip-by-default; Option B: delete dir + amend spec) | M | S | — | Day 5 |
-| 6 | ☐ | S3 | Structural | God-module splits: Database → ConnectionManager/Repos/Migrations; `cli.py` → `cli/` package; `audio_storage` → `util/paths` + `storage/audio_storage` + `orphan_scan` | H | L | S2 (done) | Week 2, Day 5–8 (after mypy locked) |
+| 4 | ✅ | P8 | Process | pre-commit + ruff format (`.pre-commit-config.yaml` ruff lint + format + EOF/whitespace/yaml/toml/merge-conflict checks; decide ruff format repo-wide one commit; `.editorconfig`; optional dependabot) — **Done (Day 5)**: ruff format adopted repo-wide (owner-approved 2026-09-03); pre-commit hooks pinned (ruff v0.16.1 / pre-commit-hooks v6.0.0); snapshots excluded from file-modifying hooks; dependabot deferred to P9 (no CI yet) | M | S | — | Day 5 |
+| 5 | ✅ | P11 | Process | Resolve `tests/contract/` honestly (Option A recommended: move provider-contract tests into `tests/contract/test_openai_compatible.py`? — see §3.2/8 — actually: tests live in `tests/unit/test_provider_contract.py`; update spec 008; add contract marker; optional live-mode `@mark.contract-live` behind `WHISPER_DICTATE_LIVE_CONTRACT` skip-by-default; Option B: delete dir + amend spec) — **Done (Day 5)**: Option A: `tests/contract/test_openai_compatible.py` created (moved from unit/); `contract` + `contract_live` markers; live-mode skip-by-default behind `WHISPER_DICTATE_LIVE_CONTRACT`; spec 008 amended | M | S | — | Day 5 |
+| 6 | ☐ | S3 | Structural | God-module splits: Database → ConnectionManager/Repos/Migrations; `cli.py` → `cli/` package; `audio_storage` → `util/paths` + `storage/audio_storage` + `orphan_scan` — **Started (Day 5)**: src/ layout | H | L | S2 (done) | Week 2, Day 5–8 (after mypy locked) |
 | 7 | ☐ | P10 | Process | Remove pydub (golden behavior tests first — sample rate, frame counts, duration, silence-trim boundaries; replace w/ soundfile + ffmpeg subprocess where needed; remove dep; prove 3.13 import-clean; README/AGENTS tech line) | H | M | golden tests first (S0 done / P16) | Day 6 |
 | 8 | ☐ | P9 | Process | CI matrix 3.11/3.12/3.13 (astral-sh/setup-uv@v8+ enable-cache; `uv sync --frozen --extra dev`; pytest on matrix without `--cov`; separate coverage job on 3.12 w/ `check_coverage.py` + artefact; lint job ruff check + format check + mypy job; pip-audit step; drop pip-based lint) | H | M | P7, P10 (for 3.13) | Day 7 |
 | 9 | ☐ | P6 | Process | Exception audit + traceback logging (rotating file handler at `{state_dir}/logs/whisper-dictate.log`, XDG-state; `-v/--verbose` → DEBUG; categorize ~49 excepts; top-level = notify + `logger.exception()`; fault-injection tests) | H | M | — | Day 8 |
