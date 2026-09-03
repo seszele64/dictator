@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This specification defines the MP3 audio conversion capability for the i3-arch-whisper-dictate system. The system SHALL provide the ability to convert WAV audio recordings to MP3 format to achieve significant file size reduction while preserving audio quality suitable for speech recognition via the Whisper API.
+This specification defines the MP3 audio conversion capability for the dictator system. The system SHALL provide the ability to convert WAV audio recordings to MP3 format to achieve significant file size reduction while preserving audio quality suitable for speech recognition via the Whisper API.
 
 The MP3 audio conversion capability enables:
 - Automatic conversion of WAV recordings to MP3 format after capture
