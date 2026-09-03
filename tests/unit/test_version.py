@@ -1,6 +1,6 @@
 """Version wiring tests: package __version__ must agree with its metadata.
 
-WHY: the version is defined once in whisper_dictate/__init__.py and read by
+WHY: the version is defined once in src/whisper_dictate/__init__.py and read by
 hatchling for the distribution (pyproject.toml uses dynamic = ["version"]).
 These tests fail loudly if the single source of truth drifts from the
 installed distribution metadata or if the CLI's --version flag stops
@@ -37,7 +37,7 @@ def test_pyproject_declares_dynamic_version_from_package_init():
     data = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
     assert "version" not in data["project"]
     assert "version" in data["project"]["dynamic"]
-    assert data["tool"]["hatch"]["version"]["path"] == "whisper_dictate/__init__.py"
+    assert data["tool"]["hatch"]["version"]["path"] == "src/whisper_dictate/__init__.py"
 
 
 def test_dunder_version_matches_installed_distribution_metadata():

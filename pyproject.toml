@@ -31,7 +31,7 @@ whisper-dictate = "whisper_dictate.cli:cli"
 whisper-dictate-toggle = "whisper_dictate.toggle:cli"
 
 [tool.hatch.version]
-path = "whisper_dictate/__init__.py"
+path = "src/whisper_dictate/__init__.py"
 
 [project.optional-dependencies]
 dev = [
@@ -40,6 +40,7 @@ dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
     "pytest-timeout>=2.2.0",
+    "pre-commit>=3.0.0",
 ]
 
 [tool.pytest.ini_options]
@@ -55,6 +56,7 @@ markers = [
     "integration: tests exercising real SQLite database and filesystem (offline)",
     "e2e: full-system tests that require system binaries (dunstify, xclip)",
     "contract: provider contract tests pinning external transcription seams",
+    "contract_live: live provider contract test against the real API; opt-in via WHISPER_DICTATE_LIVE_CONTRACT",
 ]
 
 [tool.coverage.run]
@@ -77,7 +79,7 @@ exclude_lines = [
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["whisper_dictate"]
+files = ["src/whisper_dictate"]
 warn_unused_ignores = true
 
 # Ratchet policy (D3, locked 2026-09-02; updated P7 2026-09-02):
@@ -115,6 +117,15 @@ ignore_missing_imports = true
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+# Keep `ruff format` .py-only: ruff 0.16 formats Python fenced code blocks in
+# Markdown files by default, which would churn archived openspec docs in the
+# format pass. Owner decision (P8): the adopt-ruff-format diff stays .py-only.
+extend-exclude = ["*.md"]
+# src layout: tells ruff (isort/I001) that `whisper_dictate.*` imports are
+# first-party, resolving against src/ instead of the project root. The repo
+# root stays listed so `tests.*` imports (tests/ lives at the root) are still
+# classified first-party.
+src = ["src", "."]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
