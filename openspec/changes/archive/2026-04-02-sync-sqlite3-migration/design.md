@@ -76,7 +76,7 @@ async def get_settings(self) -> dict[str, Any]:
     async with self._lock:
         async with self._connection.cursor() as cursor:
             await cursor.execute("SELECT ...")
-            
+
 # After (sync)
 def get_settings(self) -> dict[str, Any]:
     with self._lock:

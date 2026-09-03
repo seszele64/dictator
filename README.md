@@ -174,18 +174,18 @@ whisper-dictate info
 # Output:
 # 🔍 System Information:
 # ========================================
-# 
+#
 # 🎤 Audio Devices:
 #   • Built-in Microphone
 #   • USB Microphone
-# 
+#
 # 📋 Clipboard Tools:
 #   • xclip
-# 
+#
 # ⚙️  Configuration:
 #   • model: base
 #   • language: auto
-# 
+#
 # 📊 Logging:
 #   • Log file: /home/user/.local/state/whisper-dictate/logs/whisper-dictate.log
 #   • View logs: tail -f /home/user/.local/state/whisper-dictate/logs/whisper-dictate.log

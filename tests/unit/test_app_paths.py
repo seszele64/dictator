@@ -33,10 +33,7 @@ class TestAppPathsDefaults:
 
     def test_log_dir_default(self, clean_xdg_env):
         """Without XDG_STATE_HOME, logs live under ~/.local/state (XDG state, not data)."""
-        assert (
-            AppPaths().log_dir
-            == Path.home() / ".local" / "state" / "whisper-dictate" / "logs"
-        )
+        assert AppPaths().log_dir == Path.home() / ".local" / "state" / "whisper-dictate" / "logs"
 
     def test_log_file_derived_from_log_dir(self, clean_xdg_env):
         """log_file is whisper-dictate.log inside log_dir."""

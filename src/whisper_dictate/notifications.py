@@ -48,9 +48,7 @@ def notify_recording_start() -> bool:
     """
     try:
         if not is_dunstify_available():
-            logger.warning(
-                "dunstify not available, cannot send persistent notification"
-            )
+            logger.warning("dunstify not available, cannot send persistent notification")
             return False
 
         cmd = [
@@ -121,9 +119,7 @@ def notify_recording_stop() -> bool:
             )
             return False
 
-        logger.info(
-            "Recording stop notification sent (replaced persistent notification)"
-        )
+        logger.info("Recording stop notification sent (replaced persistent notification)")
         return True
 
     except FileNotFoundError:
@@ -229,14 +225,10 @@ def notify_recording_stopped(text_preview: str = "") -> bool:
     """
     body = "Recording stopped and processing..."
     if text_preview:
-        preview = (
-            text_preview[:49] + "..." if len(text_preview) > 52 else text_preview
-        )  # 49 + 3 = 52 total
+        preview = text_preview[:49] + "..." if len(text_preview) > 52 else text_preview  # 49 + 3 = 52 total
         body = f"Transcription: {preview}"
 
-    return send_notification(
-        summary="Dictation", body=body, urgency="normal", timeout=5000
-    )
+    return send_notification(summary="Dictation", body=body, urgency="normal", timeout=5000)
 
 
 def notify_error(error_message: str) -> bool:
@@ -251,9 +243,7 @@ def notify_error(error_message: str) -> bool:
     Returns:
         bool: True if notification sent successfully
     """
-    return send_notification(
-        summary="Dictation Error", body=error_message, urgency="critical", timeout=10000
-    )
+    return send_notification(summary="Dictation Error", body=error_message, urgency="critical", timeout=10000)
 
 
 def notify_stopping_transcription() -> bool:

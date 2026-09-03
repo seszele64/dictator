@@ -16,9 +16,7 @@ from whisper_dictate.database import Database
 from whisper_dictate.dictation import DictationService
 
 
-def setup_logging(
-    level: str, db: Database | None = None, enable_db_logging: bool = True
-):
+def setup_logging(level: str, db: Database | None = None, enable_db_logging: bool = True):
     """Configure application logging with file and optional database output.
 
     Args:
@@ -130,9 +128,7 @@ def cli(ctx: click.Context, log_level: str) -> None:
     except ValueError as e:
         # The version tag makes bug reports from this top-level failure path
         # self-identifying without needing the reporter to run --version.
-        click.echo(
-            f"Configuration error (whisper-dictate v{__version__}): {e}", err=True
-        )
+        click.echo(f"Configuration error (whisper-dictate v{__version__}): {e}", err=True)
         sys.exit(1)
 
     log_db = Database(config.database)
@@ -169,17 +165,13 @@ def dictate(ctx: click.Context, duration: float | None) -> None:
     except ValueError as e:
         # Same failure banner as the top-level config load: version tag keeps
         # dictate-path bug reports self-identifying too.
-        click.echo(
-            f"Configuration error (whisper-dictate v{__version__}): {e}", err=True
-        )
+        click.echo(f"Configuration error (whisper-dictate v{__version__}): {e}", err=True)
         sys.exit(1)
 
     try:
         # Check disk space before recording (use configured values)
         db_config = ctx.obj["config"].database
-        has_space, available_mb = check_disk_space(
-            db_config.get_recordings_path(), db_config.min_free_space_mb
-        )
+        has_space, available_mb = check_disk_space(db_config.get_recordings_path(), db_config.min_free_space_mb)
         if not has_space:
             click.echo(
                 f"⚠️  Warning: Low disk space (only {available_mb} MB available).\n"
@@ -251,13 +243,9 @@ def logs() -> None:
     help="Filter by log level",
 )
 @click.option("--source", help="Filter by source module")
-@click.option(
-    "--from-time", help="Filter from timestamp (ISO format: YYYY-MM-DD HH:MM:SS)"
-)
+@click.option("--from-time", help="Filter from timestamp (ISO format: YYYY-MM-DD HH:MM:SS)")
 @click.option("--to-time", help="Filter to timestamp (ISO format: YYYY-MM-DD HH:MM:SS)")
-@click.option(
-    "--limit", type=int, default=100, help="Maximum number of logs to display"
-)
+@click.option("--limit", type=int, default=100, help="Maximum number of logs to display")
 @with_database
 def list_logs(
     ctx: click.Context,
@@ -370,11 +358,7 @@ def export_logs(
             export_path.relative_to(cwd)
         except ValueError:
             # Path is outside current directory tree
-            if not click.confirm(
-                f"Warning: Writing to path outside current directory:\n"
-                f"  {export_path}\n"
-                f"Continue?"
-            ):
+            if not click.confirm(f"Warning: Writing to path outside current directory:\n  {export_path}\nContinue?"):
                 click.echo("Export cancelled.")
                 return
 
@@ -457,9 +441,7 @@ def history() -> None:
 
 
 @history.command("list")
-@click.option(
-    "--limit", type=int, default=20, help="Maximum number of transcriptions to display"
-)
+@click.option("--limit", type=int, default=20, help="Maximum number of transcriptions to display")
 @click.option("--date", help="Filter by date (YYYY-MM-DD format)")
 @with_database
 def list_history(ctx: click.Context, limit: int, date: str | None) -> None:
@@ -479,9 +461,7 @@ def list_history(ctx: click.Context, limit: int, date: str | None) -> None:
             click.echo("No transcriptions found.")
             return
 
-        click.echo(
-            f"Recent Transcriptions (showing {len(transcriptions)} of {len(transcriptions)}):\n"
-        )
+        click.echo(f"Recent Transcriptions (showing {len(transcriptions)} of {len(transcriptions)}):\n")
         click.echo(f"{'ID':<5} {'Date':<20} {'Duration':<10} {'Preview':<50}")
         click.echo("-" * 90)
 
@@ -489,11 +469,7 @@ def list_history(ctx: click.Context, limit: int, date: str | None) -> None:
             # Format timestamp
             timestamp = t.get("timestamp", "N/A")
             date_str = timestamp.split()[0] if timestamp != "N/A" else "N/A"
-            time_str = (
-                timestamp.split()[1][:8]
-                if " " in timestamp and len(timestamp.split()) > 1
-                else ""
-            )
+            time_str = timestamp.split()[1][:8] if " " in timestamp and len(timestamp.split()) > 1 else ""
 
             # Format duration
             duration = t.get("duration")
@@ -503,9 +479,7 @@ def list_history(ctx: click.Context, limit: int, date: str | None) -> None:
             text = t.get("text", "")
             preview = text[:47] + "..." if len(text) > 50 else text
 
-            click.echo(
-                f"{t['id']:<5} {date_str} {time_str:<10} {duration_str:<10} {preview:<50}"
-            )
+            click.echo(f"{t['id']:<5} {date_str} {time_str:<10} {duration_str:<10} {preview:<50}")
 
     except Exception as e:
         click.echo(f"Error listing transcriptions: {e}", err=True)
@@ -532,9 +506,7 @@ def show_history(ctx: click.Context, transcript_id: int, audio: bool) -> None:
         transcription = db.get_transcription_with_recording(transcript_id)
 
         if not transcription:
-            click.echo(
-                f"Error: Transcription with ID {transcript_id} not found.", err=True
-            )
+            click.echo(f"Error: Transcription with ID {transcript_id} not found.", err=True)
             sys.exit(1)
 
         click.echo("=" * 60)
@@ -570,9 +542,7 @@ def show_history(ctx: click.Context, transcript_id: int, audio: bool) -> None:
 
             audio_storage = AudioStorage(db_config)
             try:
-                audio_path = audio_storage.get_audio_path(
-                    transcription["file_path"], verify_exists=True
-                )
+                audio_path = audio_storage.get_audio_path(transcription["file_path"], verify_exists=True)
             except NoAudioFileError:
                 click.echo("\nℹ️  No audio file stored for this transcription.")
             except UnsafeAudioPathError as e:
@@ -597,9 +567,7 @@ def show_history(ctx: click.Context, transcript_id: int, audio: bool) -> None:
 
 @history.command("search")
 @click.argument("query")
-@click.option(
-    "--limit", type=int, default=20, help="Maximum number of results to display"
-)
+@click.option("--limit", type=int, default=20, help="Maximum number of results to display")
 @with_database
 def search_history(ctx: click.Context, query: str, limit: int) -> None:
     """Search transcriptions by text (case-insensitive).
@@ -625,11 +593,7 @@ def search_history(ctx: click.Context, query: str, limit: int) -> None:
             # Format timestamp
             timestamp = t.get("timestamp", "N/A")
             date_str = timestamp.split()[0] if timestamp != "N/A" else "N/A"
-            time_str = (
-                timestamp.split()[1][:8]
-                if " " in timestamp and len(timestamp.split()) > 1
-                else ""
-            )
+            time_str = timestamp.split()[1][:8] if " " in timestamp and len(timestamp.split()) > 1 else ""
 
             # Highlight matching text
             text = t.get("text", "")
@@ -642,11 +606,7 @@ def search_history(ctx: click.Context, query: str, limit: int) -> None:
                 # Get context around the match
                 start = max(0, pos - 20)
                 end = min(len(text), pos + len(query) + 20)
-                preview = (
-                    ("..." if start > 0 else "")
-                    + text[start:end]
-                    + ("..." if end < len(text) else "")
-                )
+                preview = ("..." if start > 0 else "") + text[start:end] + ("..." if end < len(text) else "")
             else:
                 preview = text[:52] + "..." if len(text) > 55 else text
 
@@ -682,28 +642,20 @@ def delete_history(ctx: click.Context, transcript_id: int, confirm_yes: bool) ->
         transcription = db.get_transcription_with_recording(transcript_id)
 
         if not transcription:
-            click.echo(
-                f"Error: Transcription with ID {transcript_id} not found.", err=True
-            )
+            click.echo(f"Error: Transcription with ID {transcript_id} not found.", err=True)
             sys.exit(1)
 
         # Show info about what will be deleted
         timestamp = transcription.get("timestamp", "N/A")
         text_preview = transcription.get("text", "")[:50]
-        text_preview = (
-            text_preview + "..."
-            if len(transcription.get("text", "")) > 50
-            else text_preview
-        )
+        text_preview = text_preview + "..." if len(transcription.get("text", "")) > 50 else text_preview
 
         click.echo(f"About to delete transcription #{transcript_id}:")
         click.echo(f"  Date: {timestamp}")
         click.echo(f"  Preview: {text_preview}")
 
         # Confirm deletion
-        if not confirm_yes and not click.confirm(
-            "\nAre you sure you want to delete this transcription?"
-        ):
+        if not confirm_yes and not click.confirm("\nAre you sure you want to delete this transcription?"):
             click.echo("Deletion cancelled.")
             return
 
@@ -740,9 +692,7 @@ def delete_history(ctx: click.Context, transcript_id: int, confirm_yes: bool) ->
             except OSError as e:
                 # Real unlink errors abort the row deletion so disk and
                 # database stay consistent.
-                click.echo(
-                    f"Error: Failed to delete audio file {unlink_path}: {e}", err=True
-                )
+                click.echo(f"Error: Failed to delete audio file {unlink_path}: {e}", err=True)
                 sys.exit(1)
 
         # Delete the recording (cascades to transcript due to foreign key)
@@ -751,9 +701,7 @@ def delete_history(ctx: click.Context, transcript_id: int, confirm_yes: bool) ->
         if deleted:
             click.echo(f"✅ Deleted transcription #{transcript_id}")
         else:
-            click.echo(
-                f"Error: Failed to delete transcription #{transcript_id}", err=True
-            )
+            click.echo(f"Error: Failed to delete transcription #{transcript_id}", err=True)
             sys.exit(1)
 
     except Exception as e:
@@ -766,9 +714,7 @@ def delete_history(ctx: click.Context, transcript_id: int, confirm_yes: bool) ->
 @click.option("--text", required=True, help="New transcript text")
 @click.option("--language", default=None, help="New language code (optional)")
 @with_database
-def update_history(
-    ctx: click.Context, transcript_id: int, text: str, language: str | None
-) -> None:
+def update_history(ctx: click.Context, transcript_id: int, text: str, language: str | None) -> None:
     """Update a transcription's text and optionally language.
 
     Examples:
@@ -782,9 +728,7 @@ def update_history(
         current = db.get_transcription_with_recording(transcript_id)
 
         if not current:
-            click.echo(
-                f"Error: Transcription with ID {transcript_id} not found.", err=True
-            )
+            click.echo(f"Error: Transcription with ID {transcript_id} not found.", err=True)
             sys.exit(1)
 
         # Show old vs new text
@@ -911,23 +855,19 @@ def cleanup_audio(ctx: click.Context, dry_run: bool, confirm: bool) -> None:
         if actual_dry_run:
             click.echo(
                 click.style(
-                    "DRY RUN: No files were deleted. "
-                    "Use --confirm to actually delete these files.",
+                    "DRY RUN: No files were deleted. Use --confirm to actually delete these files.",
                     fg="yellow",
                 )
             )
         else:
             # Perform the cleanup (actual_dry_run is False in this branch;
             # passing the flag keeps the call site data-driven).
-            deleted_count, size_freed = cleanup_orphaned_files(
-                ctx.obj["db"], storage, dry_run=actual_dry_run
-            )
+            deleted_count, size_freed = cleanup_orphaned_files(ctx.obj["db"], storage, dry_run=actual_dry_run)
 
             size_freed_mb = size_freed / (1024 * 1024)
             click.echo(
                 click.style(
-                    f"✅ Deleted {deleted_count} orphaned file(s), "
-                    f"freed {size_freed_mb:.2f} MB",
+                    f"✅ Deleted {deleted_count} orphaned file(s), freed {size_freed_mb:.2f} MB",
                     fg="green",
                 )
             )
@@ -985,15 +925,9 @@ def migrate(ctx: click.Context, force: bool, status: bool) -> None:
             click.echo("=" * 40)
 
             legacy = result["legacy_files"]
-            click.echo(
-                f"Legacy state file:  {'Found' if legacy['state_file'] else 'Not found'}"
-            )
-            click.echo(
-                f"Legacy PID file:   {'Found' if legacy['pid_file'] else 'Not found'}"
-            )
-            click.echo(
-                f"Legacy audio file: {'Found' if legacy['audio_file'] else 'Not found'}"
-            )
+            click.echo(f"Legacy state file:  {'Found' if legacy['state_file'] else 'Not found'}")
+            click.echo(f"Legacy PID file:   {'Found' if legacy['pid_file'] else 'Not found'}")
+            click.echo(f"Legacy audio file: {'Found' if legacy['audio_file'] else 'Not found'}")
 
             click.echo(f"\nMigration completed: {result['migration_completed']}")
             click.echo(f"Migration needed:   {result['migration_needed']}")

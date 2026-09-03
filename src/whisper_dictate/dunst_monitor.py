@@ -36,24 +36,14 @@ def is_dunst_running() -> bool:
     """
     try:
         # Check for dunst processes
-        result = subprocess.run(
-            ['pgrep', '-f', 'dunst'],
-            capture_output=True,
-            text=True,
-            check=False
-        )
+        result = subprocess.run(["pgrep", "-f", "dunst"], capture_output=True, text=True, check=False)
         return result.returncode == 0 and result.stdout.strip() != ""
 
     except FileNotFoundError:
         # pgrep not available, try alternative
         try:
-            result = subprocess.run(
-                ['ps', 'aux'],
-                capture_output=True,
-                text=True,
-                check=False
-            )
-            return 'dunst' in result.stdout.lower()
+            result = subprocess.run(["ps", "aux"], capture_output=True, text=True, check=False)
+            return "dunst" in result.stdout.lower()
         except Exception:
             return False
     except Exception as e:
@@ -73,12 +63,7 @@ def start_dunst() -> bool:
     """
     try:
         # Start dunst in background
-        subprocess.Popen(
-            ['dunst'],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True
-        )
+        subprocess.Popen(["dunst"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
         # Give dunst time to start
         time.sleep(0.5)

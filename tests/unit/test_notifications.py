@@ -162,9 +162,7 @@ class TestNotificationHelpers:
         with patch("whisper_dictate.notifications.send_notification") as mock_send:
             mock_send.return_value = True
 
-            long_text = (
-                "This is a very long text that should be truncated to 50 characters"
-            )
+            long_text = "This is a very long text that should be truncated to 50 characters"
             expected_preview = "This is a very long text that should be truncated..."
 
             result = notify_recording_stopped(long_text)

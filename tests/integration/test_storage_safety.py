@@ -79,9 +79,7 @@ class TestPathContainment:
         with pytest.raises(UnsafeAudioPathError):
             storage.get_audio_path("link.wav")
 
-    def test_delete_audio_never_removes_outside_root(
-        self, storage, recordings_root, tmp_path
-    ):
+    def test_delete_audio_never_removes_outside_root(self, storage, recordings_root, tmp_path):
         outside = tmp_path / "precious.wav"
         outside.write_bytes(b"keep me")
         assert storage.delete_audio(str(outside)) is False
@@ -106,38 +104,34 @@ class TestAtomicSave:
         assert final.read_bytes() == b"complete audio content"
         assert not staged.staged_path.exists()
 
-    def test_save_audio_wrapper_returns_final_and_relative(
-        self, storage, recordings_root
-    ):
+    def test_save_audio_wrapper_returns_final_and_relative(self, storage, recordings_root):
         source = recordings_root / "source.mp3"
         source.write_bytes(b"mp3 data")
         final, relative = storage.save_audio(source, suffix="mp3")
         assert final.exists()
         assert relative == str(final.relative_to(recordings_root))
 
-    def test_finalize_failure_leaves_no_partial_file_and_cleans_staging(
-        self, storage, recordings_root
-    ):
+    def test_finalize_failure_leaves_no_partial_file_and_cleans_staging(self, storage, recordings_root):
         source = recordings_root / "source.wav"
         source.write_bytes(b"data")
         staged = storage.stage_audio(source)
 
-        with patch(
-            "whisper_dictate.audio_storage.os.replace", side_effect=OSError("ENOSPC")
-        ), pytest.raises(OSError, match="Failed to finalize"):
+        with (
+            patch("whisper_dictate.audio_storage.os.replace", side_effect=OSError("ENOSPC")),
+            pytest.raises(OSError, match="Failed to finalize"),
+        ):
             storage.finalize_audio(staged)
 
         assert not staged.final_path.exists()  # no partial file ever appeared
         assert not staged.staged_path.exists()  # staging file cleaned up
 
-    def test_stage_failure_cleans_up_partial_staging_file(
-        self, storage, recordings_root
-    ):
+    def test_stage_failure_cleans_up_partial_staging_file(self, storage, recordings_root):
         source = recordings_root / "source.wav"
         source.write_bytes(b"data")
-        with patch(
-            "whisper_dictate.audio_storage.shutil.copy2", side_effect=OSError("disk full")
-        ), pytest.raises(OSError, match="Failed to stage"):
+        with (
+            patch("whisper_dictate.audio_storage.shutil.copy2", side_effect=OSError("disk full")),
+            pytest.raises(OSError, match="Failed to stage"),
+        ):
             storage.stage_audio(source)
         # No staging leftovers anywhere in the tree
         assert not any(recordings_root.rglob(f"{STAGING_PREFIX}*"))
@@ -152,9 +146,7 @@ class TestOrphanScanStagingFiles:
 
     def _db_with(self, file_paths):
         db = Mock()
-        db.list_recordings = Mock(
-            return_value=[{"id": i, "file_path": p} for i, p in enumerate(file_paths)]
-        )
+        db.list_recordings = Mock(return_value=[{"id": i, "file_path": p} for i, p in enumerate(file_paths)])
         return db
 
     def test_recent_staging_file_is_not_orphaned(self, storage, recordings_root):
@@ -194,9 +186,7 @@ class TestOrphanScanStagingFiles:
 
         assert [o["relative_path"] for o in orphaned] == ["2024/01/01/orphan.wav"]
 
-    def test_legacy_absolute_in_root_path_is_not_orphaned(
-        self, storage, recordings_root
-    ):
+    def test_legacy_absolute_in_root_path_is_not_orphaned(self, storage, recordings_root):
         day_dir = recordings_root / "2024/01/01"
         day_dir.mkdir(parents=True)
         referenced = day_dir / "rec.wav"
@@ -231,9 +221,7 @@ class TestOrphanScanSymlinkedRoot:
         db.initialize()
         return storage, db, link, real_root
 
-    def test_stored_recording_is_not_orphaned_through_symlink(
-        self, symlinked_setup
-    ):
+    def test_stored_recording_is_not_orphaned_through_symlink(self, symlinked_setup):
         storage, db, link, real_root = symlinked_setup
         source = link / "source.wav"
         source.write_bytes(b"real recording")

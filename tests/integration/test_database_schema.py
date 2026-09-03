@@ -38,9 +38,7 @@ class TestDatabaseInitialization:
         db = Database(real_db_config)
         db.initialize()
         db.initialize()  # second call should be a no-op
-        version = db.fetchone(
-            "SELECT version FROM schema_versions ORDER BY applied_at DESC LIMIT 1"
-        )
+        version = db.fetchone("SELECT version FROM schema_versions ORDER BY applied_at DESC LIMIT 1")
         assert version == (CURRENT_SCHEMA_VERSION,)
         db.close()
 
@@ -68,9 +66,7 @@ class TestDatabaseInitialization:
         # Re-initialization works after close
         db.initialize()
         assert db._initialized is True
-        version = db.fetchone(
-            "SELECT version FROM schema_versions ORDER BY applied_at DESC LIMIT 1"
-        )
+        version = db.fetchone("SELECT version FROM schema_versions ORDER BY applied_at DESC LIMIT 1")
         assert version == (CURRENT_SCHEMA_VERSION,)
         db.close()
 
@@ -87,23 +83,13 @@ class TestSchemaCreation:
 
     def test_all_tables_exist(self, real_db):
         """All expected tables exist in sqlite_master after initialization."""
-        tables = {
-            row[0]
-            for row in real_db.fetchall(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
-        }
+        tables = {row[0] for row in real_db.fetchall("SELECT name FROM sqlite_master WHERE type='table'")}
         expected = {"recordings", "transcripts", "logs", "state", "schema_versions"}
         assert expected <= tables
 
     def test_all_indexes_exist(self, real_db):
         """All expected indexes exist after initialization."""
-        indexes = {
-            row[0]
-            for row in real_db.fetchall(
-                "SELECT name FROM sqlite_master WHERE type='index'"
-            )
-        }
+        indexes = {row[0] for row in real_db.fetchall("SELECT name FROM sqlite_master WHERE type='index'")}
         expected = {
             "idx_recordings_timestamp",
             "idx_transcripts_recording_id",
@@ -116,9 +102,7 @@ class TestSchemaCreation:
 
     def test_schema_version_is_current(self, real_db):
         """The latest schema version row reports the current version."""
-        version = real_db.fetchone(
-            "SELECT version FROM schema_versions ORDER BY applied_at DESC LIMIT 1"
-        )
+        version = real_db.fetchone("SELECT version FROM schema_versions ORDER BY applied_at DESC LIMIT 1")
         assert version == (CURRENT_SCHEMA_VERSION,)
 
     def test_schema_versions_table_columns(self, real_db):
@@ -138,14 +122,9 @@ class TestSchemaCreation:
         assert pk_columns == ["id"]
 
         # The UNIQUE constraint on version yields exactly one auto index
-        unique_indexes = [
-            row for row in real_db.fetchall("PRAGMA index_list(schema_versions)") if row[2]
-        ]
+        unique_indexes = [row for row in real_db.fetchall("PRAGMA index_list(schema_versions)") if row[2]]
         assert len(unique_indexes) == 1
-        index_columns = [
-            row[2]
-            for row in real_db.fetchall(f"PRAGMA index_info('{unique_indexes[0][1]}')")
-        ]
+        index_columns = [row[2] for row in real_db.fetchall(f"PRAGMA index_info('{unique_indexes[0][1]}')")]
         assert index_columns == ["version"]
 
     def test_recordings_table_columns(self, real_db):
@@ -201,12 +180,7 @@ class TestMigration:
 
     def test_fresh_db_goes_directly_to_version_2(self, real_db):
         """A fresh database goes straight to the current version with one row."""
-        versions = [
-            row[0]
-            for row in real_db.fetchall(
-                "SELECT version FROM schema_versions ORDER BY version"
-            )
-        ]
+        versions = [row[0] for row in real_db.fetchall("SELECT version FROM schema_versions ORDER BY version")]
         assert versions == [CURRENT_SCHEMA_VERSION]
         assert real_db._get_schema_version() == CURRENT_SCHEMA_VERSION
 
@@ -303,9 +277,7 @@ class TestMigration:
 
     def test_get_schema_version_returns_0_for_empty_db(self, tmp_path):
         """_get_schema_version() returns 0 on a fresh connection with no tables."""
-        config = DatabaseConfig(
-            path=tmp_path / "empty.db", recordings_path=tmp_path / "recordings"
-        )
+        config = DatabaseConfig(path=tmp_path / "empty.db", recordings_path=tmp_path / "recordings")
         db = Database(config)
         # Connect without running full initialization so no tables exist.
         db._connect()

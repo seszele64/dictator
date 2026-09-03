@@ -109,9 +109,7 @@ class TestStartDunst:
         with (
             patch("whisper_dictate.dunst_monitor.subprocess.Popen") as mock_popen,
             patch("whisper_dictate.dunst_monitor.time.sleep") as mock_sleep,
-            patch(
-                "whisper_dictate.dunst_monitor.is_dunst_running", return_value=True
-            ) as mock_running,
+            patch("whisper_dictate.dunst_monitor.is_dunst_running", return_value=True) as mock_running,
         ):
             assert start_dunst() is True
 
@@ -130,9 +128,7 @@ class TestEnsureDunstRunning:
 
     def test_ensure_skips_start_when_already_running(self):
         with (
-            patch(
-                "whisper_dictate.dunst_monitor.is_dunst_running", return_value=True
-            ),
+            patch("whisper_dictate.dunst_monitor.is_dunst_running", return_value=True),
             patch("whisper_dictate.dunst_monitor.start_dunst") as mock_start,
         ):
             assert ensure_dunst_running() is True
@@ -140,12 +136,8 @@ class TestEnsureDunstRunning:
 
     def test_ensure_starts_when_missing(self):
         with (
-            patch(
-                "whisper_dictate.dunst_monitor.is_dunst_running", return_value=False
-            ),
-            patch(
-                "whisper_dictate.dunst_monitor.start_dunst", return_value=True
-            ) as mock_start,
+            patch("whisper_dictate.dunst_monitor.is_dunst_running", return_value=False),
+            patch("whisper_dictate.dunst_monitor.start_dunst", return_value=True) as mock_start,
         ):
             assert ensure_dunst_running() is True
             mock_start.assert_called_once()

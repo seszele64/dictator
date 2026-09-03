@@ -84,9 +84,7 @@ class TestRunMigrationReal:
         assert (backup_dir / "audio.wav").exists()
 
     def test_migration_skip_when_completed_real(self, migration_manager, tmp_path):
-        migration_manager._db.set_state(
-            MIGRATION_STATUS_KEY, {"status": MIGRATION_COMPLETED}
-        )
+        migration_manager._db.set_state(MIGRATION_STATUS_KEY, {"status": MIGRATION_COMPLETED})
         state = tmp_path / "state"
         pid = tmp_path / "pid"
         state.write_text("recording")
@@ -102,9 +100,7 @@ class TestRunMigrationReal:
         assert pid.exists()
 
     def test_force_re_migration_real(self, migration_manager, tmp_path):
-        migration_manager._db.set_state(
-            MIGRATION_STATUS_KEY, {"status": MIGRATION_COMPLETED}
-        )
+        migration_manager._db.set_state(MIGRATION_STATUS_KEY, {"status": MIGRATION_COMPLETED})
         state = tmp_path / "state"
         pid = tmp_path / "pid"
         state.write_text("recording")
@@ -138,9 +134,7 @@ class TestRunMigrationReal:
         pid.write_text("12345")
 
         with (
-            patch.object(
-                migration_manager, "_migrate_pid", side_effect=RuntimeError("boom")
-            ),
+            patch.object(migration_manager, "_migrate_pid", side_effect=RuntimeError("boom")),
             pytest.raises(MigrationError),
         ):
             migration_manager.run_migration()

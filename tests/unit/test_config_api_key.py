@@ -137,12 +137,15 @@ class TestValidateApiKey:
         with pytest.raises(ValueError, match="API key not found"):
             validate_api_key(config)
 
-    @pytest.mark.parametrize("provider,env_var", [
-        ("openai", "OPENAI_API_KEY"),
-        ("groq", "GROQ_API_KEY"),
-        ("together", "TOGETHER_API_KEY"),
-        ("deepinfra", "DEEPINFRA_API_KEY"),
-    ])
+    @pytest.mark.parametrize(
+        "provider,env_var",
+        [
+            ("openai", "OPENAI_API_KEY"),
+            ("groq", "GROQ_API_KEY"),
+            ("together", "TOGETHER_API_KEY"),
+            ("deepinfra", "DEEPINFRA_API_KEY"),
+        ],
+    )
     def test_auth_provider_with_env_key_passes(self, clean_provider_env, provider, env_var):
         clean_provider_env.setenv("WHISPER_PROVIDER", provider)
         clean_provider_env.setenv(env_var, "env-key")

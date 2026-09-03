@@ -16,9 +16,7 @@ class TestTransactions:
     def test_transaction_commits_on_success(self, real_db):
         """Changes made inside a transaction are committed on normal exit."""
         with real_db.transaction() as conn:
-            cursor = conn.execute(
-                "INSERT INTO recordings (file_path) VALUES (?)", ("tx.wav",)
-            )
+            cursor = conn.execute("INSERT INTO recordings (file_path) VALUES (?)", ("tx.wav",))
             inserted_id = cursor.lastrowid
         recording = real_db.get_recording(inserted_id)
         assert recording is not None
@@ -27,13 +25,9 @@ class TestTransactions:
     def test_transaction_rolls_back_on_exception(self, real_db):
         """Changes made inside a transaction are rolled back on exception."""
         with pytest.raises(ValueError), real_db.transaction() as conn:
-            conn.execute(
-                "INSERT INTO recordings (file_path) VALUES (?)", ("rb.wav",)
-            )
+            conn.execute("INSERT INTO recordings (file_path) VALUES (?)", ("rb.wav",))
             raise ValueError("boom")
-        row = real_db.fetchone(
-            "SELECT id FROM recordings WHERE file_path = ?", ("rb.wav",)
-        )
+        row = real_db.fetchone("SELECT id FROM recordings WHERE file_path = ?", ("rb.wav",))
         assert row is None
 
     def test_transaction_rolls_back_on_sql_failure_midway(self, real_db):
@@ -47,28 +41,17 @@ class TestTransactions:
         (dictation._save_audio_claim_first) depend on exactly this behavior.
         """
         with pytest.raises(sqlite3.IntegrityError), real_db.transaction() as conn:
-            conn.execute(
-                "INSERT INTO recordings (file_path) VALUES (?)", ("first.wav",)
-            )
+            conn.execute("INSERT INTO recordings (file_path) VALUES (?)", ("first.wav",))
             # 2nd statement violates the FK constraint: recordings row
             # 999999 can never exist, so this INSERT always fails.
-            conn.execute(
-                "INSERT INTO transcripts (recording_id, text) VALUES (999999, 'orphan')"
-            )
+            conn.execute("INSERT INTO transcripts (recording_id, text) VALUES (999999, 'orphan')")
         # The 1st statement's insert must have been rolled back as well
-        assert (
-            real_db.fetchone(
-                "SELECT id FROM recordings WHERE file_path = ?", ("first.wav",)
-            )
-            is None
-        )
+        assert real_db.fetchone("SELECT id FROM recordings WHERE file_path = ?", ("first.wav",)) is None
 
     def test_transaction_rollback_re_raises_exception(self, real_db):
         """The exception that triggered the rollback is re-raised."""
         with pytest.raises(ValueError, match="test"), real_db.transaction() as conn:
-            conn.execute(
-                "INSERT INTO recordings (file_path) VALUES (?)", ("rr.wav",)
-            )
+            conn.execute("INSERT INTO recordings (file_path) VALUES (?)", ("rr.wav",))
             raise ValueError("test")
 
     def test_transaction_begin_immediate(self, real_db):
@@ -88,26 +71,15 @@ class TestTransactions:
             with real_db.transaction() as conn:
                 assert conn.in_transaction
                 with pytest.raises(sqlite3.OperationalError, match="locked"):
-                    other.execute(
-                        "INSERT INTO recordings (file_path) VALUES ('blocked.wav')"
-                    )
+                    other.execute("INSERT INTO recordings (file_path) VALUES ('blocked.wav')")
         finally:
             other.close()
-        assert (
-            real_db.fetchone(
-                "SELECT id FROM recordings WHERE file_path = 'blocked.wav'"
-            )
-            is None
-        )
+        assert real_db.fetchone("SELECT id FROM recordings WHERE file_path = 'blocked.wav'") is None
 
     def test_execute_autocommit_mode(self, real_db):
         """db.execute() auto-commits without an explicit transaction."""
-        real_db.execute(
-            "INSERT INTO recordings (file_path) VALUES (?)", ("auto.wav",)
-        )
-        row = real_db.fetchone(
-            "SELECT file_path FROM recordings WHERE file_path = ?", ("auto.wav",)
-        )
+        real_db.execute("INSERT INTO recordings (file_path) VALUES (?)", ("auto.wav",))
+        row = real_db.fetchone("SELECT file_path FROM recordings WHERE file_path = ?", ("auto.wav",))
         assert row == ("auto.wav",)
 
     def test_fetchone_returns_tuple_or_none(self, real_db):

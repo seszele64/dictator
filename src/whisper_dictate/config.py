@@ -64,9 +64,7 @@ class DatabaseConfig(BaseModel):
     - DOES NOT: Handle actual database operations
     """
 
-    path: Path | None = Field(
-        default=None, description="Database file path (defaults to XDG data directory)"
-    )
+    path: Path | None = Field(default=None, description="Database file path (defaults to XDG data directory)")
     recordings_path: Path | None = Field(
         default=None,
         description="Recordings directory path (defaults to XDG data directory)",
@@ -211,12 +209,8 @@ class AudioConfig(BaseModel):
 
     sample_rate: int = Field(default=16000, description="Audio sample rate in Hz")
     channels: int = Field(default=1, description="Number of audio channels")
-    duration: float = Field(
-        default=5.0, description="Maximum recording duration in seconds"
-    )
-    device: int | str | None = Field(
-        default=None, description="Audio input device index or name"
-    )
+    duration: float = Field(default=5.0, description="Maximum recording duration in seconds")
+    device: int | str | None = Field(default=None, description="Audio input device index or name")
     mp3_enabled: bool = Field(
         default=True,
         description="Enable MP3 conversion before API upload. "
@@ -273,8 +267,7 @@ class WhisperConfig(BaseModel):
     )
     language: str | None = Field(
         default=None,
-        description="Language hint as ISO 639-1 code (e.g. 'en', 'de'). "
-        "If None, Whisper auto-detects the language.",
+        description="Language hint as ISO 639-1 code (e.g. 'en', 'de'). If None, Whisper auto-detects the language.",
     )
     temperature: float = Field(
         default=0.0,
@@ -344,9 +337,7 @@ class AppConfig(BaseModel):
     database: DatabaseConfig = Field(default_factory=lambda: DatabaseConfig())
     audio: AudioConfig = Field(default_factory=AudioConfig)
     openai: OpenAIConfig = Field(default_factory=_load_whisper_config_from_env)
-    copy_to_clipboard: bool = Field(
-        default=True, description="Copy transcription to clipboard"
-    )
+    copy_to_clipboard: bool = Field(default=True, description="Copy transcription to clipboard")
 
     @property
     def paths(self) -> AppPaths:

@@ -55,35 +55,27 @@ def mock_db_empty():
 class TestGetAudioPath:
     """Test the get_audio_path method."""
 
-    def test_resolve_relative_path(
-        self, audio_storage: AudioStorage, temp_recordings_dir: Path
-    ):
+    def test_resolve_relative_path(self, audio_storage: AudioStorage, temp_recordings_dir: Path):
         """Test resolving a relative path to absolute path."""
         relative_path = "2024/03/14/recording.wav"
         result = audio_storage.get_audio_path(relative_path)
         assert result == temp_recordings_dir / relative_path
 
-    def test_resolve_path_without_verification(
-        self, audio_storage: AudioStorage, temp_recordings_dir: Path
-    ):
+    def test_resolve_path_without_verification(self, audio_storage: AudioStorage, temp_recordings_dir: Path):
         """Test that verify_exists=False returns path even if file doesn't exist."""
         relative_path = "nonexistent/file.wav"
         result = audio_storage.get_audio_path(relative_path, verify_exists=False)
         assert result == temp_recordings_dir / relative_path
         assert not result.exists()
 
-    def test_verify_exists_false_with_nonexistent_file(
-        self, audio_storage: AudioStorage, temp_recordings_dir: Path
-    ):
+    def test_verify_exists_false_with_nonexistent_file(self, audio_storage: AudioStorage, temp_recordings_dir: Path):
         """Test that verify_exists=False doesn't raise error for missing file."""
         relative_path = "2024/03/14/missing.wav"
         result = audio_storage.get_audio_path(relative_path, verify_exists=False)
         assert result == temp_recordings_dir / relative_path
         assert not result.exists()
 
-    def test_verify_exists_true_with_existing_file(
-        self, audio_storage: AudioStorage, temp_recordings_dir: Path
-    ):
+    def test_verify_exists_true_with_existing_file(self, audio_storage: AudioStorage, temp_recordings_dir: Path):
         """Test that verify_exists=True returns path when file exists."""
         # Create a test file
         file_path = temp_recordings_dir / "2024/03/14/test.wav"
@@ -95,9 +87,7 @@ class TestGetAudioPath:
         assert result == file_path
         assert result.exists()
 
-    def test_verify_exists_true_with_missing_file(
-        self, audio_storage: AudioStorage, temp_recordings_dir: Path
-    ):
+    def test_verify_exists_true_with_missing_file(self, audio_storage: AudioStorage, temp_recordings_dir: Path):
         """Test that verify_exists=True raises FileNotFoundError for missing file."""
         relative_path = "2024/03/14/nonexistent.wav"
         with pytest.raises(FileNotFoundError) as exc_info:
@@ -111,9 +101,7 @@ class TestGetAudioPath:
 class TestVerifyAudioFile:
     """Test the verify_audio_file method."""
 
-    def test_verify_existing_file(
-        self, audio_storage: AudioStorage, temp_recordings_dir: Path
-    ):
+    def test_verify_existing_file(self, audio_storage: AudioStorage, temp_recordings_dir: Path):
         """Test verification of an existing audio file."""
         # Create a test file
         file_path = temp_recordings_dir / "2024/03/14/exists.wav"
@@ -124,9 +112,7 @@ class TestVerifyAudioFile:
         assert result == file_path
         assert result.exists()
 
-    def test_verify_missing_file_raises_error(
-        self, audio_storage: AudioStorage, temp_recordings_dir: Path
-    ):
+    def test_verify_missing_file_raises_error(self, audio_storage: AudioStorage, temp_recordings_dir: Path):
         """Test that verifying missing file raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError) as exc_info:
             audio_storage.verify_audio_file("2024/03/14/missing.wav")
@@ -136,9 +122,7 @@ class TestVerifyAudioFile:
         assert str(temp_recordings_dir) in error_message
         assert "deleted or moved" in error_message.lower()
 
-    def test_verify_audio_file_returns_path_object(
-        self, audio_storage: AudioStorage, temp_recordings_dir: Path
-    ):
+    def test_verify_audio_file_returns_path_object(self, audio_storage: AudioStorage, temp_recordings_dir: Path):
         """Test that verify_audio_file returns a Path object."""
         file_path = temp_recordings_dir / "test/path.wav"
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -152,17 +136,13 @@ class TestVerifyAudioFile:
 class TestAudioStorageIntegration:
     """Integration tests for AudioStorage."""
 
-    def test_get_audio_path_with_nested_directories(
-        self, audio_storage: AudioStorage, temp_recordings_dir: Path
-    ):
+    def test_get_audio_path_with_nested_directories(self, audio_storage: AudioStorage, temp_recordings_dir: Path):
         """Test resolving path with deeply nested directories."""
         relative_path = "2024/01/01/very/deep/nested/path.wav"
         result = audio_storage.get_audio_path(relative_path)
         assert result == temp_recordings_dir / relative_path
 
-    def test_verify_with_special_characters_in_filename(
-        self, audio_storage: AudioStorage, temp_recordings_dir: Path
-    ):
+    def test_verify_with_special_characters_in_filename(self, audio_storage: AudioStorage, temp_recordings_dir: Path):
         """Test file verification with special characters in filename."""
         file_path = temp_recordings_dir / "2024/03/14/recording_001 (copy).wav"
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -284,19 +264,13 @@ class TestGetOrphanedFiles:
 
         assert orphaned == []
 
-    def test_orphaned_files_detected(
-        self, audio_storage: AudioStorage, mock_db_empty, temp_recordings_dir: Path
-    ):
+    def test_orphaned_files_detected(self, audio_storage: AudioStorage, mock_db_empty, temp_recordings_dir: Path):
         """Test that orphaned files are detected when not in database."""
         # Create files in the recordings directory
         (temp_recordings_dir / "2024/03/14").mkdir(parents=True)
         (temp_recordings_dir / "2024/03/15").mkdir(parents=True)
-        (temp_recordings_dir / "2024/03/14/orphan1.wav").write_bytes(
-            b"orphan content 1"
-        )
-        (temp_recordings_dir / "2024/03/15/orphan2.wav").write_bytes(
-            b"orphan content 2"
-        )
+        (temp_recordings_dir / "2024/03/14/orphan1.wav").write_bytes(b"orphan content 1")
+        (temp_recordings_dir / "2024/03/15/orphan2.wav").write_bytes(b"orphan content 2")
 
         orphaned = get_orphaned_files(mock_db_empty, audio_storage)
 
@@ -369,27 +343,21 @@ class TestGetOrphanedFiles:
 class TestCleanupOrphanedFiles:
     """Tests for orphaned file cleanup."""
 
-    def test_dry_run_does_not_delete(
-        self, audio_storage: AudioStorage, mock_db_empty, temp_recordings_dir: Path
-    ):
+    def test_dry_run_does_not_delete(self, audio_storage: AudioStorage, mock_db_empty, temp_recordings_dir: Path):
         """Test that dry_run=True doesn't actually delete files."""
         # Create orphaned files
         (temp_recordings_dir / "2024/03/14").mkdir(parents=True)
         test_file = temp_recordings_dir / "2024/03/14/orphan.wav"
         test_file.write_bytes(b"orphan content")
 
-        deleted_count, size_freed = cleanup_orphaned_files(
-            mock_db_empty, audio_storage, dry_run=True
-        )
+        deleted_count, size_freed = cleanup_orphaned_files(mock_db_empty, audio_storage, dry_run=True)
 
         # File should still exist
         assert test_file.exists()
         assert deleted_count == 1
         assert size_freed > 0
 
-    def test_actual_delete_removes_files(
-        self, audio_storage: AudioStorage, mock_db_empty, temp_recordings_dir: Path
-    ):
+    def test_actual_delete_removes_files(self, audio_storage: AudioStorage, mock_db_empty, temp_recordings_dir: Path):
         """Test that dry_run=False actually deletes files."""
         # Create orphaned files
         (temp_recordings_dir / "2024/03/14").mkdir(parents=True)
@@ -397,18 +365,14 @@ class TestCleanupOrphanedFiles:
         test_content = b"orphan content"
         test_file.write_bytes(test_content)
 
-        deleted_count, size_freed = cleanup_orphaned_files(
-            mock_db_empty, audio_storage, dry_run=False
-        )
+        deleted_count, size_freed = cleanup_orphaned_files(mock_db_empty, audio_storage, dry_run=False)
 
         # File should be deleted
         assert not test_file.exists()
         assert deleted_count == 1
         assert size_freed == len(test_content)
 
-    def test_cleanup_returns_correct_count(
-        self, audio_storage: AudioStorage, mock_db_empty, temp_recordings_dir: Path
-    ):
+    def test_cleanup_returns_correct_count(self, audio_storage: AudioStorage, mock_db_empty, temp_recordings_dir: Path):
         """Test that cleanup returns correct count and size."""
         # Create multiple orphaned files
         (temp_recordings_dir / "2024/03/14").mkdir(parents=True)
@@ -419,21 +383,15 @@ class TestCleanupOrphanedFiles:
         file1.write_bytes(content1)
         file2.write_bytes(content2)
 
-        deleted_count, size_freed = cleanup_orphaned_files(
-            mock_db_empty, audio_storage, dry_run=False
-        )
+        deleted_count, size_freed = cleanup_orphaned_files(mock_db_empty, audio_storage, dry_run=False)
 
         assert deleted_count == 2
         assert size_freed == len(content1) + len(content2)
 
-    def test_cleanup_nonexistent_directory(
-        self, audio_storage: AudioStorage, mock_db_empty, temp_recordings_dir: Path
-    ):
+    def test_cleanup_nonexistent_directory(self, audio_storage: AudioStorage, mock_db_empty, temp_recordings_dir: Path):
         """Test cleanup handles non-existent directory gracefully."""
         # Directory doesn't exist
-        deleted_count, size_freed = cleanup_orphaned_files(
-            mock_db_empty, audio_storage, dry_run=True
-        )
+        deleted_count, size_freed = cleanup_orphaned_files(mock_db_empty, audio_storage, dry_run=True)
 
         assert deleted_count == 0
         assert size_freed == 0

@@ -51,9 +51,7 @@ class TranscriptionResult:
     def __repr__(self) -> str:
         if self.silence_detected:
             return f"TranscriptionResult(text='', silence_detected=True, provider={self.provider})"
-        return (
-            f"TranscriptionResult(text='{self.text[:50]}...', language={self.language})"
-        )
+        return f"TranscriptionResult(text='{self.text[:50]}...', language={self.language})"
 
 
 class TranscriptionProvider(ABC):

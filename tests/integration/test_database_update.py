@@ -161,9 +161,7 @@ class TestHistoryUpdateCLI:
             mock_database_cls.return_value = mock_db
 
             # Simulate user confirming with 'y'
-            result = cli_runner.invoke(
-                cli, ["history", "update", "1", "--text", "Updated text"], input="y\n"
-            )
+            result = cli_runner.invoke(cli, ["history", "update", "1", "--text", "Updated text"], input="y\n")
 
             assert result.exit_code == 0, f"Command failed: {result.output}"
             assert "Updated transcription #1" in result.output
@@ -194,9 +192,7 @@ class TestHistoryUpdateCLI:
             mock_database_cls.return_value = mock_db
 
             # Simulate user cancelling with 'n'
-            result = cli_runner.invoke(
-                cli, ["history", "update", "1", "--text", "Updated text"], input="n\n"
-            )
+            result = cli_runner.invoke(cli, ["history", "update", "1", "--text", "Updated text"], input="n\n")
 
             assert result.exit_code == 0
             assert "cancelled" in result.output.lower()
@@ -215,9 +211,7 @@ class TestHistoryUpdateCLI:
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
 
-            result = cli_runner.invoke(
-                cli, ["history", "update", "999", "--text", "Updated text"]
-            )
+            result = cli_runner.invoke(cli, ["history", "update", "999", "--text", "Updated text"])
 
             assert result.exit_code == 1
             assert "not found" in result.output
@@ -308,9 +302,7 @@ class TestHistoryUpdateCLI:
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
 
-            result = cli_runner.invoke(
-                cli, ["history", "update", "1", "--text", "New text"], input="y\n"
-            )
+            result = cli_runner.invoke(cli, ["history", "update", "1", "--text", "New text"], input="y\n")
 
             assert "Current Text" in result.output
             assert "New Text" in result.output

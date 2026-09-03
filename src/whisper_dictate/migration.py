@@ -170,9 +170,7 @@ class MigrationManager:
         if not backup_path:
             self._log("ERROR", "Failed to create backup, aborting migration")
             self._set_migration_status(MIGRATION_FAILED, error="Backup creation failed")
-            raise MigrationError(
-                "Backup creation failed, aborting migration to prevent data loss"
-            )
+            raise MigrationError("Backup creation failed, aborting migration to prevent data loss")
         self._log("INFO", f"Created backup at: {backup_path}")
 
         # Perform migration in a transaction for atomicity
@@ -214,9 +212,7 @@ class MigrationManager:
             try:
                 self._set_migration_status(MIGRATION_FAILED, error=str(e))
             except Exception as status_error:
-                self._log(
-                    "ERROR", f"Failed to record migration failure: {status_error}"
-                )
+                self._log("ERROR", f"Failed to record migration failure: {status_error}")
             raise MigrationError(f"Migration failed: {e}") from e
 
     def _create_backup(self, legacy_files: dict[str, bool]) -> Path | None:
@@ -323,9 +319,7 @@ class MigrationManager:
 
                 # Check if process is still running
                 try:
-                    os.kill(
-                        pid_value, 0
-                    )  # Signal 0 doesn't kill, just checks existence
+                    os.kill(pid_value, 0)  # Signal 0 doesn't kill, just checks existence
                     pid_data["process_exists"] = True
                 except OSError:
                     pid_data["process_exists"] = False
@@ -338,9 +332,7 @@ class MigrationManager:
             self._log("ERROR", f"Failed to migrate PID: {e}")
             raise
 
-    def _rollback(
-        self, backup_path: Path | None, legacy_files: dict[str, bool]
-    ) -> None:
+    def _rollback(self, backup_path: Path | None, legacy_files: dict[str, bool]) -> None:
         """Attempt to rollback migration.
 
         Args:
@@ -395,34 +387,24 @@ class MigrationManager:
             if legacy_files.get("state_file"):
                 state = self._db.get_state("legacy_recording_state")
                 if not state or not isinstance(state, dict):
-                    raise MigrationError(
-                        "Verification failed: legacy_recording_state not found"
-                    )
+                    raise MigrationError("Verification failed: legacy_recording_state not found")
                 if "migrated_at" not in state:
-                    raise MigrationError(
-                        "Verification failed: migrated_at not in state"
-                    )
+                    raise MigrationError("Verification failed: migrated_at not in state")
                 self._log("INFO", "Recording state verification passed")
 
             # Verify PID state
             if legacy_files.get("pid_file"):
                 pid_state = self._db.get_state("legacy_pid_state")
                 if not pid_state or not isinstance(pid_state, dict):
-                    raise MigrationError(
-                        "Verification failed: legacy_pid_state not found"
-                    )
+                    raise MigrationError("Verification failed: legacy_pid_state not found")
                 if "migrated_at" not in pid_state:
-                    raise MigrationError(
-                        "Verification failed: migrated_at not in pid_state"
-                    )
+                    raise MigrationError("Verification failed: migrated_at not in pid_state")
                 self._log("INFO", "PID state verification passed")
 
             # Verify migration status
             status = self._db.get_state(MIGRATION_STATUS_KEY)
             if not status or status.get("status") != MIGRATION_COMPLETED:
-                raise MigrationError(
-                    "Verification failed: migration status not completed"
-                )
+                raise MigrationError("Verification failed: migration status not completed")
 
             self._log("INFO", "All migration verification checks passed")
 

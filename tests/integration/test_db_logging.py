@@ -36,9 +36,7 @@ def _make_record(
 def _query_logs(db) -> list[tuple]:
     """Fetch all rows from the logs table, oldest first."""
     with db.connection() as conn:
-        return conn.execute(
-            "SELECT level, message, source, metadata_json, timestamp FROM logs ORDER BY id"
-        ).fetchall()
+        return conn.execute("SELECT level, message, source, metadata_json, timestamp FROM logs ORDER BY id").fetchall()
 
 
 class TestDatabaseLogHandlerEmitReal:
@@ -129,9 +127,7 @@ class TestDatabaseLogHandlerLifecycleReal:
         assert len(rows) == 1
         assert rows[0][1] == "singleton message"
 
-    def test_multiple_handlers_each_own_their_database(
-        self, real_db_config, tmp_path
-    ):
+    def test_multiple_handlers_each_own_their_database(self, real_db_config, tmp_path):
         """Per-invocation instances: two handlers constructed with separate
         Database instances write through their own connections to their own
         files."""

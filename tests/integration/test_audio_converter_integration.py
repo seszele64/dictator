@@ -38,10 +38,7 @@ class TestFileSizeReductionIntegration:
         Returns:
             True if file is smaller than SMALL_FILE_THRESHOLD_MB
         """
-        return (
-            size_bytes
-            < TestFileSizeReductionIntegration.SMALL_FILE_THRESHOLD_MB * 1024 * 1024
-        )
+        return size_bytes < TestFileSizeReductionIntegration.SMALL_FILE_THRESHOLD_MB * 1024 * 1024
 
     @pytest.fixture
     def real_wav_file(self):
@@ -77,9 +74,7 @@ class TestFileSizeReductionIntegration:
 
         wav_size = real_wav_file.stat().st_size
         is_small = self.is_small_file(wav_size)
-        print(
-            f"\nOriginal WAV size: {wav_size / 1024 / 1024:.2f} MB ({'small' if is_small else 'large'} file)"
-        )
+        print(f"\nOriginal WAV size: {wav_size / 1024 / 1024:.2f} MB ({'small' if is_small else 'large'} file)")
 
         converter = AudioConverter(bitrate="128k", keep_wav=True)
         result = converter.convert(real_wav_file)
@@ -120,9 +115,7 @@ class TestFileSizeReductionIntegration:
 
         wav_size = real_wav_file.stat().st_size
         is_small = self.is_small_file(wav_size)
-        print(
-            f"\nOriginal WAV size: {wav_size / 1024 / 1024:.2f} MB ({'small' if is_small else 'large'} file)"
-        )
+        print(f"\nOriginal WAV size: {wav_size / 1024 / 1024:.2f} MB ({'small' if is_small else 'large'} file)")
 
         converter = AudioConverter(bitrate="64k", keep_wav=True)
         result = converter.convert(real_wav_file)
@@ -198,9 +191,7 @@ class TestFileSizeReductionIntegration:
                 pytest.skip("FFmpeg not available, skipping live conversion test")
 
             # Transcribe both
-            transcriber = OpenAICompatibleProvider(
-                api_key=os.getenv("OPENAI_API_KEY", ""), silence_threshold_dbfs=None
-            )
+            transcriber = OpenAICompatibleProvider(api_key=os.getenv("OPENAI_API_KEY", ""), silence_threshold_dbfs=None)
 
             wav_text = transcriber.transcribe_audio(wav_path).text
             mp3_text = transcriber.transcribe_audio(result).text
@@ -210,8 +201,7 @@ class TestFileSizeReductionIntegration:
 
             # Verify transcription is identical (or very close)
             assert wav_text.strip() == mp3_text.strip(), (
-                f"WAV transcription ('{wav_text}') should match "
-                f"MP3 transcription ('{mp3_text}')"
+                f"WAV transcription ('{wav_text}') should match MP3 transcription ('{mp3_text}')"
             )
 
         finally:

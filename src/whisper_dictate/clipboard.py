@@ -40,12 +40,7 @@ class ClipboardManager:
 
         for tool in tools:
             try:
-                subprocess.run(
-                    ["which", tool],
-                    check=True,
-                    capture_output=True,
-                    timeout=2
-                )
+                subprocess.run(["which", tool], check=True, capture_output=True, timeout=2)
                 available.append(tool)
                 logger.debug(f"Found clipboard tool: {tool}")
             except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
@@ -76,25 +71,14 @@ class ClipboardManager:
             try:
                 if tool == "xclip":
                     subprocess.run(
-                        ["xclip", "-selection", "clipboard"],
-                        input=text.encode("utf-8"),
-                        check=True,
-                        timeout=5
+                        ["xclip", "-selection", "clipboard"], input=text.encode("utf-8"), check=True, timeout=5
                     )
                 elif tool == "xsel":
                     subprocess.run(
-                        ["xsel", "--clipboard", "--input"],
-                        input=text.encode("utf-8"),
-                        check=True,
-                        timeout=5
+                        ["xsel", "--clipboard", "--input"], input=text.encode("utf-8"), check=True, timeout=5
                     )
                 elif tool == "wl-copy":
-                    subprocess.run(
-                        ["wl-copy"],
-                        input=text.encode("utf-8"),
-                        check=True,
-                        timeout=5
-                    )
+                    subprocess.run(["wl-copy"], input=text.encode("utf-8"), check=True, timeout=5)
 
                 logger.info(f"Text copied to clipboard using {tool}")
                 return True

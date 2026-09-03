@@ -176,9 +176,7 @@ def mock_db_empty_logs():
 class TestHistoryListClose:
     """Tests for history list command - verify db.close() is called."""
 
-    def test_history_list_exits_without_hanging_with_data(
-        self, cli_runner, mock_db_with_data
-    ):
+    def test_history_list_exits_without_hanging_with_data(self, cli_runner, mock_db_with_data):
         """Verify history list command exits cleanly with data.
 
         This test verifies the bug fix: commands should not hang after execution.
@@ -195,13 +193,9 @@ class TestHistoryListClose:
             assert result.exit_code == 0, f"Command failed: {result.output}"
 
             # Verify database close was called (the bug fix)
-            assert mock_db_with_data.close.called, (
-                "Database close() was not called - this would cause hanging"
-            )
+            assert mock_db_with_data.close.called, "Database close() was not called - this would cause hanging"
 
-    def test_history_list_exits_without_hanging_empty_database(
-        self, cli_runner, mock_db_empty
-    ):
+    def test_history_list_exits_without_hanging_empty_database(self, cli_runner, mock_db_empty):
         """Verify history list exits cleanly when no transcriptions exist."""
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_empty
@@ -236,9 +230,7 @@ class TestHistoryListClose:
 class TestHistoryShowClose:
     """Tests for history show command - verify db.close() is called."""
 
-    def test_history_show_exits_without_hanging(
-        self, cli_runner, mock_db_with_data
-    ):
+    def test_history_show_exits_without_hanging(self, cli_runner, mock_db_with_data):
         """Verify history show command exits cleanly with valid ID."""
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_with_data
@@ -247,13 +239,9 @@ class TestHistoryShowClose:
 
             assert result.exit_code == 0, f"Command failed: {result.output}"
             assert "Transcription #1" in result.output
-            assert mock_db_with_data.close.called, (
-                "Database close() was not called - this would cause hanging"
-            )
+            assert mock_db_with_data.close.called, "Database close() was not called - this would cause hanging"
 
-    def test_history_show_exits_without_hanging_invalid_id(
-        self, cli_runner, mock_db_empty
-    ):
+    def test_history_show_exits_without_hanging_invalid_id(self, cli_runner, mock_db_empty):
         """Verify history show exits cleanly when ID doesn't exist."""
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_empty
@@ -270,12 +258,8 @@ class TestHistoryShowClose:
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_with_data
 
-            with patch(
-                "whisper_dictate.audio_storage.AudioStorage"
-            ) as mock_storage:
-                mock_storage.return_value.get_audio_path.return_value = Path(
-                    "/fake/path"
-                )
+            with patch("whisper_dictate.audio_storage.AudioStorage") as mock_storage:
+                mock_storage.return_value.get_audio_path.return_value = Path("/fake/path")
 
                 result = cli_runner.invoke(cli, ["history", "show", "1", "--audio"])
 
@@ -286,9 +270,7 @@ class TestHistoryShowClose:
 class TestHistorySearchClose:
     """Tests for history search command - verify db.close() is called."""
 
-    def test_history_search_exits_without_hanging(
-        self, cli_runner, mock_db_with_data
-    ):
+    def test_history_search_exits_without_hanging(self, cli_runner, mock_db_with_data):
         """Verify history search command exits cleanly with matching results."""
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_with_data
@@ -297,20 +279,14 @@ class TestHistorySearchClose:
 
             assert result.exit_code == 0, f"Command failed: {result.output}"
             assert "Found 1 transcription" in result.output
-            assert mock_db_with_data.close.called, (
-                "Database close() was not called - this would cause hanging"
-            )
+            assert mock_db_with_data.close.called, "Database close() was not called - this would cause hanging"
 
-    def test_history_search_exits_without_hanging_no_results(
-        self, cli_runner, mock_db_empty
-    ):
+    def test_history_search_exits_without_hanging_no_results(self, cli_runner, mock_db_empty):
         """Verify history search exits cleanly when no results found."""
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_empty
 
-            result = cli_runner.invoke(
-                cli, ["history", "search", "nonexistent_query_12345"]
-            )
+            result = cli_runner.invoke(cli, ["history", "search", "nonexistent_query_12345"])
 
             assert result.exit_code == 0
             assert "No transcriptions found matching" in result.output
@@ -321,9 +297,7 @@ class TestHistorySearchClose:
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_with_data
 
-            result = cli_runner.invoke(
-                cli, ["history", "search", "test", "--limit", "5"]
-            )
+            result = cli_runner.invoke(cli, ["history", "search", "test", "--limit", "5"])
 
             assert result.exit_code == 0
             assert mock_db_with_data.close.called
@@ -332,16 +306,12 @@ class TestHistorySearchClose:
 class TestHistoryDeleteClose:
     """Tests for history delete command - verify db.close() is called."""
 
-    def test_history_delete_exits_without_hanging(
-        self, cli_runner, mock_db_with_data
-    ):
+    def test_history_delete_exits_without_hanging(self, cli_runner, mock_db_with_data):
         """Verify history delete command exits cleanly with --yes flag."""
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_with_data
 
-            with patch(
-                "whisper_dictate.audio_storage.AudioStorage"
-            ) as mock_storage:
+            with patch("whisper_dictate.audio_storage.AudioStorage") as mock_storage:
                 mock_audio_path = Mock()
                 mock_audio_path.exists.return_value = False
                 mock_storage.return_value.get_audio_path.return_value = mock_audio_path
@@ -350,13 +320,9 @@ class TestHistoryDeleteClose:
 
                 assert result.exit_code == 0, f"Command failed: {result.output}"
                 assert "Deleted transcription #1" in result.output
-                assert mock_db_with_data.close.called, (
-                    "Database close() was not called - this would cause hanging"
-                )
+                assert mock_db_with_data.close.called, "Database close() was not called - this would cause hanging"
 
-    def test_history_delete_exits_without_hanging_invalid_id(
-        self, cli_runner, mock_db_empty
-    ):
+    def test_history_delete_exits_without_hanging_invalid_id(self, cli_runner, mock_db_empty):
         """Verify history delete exits cleanly when ID doesn't exist."""
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_empty
@@ -431,9 +397,7 @@ class TestHistoryUpdate:
             mock_database_cls.return_value = mock_db_with_update
 
             # Simulate user confirming with 'y'
-            result = cli_runner.invoke(
-                cli, ["history", "update", "1", "--text", "Updated text"], input="y\n"
-            )
+            result = cli_runner.invoke(cli, ["history", "update", "1", "--text", "Updated text"], input="y\n")
 
             assert result.exit_code == 0, f"Command failed: {result.output}"
             assert "Updated transcription #1" in result.output
@@ -445,9 +409,7 @@ class TestHistoryUpdate:
             mock_database_cls.return_value = mock_db_with_update
 
             # Simulate user cancelling with 'n'
-            result = cli_runner.invoke(
-                cli, ["history", "update", "1", "--text", "Updated text"], input="n\n"
-            )
+            result = cli_runner.invoke(cli, ["history", "update", "1", "--text", "Updated text"], input="n\n")
 
             assert result.exit_code == 0
             assert "cancelled" in result.output.lower()
@@ -459,9 +421,7 @@ class TestHistoryUpdate:
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_update_not_found
 
-            result = cli_runner.invoke(
-                cli, ["history", "update", "999", "--text", "Updated text"]
-            )
+            result = cli_runner.invoke(cli, ["history", "update", "999", "--text", "Updated text"])
 
             assert result.exit_code == 1
             assert "not found" in result.output
@@ -489,9 +449,7 @@ class TestHistoryUpdate:
             assert "Updated transcription #1" in result.output
 
             # Verify update was called with language
-            mock_db_with_update.update_transcript.assert_called_with(
-                1, "Updated text", "es"
-            )
+            mock_db_with_update.update_transcript.assert_called_with(1, "Updated text", "es")
 
     def test_history_update_requires_text(self, cli_runner):
         """Verify history update requires --text option."""
@@ -512,9 +470,7 @@ class TestHistoryUpdate:
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_with_update
 
-            result = cli_runner.invoke(
-                cli, ["history", "update", "1", "--text", "New text"], input="y\n"
-            )
+            result = cli_runner.invoke(cli, ["history", "update", "1", "--text", "New text"], input="y\n")
 
             assert "Current Text" in result.output
             assert "New Text" in result.output
@@ -531,27 +487,19 @@ class TestLogsCommandsClose:
             result = cli_runner.invoke(cli, ["logs", "list"])
 
             assert result.exit_code == 0, f"Command failed: {result.output}"
-            assert mock_db_with_logs.close.called, (
-                "Database close() was not called - this would cause connection leak"
-            )
+            assert mock_db_with_logs.close.called, "Database close() was not called - this would cause connection leak"
 
-    def test_logs_list_with_filters_calls_db_close(
-        self, cli_runner, mock_db_with_logs
-    ):
+    def test_logs_list_with_filters_calls_db_close(self, cli_runner, mock_db_with_logs):
         """Verify logs list with filter options calls database close()."""
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_with_logs
 
-            result = cli_runner.invoke(
-                cli, ["logs", "list", "--level", "ERROR", "--limit", "10"]
-            )
+            result = cli_runner.invoke(cli, ["logs", "list", "--level", "ERROR", "--limit", "10"])
 
             assert result.exit_code == 0
             assert mock_db_with_logs.close.called
 
-    def test_logs_list_no_results_calls_db_close(
-        self, cli_runner, mock_db_empty_logs
-    ):
+    def test_logs_list_no_results_calls_db_close(self, cli_runner, mock_db_empty_logs):
         """Verify logs list with no results calls database close()."""
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_empty_logs
@@ -571,9 +519,7 @@ class TestLogsCommandsClose:
                 export_file = f.name
 
             try:
-                result = cli_runner.invoke(
-                    cli, ["logs", "export", export_file], input="y\n"
-                )
+                result = cli_runner.invoke(cli, ["logs", "export", export_file], input="y\n")
 
                 assert result.exit_code == 0, f"Command failed: {result.output}"
                 assert mock_db_with_logs.close.called, (
@@ -583,9 +529,7 @@ class TestLogsCommandsClose:
                 with contextlib.suppress(OSError):
                     os.unlink(export_file)
 
-    def test_logs_export_json_format_calls_db_close(
-        self, cli_runner, mock_db_with_logs
-    ):
+    def test_logs_export_json_format_calls_db_close(self, cli_runner, mock_db_with_logs):
         """Verify logs export with JSON format calls database close()."""
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_with_logs
@@ -614,13 +558,9 @@ class TestLogsCommandsClose:
             result = cli_runner.invoke(cli, ["logs", "cleanup", "--days", "7"])
 
             assert result.exit_code == 0, f"Command failed: {result.output}"
-            assert mock_db_with_logs.close.called, (
-                "Database close() was not called - this would cause connection leak"
-            )
+            assert mock_db_with_logs.close.called, "Database close() was not called - this would cause connection leak"
 
-    def test_logs_cleanup_default_days_calls_db_close(
-        self, cli_runner, mock_db_with_logs
-    ):
+    def test_logs_cleanup_default_days_calls_db_close(self, cli_runner, mock_db_with_logs):
         """Verify logs cleanup with default days calls database close()."""
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_with_logs
@@ -756,9 +696,7 @@ class TestConnectionLeak:
                 cli_runner.invoke(cli, cmd)
 
                 # Each command should close the connection
-                assert mock_db.close.call_count >= 1, (
-                    f"Connection not closed for: {' '.join(cmd)}"
-                )
+                assert mock_db.close.call_count >= 1, f"Connection not closed for: {' '.join(cmd)}"
 
     def test_consecutive_logs_commands(self, cli_runner):
         """Verify multiple logs commands can run without connection issues."""
@@ -781,9 +719,7 @@ class TestConnectionLeak:
             for cmd in commands:
                 mock_db.close.reset_mock()
                 cli_runner.invoke(cli, cmd)
-                assert mock_db.close.call_count >= 1, (
-                    f"Connection not closed for: {' '.join(cmd)}"
-                )
+                assert mock_db.close.call_count >= 1, f"Connection not closed for: {' '.join(cmd)}"
 
     def test_all_history_commands_close_connection(self, cli_runner):
         """Verify all four history commands close database connection."""
@@ -874,9 +810,7 @@ class TestHistoryUpdateStorageSafety:
             mock_database_cls.return_value = mock_database_with_update
 
             # Simulate user confirming with 'y'
-            result = cli_runner.invoke(
-                cli, ["history", "update", "1", "--text", "Updated text"], input="y\n"
-            )
+            result = cli_runner.invoke(cli, ["history", "update", "1", "--text", "Updated text"], input="y\n")
 
             assert result.exit_code == 0, f"Command failed: {result.output}"
             assert "Updated transcription #1" in result.output
@@ -888,9 +822,7 @@ class TestHistoryUpdateStorageSafety:
             mock_database_cls.return_value = mock_database_with_update
 
             # Simulate user cancelling with 'n'
-            result = cli_runner.invoke(
-                cli, ["history", "update", "1", "--text", "Updated text"], input="n\n"
-            )
+            result = cli_runner.invoke(cli, ["history", "update", "1", "--text", "Updated text"], input="n\n")
 
             assert result.exit_code == 0
             assert "cancelled" in result.output.lower()
@@ -902,9 +834,7 @@ class TestHistoryUpdateStorageSafety:
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_database_not_found
 
-            result = cli_runner.invoke(
-                cli, ["history", "update", "999", "--text", "Updated text"]
-            )
+            result = cli_runner.invoke(cli, ["history", "update", "999", "--text", "Updated text"])
 
             assert result.exit_code == 1
             assert "not found" in result.output
@@ -932,9 +862,7 @@ class TestHistoryUpdateStorageSafety:
             assert "Updated transcription #1" in result.output
 
             # Verify update was called with language
-            mock_database_with_update.update_transcript.assert_called_with(
-                1, "Updated text", "es"
-            )
+            mock_database_with_update.update_transcript.assert_called_with(1, "Updated text", "es")
 
     def test_history_update_requires_text(self, cli_runner):
         """Verify history update requires --text option."""
@@ -953,16 +881,12 @@ class TestHistoryUpdateStorageSafety:
             # Should fail because --text is required
             assert result.exit_code != 0
 
-    def test_history_update_shows_comparison(
-        self, cli_runner, mock_database_with_update
-    ):
+    def test_history_update_shows_comparison(self, cli_runner, mock_database_with_update):
         """Verify history update shows old vs new text comparison."""
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_database_with_update
 
-            result = cli_runner.invoke(
-                cli, ["history", "update", "1", "--text", "New text"], input="y\n"
-            )
+            result = cli_runner.invoke(cli, ["history", "update", "1", "--text", "New text"], input="y\n")
 
             assert "Current Text" in result.output
             assert "New Text" in result.output
@@ -995,28 +919,20 @@ class TestHistoryDeleteFileFirst:
     def _invoke(self, cli_runner, mock_db, transcription_row):
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
-            with patch(
-                "whisper_dictate.audio_storage.AudioStorage"
-            ) as mock_storage:
+            with patch("whisper_dictate.audio_storage.AudioStorage") as mock_storage:
                 result = cli_runner.invoke(cli, ["history", "delete", "1", "--yes"])
         return result, mock_storage
 
-    def test_unlinks_file_before_deleting_row(
-        self, cli_runner, transcription_row
-    ):
+    def test_unlinks_file_before_deleting_row(self, cli_runner, transcription_row):
         mock_db = Mock()
         mock_db.get_transcription_with_recording = Mock(return_value=transcription_row)
         order = []
 
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
-            with patch(
-                "whisper_dictate.audio_storage.AudioStorage"
-            ) as mock_storage:
+            with patch("whisper_dictate.audio_storage.AudioStorage") as mock_storage:
                 mock_audio_path = Mock()
-                mock_audio_path.unlink.side_effect = (
-                    lambda *a, **kw: order.append("unlink")
-                )
+                mock_audio_path.unlink.side_effect = lambda *a, **kw: order.append("unlink")
                 mock_storage.return_value.get_audio_path.return_value = mock_audio_path
                 mock_db.delete_recording.side_effect = lambda rid: (
                     order.append("row"),
@@ -1041,9 +957,7 @@ class TestHistoryDeleteFileFirst:
         mock_storage.return_value.get_audio_path.assert_not_called()
         mock_db.delete_recording.assert_called_once_with(42)
 
-    def test_unsafe_path_deletes_row_only_and_warns(
-        self, cli_runner, transcription_row
-    ):
+    def test_unsafe_path_deletes_row_only_and_warns(self, cli_runner, transcription_row):
         from whisper_dictate.audio_storage import UnsafeAudioPathError
 
         mock_db = Mock()
@@ -1052,11 +966,9 @@ class TestHistoryDeleteFileFirst:
 
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
-            with patch(
-                "whisper_dictate.audio_storage.AudioStorage"
-            ) as mock_storage:
-                mock_storage.return_value.get_audio_path.side_effect = (
-                    UnsafeAudioPathError("escapes the recordings root")
+            with patch("whisper_dictate.audio_storage.AudioStorage") as mock_storage:
+                mock_storage.return_value.get_audio_path.side_effect = UnsafeAudioPathError(
+                    "escapes the recordings root"
                 )
                 result = cli_runner.invoke(cli, ["history", "delete", "1", "--yes"])
 
@@ -1064,18 +976,14 @@ class TestHistoryDeleteFileFirst:
         assert "escapes the recordings root" in result.output
         mock_db.delete_recording.assert_called_once_with(42)
 
-    def test_unlink_permission_error_aborts_row_deletion(
-        self, cli_runner, transcription_row
-    ):
+    def test_unlink_permission_error_aborts_row_deletion(self, cli_runner, transcription_row):
         mock_db = Mock()
         mock_db.get_transcription_with_recording = Mock(return_value=transcription_row)
         mock_db.delete_recording = Mock(return_value=True)
 
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
-            with patch(
-                "whisper_dictate.audio_storage.AudioStorage"
-            ) as mock_storage:
+            with patch("whisper_dictate.audio_storage.AudioStorage") as mock_storage:
                 mock_path = Mock()
                 mock_path.unlink.side_effect = PermissionError("denied")
                 mock_storage.return_value.get_audio_path.return_value = mock_path
@@ -1093,9 +1001,7 @@ class TestHistoryDeleteFileFirst:
 
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
-            with patch(
-                "whisper_dictate.audio_storage.AudioStorage"
-            ) as mock_storage:
+            with patch("whisper_dictate.audio_storage.AudioStorage") as mock_storage:
                 mock_path = Mock()
                 mock_path.unlink.side_effect = FileNotFoundError()
                 mock_storage.return_value.get_audio_path.return_value = mock_path
@@ -1134,9 +1040,7 @@ class TestHistoryDeleteFileFirst:
 
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
-            with patch(
-                "whisper_dictate.audio_storage.AudioStorage", return_value=storage
-            ):
+            with patch("whisper_dictate.audio_storage.AudioStorage", return_value=storage):
                 # Out-of-root absolute path: row-only delete
                 result1 = cli_runner.invoke(cli, ["history", "delete", "1", "--yes"])
                 # In-root relative path: file deleted + row deleted

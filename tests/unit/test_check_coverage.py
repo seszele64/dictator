@@ -52,10 +52,12 @@ def _passing_files(prefix: str = "") -> dict[str, dict]:
 @pytest.fixture
 def tmp_coverage_file(tmp_path):
     """Write a coverage.json to tmp_path and return its Path."""
+
     def _write(data: dict) -> Path:
         p = tmp_path / "coverage.json"
         p.write_text(json.dumps(data), encoding="utf-8")
         return p
+
     return _write
 
 

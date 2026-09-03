@@ -121,6 +121,7 @@ class OpenAICompatibleProvider(TranscriptionProvider):
         # Pre-transcription silence detection
         if self._silence_threshold_dbfs is not None:
             from whisper_dictate.audio_analysis import is_audio_silent
+
             if is_audio_silent(audio_file, self._silence_threshold_dbfs):
                 logger.info(
                     f"Silence detected in {audio_file.name} "
@@ -133,10 +134,7 @@ class OpenAICompatibleProvider(TranscriptionProvider):
                     provider=self._provider_name,
                 )
 
-        logger.info(
-            f"Transcribing with {self._provider_name}: {audio_file} "
-            f"(model={self._model})"
-        )
+        logger.info(f"Transcribing with {self._provider_name}: {audio_file} (model={self._model})")
 
         try:
             with open(audio_file, "rb") as file:
@@ -161,8 +159,7 @@ class OpenAICompatibleProvider(TranscriptionProvider):
                     # Transcribe (default)
                     if self._language:
                         logger.debug(
-                            f"Language explicitly set to '{self._language}' "
-                            f"(language auto-detection disabled)"
+                            f"Language explicitly set to '{self._language}' (language auto-detection disabled)"
                         )
                     else:
                         logger.debug(
@@ -188,10 +185,7 @@ class OpenAICompatibleProvider(TranscriptionProvider):
                 provider=self._provider_name,
             )
 
-            logger.info(
-                f"Transcription completed: {len(result.text)} characters, "
-                f"language={result.language}"
-            )
+            logger.info(f"Transcription completed: {len(result.text)} characters, language={result.language}")
 
             return result
 

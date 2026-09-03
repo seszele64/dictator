@@ -116,14 +116,8 @@ def capture_db_state(db_path: Path, queries: dict[str, str]) -> dict[str, Any]:
 
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
-        counts = {
-            table: conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-            for table in TABLES
-        }
-        query_results = {
-            name: [list(row) for row in conn.execute(sql).fetchall()]
-            for name, sql in queries.items()
-        }
+        counts = {table: conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in TABLES}
+        query_results = {name: [list(row) for row in conn.execute(sql).fetchall()] for name, sql in queries.items()}
     finally:
         conn.close()
     return {"counts": counts, "queries": query_results}
@@ -159,9 +153,7 @@ def snapshot_cli(
 
     logging.disable(logging.CRITICAL)
     try:
-        with patch(
-            "whisper_dictate.cli.bootstrap", lambda *a, **k: config
-        ):
+        with patch("whisper_dictate.cli.bootstrap", lambda *a, **k: config):
             result = runner.invoke(cli, payload_args)
     finally:
         logging.disable(logging.NOTSET)
@@ -212,7 +204,6 @@ def snapshot_cli(
             )
         )
         raise AssertionError(
-            f"CLI snapshot mismatch for {name!r} — observable CLI behavior "
-            f"drifted from the committed baseline:\n{diff}"
+            f"CLI snapshot mismatch for {name!r} — observable CLI behavior drifted from the committed baseline:\n{diff}"
         )
     return actual

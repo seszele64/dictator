@@ -80,9 +80,7 @@ class TestTranscribeAudio:
 
         ctx.service_cls.assert_called_once()
         assert ctx.service_cls.call_args.args[0] is not None  # the config
-        ctx.service.transcribe_existing.assert_called_once_with(
-            42, ctx.audio_file, copy_to_clipboard=True
-        )
+        ctx.service.transcribe_existing.assert_called_once_with(42, ctx.audio_file, copy_to_clipboard=True)
         assert ctx.returned == "Hello world"
         ctx.notify_stopped.assert_called_once_with("Hello world")
         ctx.notify_error.assert_not_called()
@@ -94,9 +92,7 @@ class TestTranscribeAudio:
         ctx = self._run_transcribe(recording_id=None, text="Hello world")
 
         ctx.mock_db.get_state.assert_called_once_with(toggle.STATE_KEY_RECORDING_ID)
-        ctx.service.transcribe_existing.assert_called_once_with(
-            42, ctx.audio_file, copy_to_clipboard=True
-        )
+        ctx.service.transcribe_existing.assert_called_once_with(42, ctx.audio_file, copy_to_clipboard=True)
         assert ctx.returned == "Hello world"
         ctx.audio_file.unlink.assert_called_once()
 
@@ -134,22 +130,16 @@ class TestTranscribeAudioSilenceDetection:
 
     def test_transcribe_silent_returns_empty_and_notifies(self):
         """Silence: delegate, notify the silence message, return ""."""
-        ctx = TestTranscribeAudio._run_transcribe(
-            None, recording_id=42, text="", silence=True
-        )
+        ctx = TestTranscribeAudio._run_transcribe(None, recording_id=42, text="", silence=True)
 
-        ctx.service.transcribe_existing.assert_called_once_with(
-            42, ctx.audio_file, copy_to_clipboard=True
-        )
+        ctx.service.transcribe_existing.assert_called_once_with(42, ctx.audio_file, copy_to_clipboard=True)
         assert ctx.returned == ""
         ctx.notify_stopped.assert_called_once_with("Silence detected - no speech")
         ctx.audio_file.unlink.assert_called_once()
 
     def test_transcribe_non_silent_proceeds_normally(self):
         """Non-silent: the text path notifies with the transcription text."""
-        ctx = TestTranscribeAudio._run_transcribe(
-            None, recording_id=42, text="Hello world"
-        )
+        ctx = TestTranscribeAudio._run_transcribe(None, recording_id=42, text="Hello world")
 
         assert ctx.returned == "Hello world"
         ctx.notify_stopped.assert_called_once_with("Hello world")
@@ -190,9 +180,7 @@ class TestToggleStateMachine:
         db.get_state = Mock(return_value=None)
         db.create_recording = Mock(return_value=7)
         storage = Mock()
-        monkeypatch.setattr(
-            toggle, "get_db_and_storage", Mock(return_value=(db, storage))
-        )
+        monkeypatch.setattr(toggle, "get_db_and_storage", Mock(return_value=(db, storage)))
 
         popen = Mock()
         popen.return_value = Mock(pid=4242)
@@ -206,9 +194,7 @@ class TestToggleStateMachine:
         monkeypatch.setattr(toggle, "bootstrap", Mock())
         monkeypatch.setattr(toggle, "setup_logging", Mock())
 
-        return SimpleNamespace(
-            db=db, popen=popen, notifies=notifies, tmp_path=tmp_path
-        )
+        return SimpleNamespace(db=db, popen=popen, notifies=notifies, tmp_path=tmp_path)
 
     # ---- is_recording: DB first, legacy files as fallback ----
 
@@ -234,9 +220,7 @@ class TestToggleStateMachine:
         """A database failure degrades to the file-based fallback."""
         monkeypatch.setattr(toggle, "STATE_FILE", tmp_path / "state")
         monkeypatch.setattr(toggle, "PID_FILE", tmp_path / "pid")
-        monkeypatch.setattr(
-            toggle, "get_db_and_storage", Mock(side_effect=RuntimeError("db down"))
-        )
+        monkeypatch.setattr(toggle, "get_db_and_storage", Mock(side_effect=RuntimeError("db down")))
         assert toggle.is_recording(None) is False
         (tmp_path / "state").touch()
         (tmp_path / "pid").write_text("1\n")
@@ -275,9 +259,7 @@ class TestToggleStateMachine:
             channels=2,
         )
         toggle_env.db.set_state.assert_any_call(toggle.STATE_KEY_RECORDING, True)
-        toggle_env.db.set_state.assert_any_call(
-            toggle.STATE_KEY_RECORDING_ID, 7
-        )
+        toggle_env.db.set_state.assert_any_call(toggle.STATE_KEY_RECORDING_ID, 7)
         toggle_env.notifies["notify_recording_start"].assert_called_once()
         toggle_env.db.close.assert_called_once()
 
@@ -302,9 +284,7 @@ class TestToggleStateMachine:
 
     # ---- stop_background_recording ----
 
-    def test_stop_kills_pid_and_clears_files_and_state(
-        self, toggle_env, monkeypatch, tmp_path
-    ):
+    def test_stop_kills_pid_and_clears_files_and_state(self, toggle_env, monkeypatch, tmp_path):
         """Stop signals arecord twice (TERM then KILL), removes both legacy
         files, clears DB state, and returns the recording_id for transcription."""
         (tmp_path / "pid").write_text("4242")
@@ -323,12 +303,8 @@ class TestToggleStateMachine:
         kill.assert_any_call(4242, toggle.signal.SIGKILL)
         assert not (tmp_path / "pid").exists()
         assert not (tmp_path / "state").exists()
-        toggle_env.db.set_state.assert_called_once_with(
-            toggle.STATE_KEY_RECORDING, False
-        )
-        toggle_env.db.delete_state.assert_called_once_with(
-            toggle.STATE_KEY_RECORDING_ID
-        )
+        toggle_env.db.set_state.assert_called_once_with(toggle.STATE_KEY_RECORDING, False)
+        toggle_env.db.delete_state.assert_called_once_with(toggle.STATE_KEY_RECORDING_ID)
         toggle_env.db.close.assert_called_once()
 
     def test_stop_without_pid_still_clears_state_file(self, toggle_env, tmp_path):
@@ -366,9 +342,7 @@ class TestToggleStateMachine:
 
     def test_main_proceeds_when_dunst_missing(self, toggle_env, monkeypatch):
         """A missing dunst daemon only warns - recording still starts."""
-        mocks = self._patch_dispatch(
-            monkeypatch, ensure_dunst_running=Mock(return_value=False)
-        )
+        mocks = self._patch_dispatch(monkeypatch, ensure_dunst_running=Mock(return_value=False))
         toggle.main()
         mocks.start_background_recording.assert_called_once()
 
@@ -385,9 +359,7 @@ class TestToggleStateMachine:
 
     def test_main_exits_1_when_start_fails(self, toggle_env, monkeypatch):
         """A failed start exits with code 1 (the i3-visible failure code)."""
-        self._patch_dispatch(
-            monkeypatch, start_background_recording=Mock(return_value=None)
-        )
+        self._patch_dispatch(monkeypatch, start_background_recording=Mock(return_value=None))
         with pytest.raises(SystemExit) as excinfo:
             toggle.main()
         assert excinfo.value.code == 1
@@ -415,15 +387,11 @@ class TestToggleStateMachine:
         mocks.stop_background_recording.assert_not_called()
         mocks.transcribe_audio.assert_not_called()
 
-    def test_main_error_path_notifies_and_cleans_up(
-        self, toggle_env, monkeypatch, tmp_path
-    ):
+    def test_main_error_path_notifies_and_cleans_up(self, toggle_env, monkeypatch, tmp_path):
         """An unexpected error notifies, stops recording, and removes audio."""
         audio_path = tmp_path / "audio.wav"
         audio_path.write_bytes(b"RIFF")
-        mocks = self._patch_dispatch(
-            monkeypatch, is_recording=Mock(side_effect=RuntimeError("boom"))
-        )
+        mocks = self._patch_dispatch(monkeypatch, is_recording=Mock(side_effect=RuntimeError("boom")))
         toggle.main()
         toggle_env.notifies["notify_error"].assert_called_once()
         mocks.stop_background_recording.assert_called_once()
@@ -443,9 +411,7 @@ class TestToggleLogging:
         try:
             toggle.setup_logging()
             expected = AppPaths().log_file
-            file_handlers = [
-                h for h in root.handlers if isinstance(h, logging.FileHandler)
-            ]
+            file_handlers = [h for h in root.handlers if isinstance(h, logging.FileHandler)]
             assert file_handlers, "expected a file handler after setup_logging"
             assert file_handlers[0].baseFilename == str(expected)
             assert expected.exists(), "log file should have been created"

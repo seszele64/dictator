@@ -90,4 +90,3 @@ The system **SHALL** include automated regression tests covering path containmen
 - Given: a test suite exercising `get_audio_path()` with absolute, traversing, legacy-in-root, and empty paths, plus `save_audio` success/failure and `keep_wav` flows
 - When: the test suite is executed
 - Then: escaping paths are rejected without file access, empty paths behave as "no file", saves are atomic and claim-first, and no temp files remain after `keep_wav` flows
-

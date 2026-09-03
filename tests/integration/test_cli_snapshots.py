@@ -41,10 +41,14 @@ _HISTORY_SEED = [
 
 _LOG_SEED = [
     # (level, message, source, metadata, pinned timestamp)
-    ("INFO", "Transcription completed", "dictation",
-     {"recording_id": 1, "duration": 2.5, "language": "en"}, "2024-05-01 08:00:00"),
-    ("ERROR", "Dictation failed: simulated API timeout", "dictation", None,
-     "2024-05-02 09:30:00"),
+    (
+        "INFO",
+        "Transcription completed",
+        "dictation",
+        {"recording_id": 1, "duration": 2.5, "language": "en"},
+        "2024-05-01 08:00:00",
+    ),
+    ("ERROR", "Dictation failed: simulated API timeout", "dictation", None, "2024-05-02 09:30:00"),
     ("DEBUG", "startup", "whisper_dictate.cli", None, "2024-05-01 10:00:00"),
 ]
 
@@ -144,17 +148,13 @@ def snapshot_ctx(env_isolator, monkeypatch, fake_provider, fake_recorder):
         copy_to_clipboard=True,
     )
 
-    monkeypatch.setattr(
-        "whisper_dictate.dictation.AudioRecorder", lambda audio_config: fake_recorder
-    )
+    monkeypatch.setattr("whisper_dictate.dictation.AudioRecorder", lambda audio_config: fake_recorder)
     monkeypatch.setattr(
         "whisper_dictate.dictation.create_transcriber",
         lambda whisper_config: fake_provider,
     )
     clipboard = FakeClipboard()
-    monkeypatch.setattr(
-        "whisper_dictate.dictation.ClipboardManager", lambda: clipboard
-    )
+    monkeypatch.setattr("whisper_dictate.dictation.ClipboardManager", lambda: clipboard)
 
     ctx = SnapshotContext(
         config=config,
@@ -210,13 +210,9 @@ def test_snapshot_dictate_success_roundtrip(snapshot_ctx):
         name="dictate_success",
         db_state_queries={
             "recordings": (
-                "SELECT file_path, duration, format, sample_rate, channels, "
-                "timestamp, created_at FROM recordings"
+                "SELECT file_path, duration, format, sample_rate, channels, timestamp, created_at FROM recordings"
             ),
-            "transcripts": (
-                "SELECT recording_id, text, language, model_used, confidence "
-                "FROM transcripts"
-            ),
+            "transcripts": ("SELECT recording_id, text, language, model_used, confidence FROM transcripts"),
             "logs": "SELECT level, message, source, metadata_json FROM logs",
         },
     )
@@ -234,9 +230,7 @@ def test_snapshot_dictate_transcription_error(snapshot_ctx):
     exact stderr message, exit code 1, no lingering recording row (the
     in-progress row is cleaned up) and exactly one ERROR log."""
     ctx = snapshot_ctx
-    ctx.provider.error = TranscriptionError(
-        "simulated provider outage", provider="fake"
-    )
+    ctx.provider.error = TranscriptionError("simulated provider outage", provider="fake")
     ctx.snap(
         ["dictate", "--duration", "2.0"],
         name="dictate_transcription_error",
@@ -312,9 +306,7 @@ def _seed_one_recording_with_files(ctx):
     """One DB-referenced file plus one orphan file on disk (44 bytes each)."""
     db = ctx.seed_db()
     try:
-        rid = db.create_recording(
-            file_path="2024/01/01/kept.wav", duration=2.0, format="wav"
-        )
+        rid = db.create_recording(file_path="2024/01/01/kept.wav", duration=2.0, format="wav")
         tid = db.create_transcript(rid, "kept recording transcript", language="en")
         db.execute(
             "UPDATE transcripts SET timestamp = '2024-02-01 12:00:00' WHERE id = ?",
@@ -380,10 +372,7 @@ def test_snapshot_logs_list_seeded(snapshot_ctx):
         ["logs", "list"],
         name="logs_list_seeded",
         db_state_queries={
-            "logs": (
-                "SELECT level, message, source, timestamp, metadata_json "
-                "FROM logs ORDER BY id"
-            ),
+            "logs": ("SELECT level, message, source, timestamp, metadata_json FROM logs ORDER BY id"),
         },
     )
 
@@ -426,9 +415,7 @@ def test_snapshot_migrate_status_with_legacy_files(snapshot_ctx, monkeypatch):
     """Pins `migrate --status` when legacy state/PID files exist: the
     Found/Not-found block and the migration-needed verdict (no DB writes)."""
     ctx = snapshot_ctx
-    _isolate_legacy_files(
-        monkeypatch, ctx.tmp_root, existing=("LEGACY_STATE_FILE", "LEGACY_PID_FILE")
-    )
+    _isolate_legacy_files(monkeypatch, ctx.tmp_root, existing=("LEGACY_STATE_FILE", "LEGACY_PID_FILE"))
     ctx.snap(
         ["migrate", "--status"],
         name="migrate_status_with_legacy_files",
@@ -457,9 +444,6 @@ def test_snapshot_legacy_v1_db_migrated_via_history_list(snapshot_ctx, legacy_db
         db_path=legacy_db_path,
         db_state_queries={
             "schema_versions": "SELECT version FROM schema_versions ORDER BY version",
-            "transcripts": (
-                "SELECT recording_id, text, language, updated_at IS NOT NULL "
-                "FROM transcripts"
-            ),
+            "transcripts": ("SELECT recording_id, text, language, updated_at IS NOT NULL FROM transcripts"),
         },
     )

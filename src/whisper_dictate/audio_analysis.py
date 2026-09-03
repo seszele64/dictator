@@ -52,16 +52,12 @@ def is_audio_silent(audio_file: Path, threshold_dbfs: float = -50.0) -> bool:
         is_silent: bool = dbfs < threshold_dbfs
 
         logger.debug(
-            f"Audio analysis: {audio_file.name} -> {dbfs:.1f} dBFS "
-            f"(threshold={threshold_dbfs:.1f}, silent={is_silent})"
+            f"Audio analysis: {audio_file.name} -> {dbfs:.1f} dBFS (threshold={threshold_dbfs:.1f}, silent={is_silent})"
         )
 
         return is_silent
 
     except Exception as e:
         # Fail-open: if we can't analyze, let the API try
-        logger.warning(
-            f"Failed to analyze audio {audio_file}: {e}. "
-            f"Proceeding with transcription (fail-open)."
-        )
+        logger.warning(f"Failed to analyze audio {audio_file}: {e}. Proceeding with transcription (fail-open).")
         return False

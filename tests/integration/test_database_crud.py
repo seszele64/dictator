@@ -272,10 +272,7 @@ class TestTranscriptCRUD:
         """update_transcript() can update text and language together."""
         recording_id = real_db.create_recording(file_path="u2.wav")
         transcript_id = real_db.create_transcript(recording_id, "original", language="en")
-        assert (
-            real_db.update_transcript(transcript_id, "nuevo texto", language="es")
-            is True
-        )
+        assert real_db.update_transcript(transcript_id, "nuevo texto", language="es") is True
         transcript = real_db.get_transcript(transcript_id)
         assert transcript["text"] == "nuevo texto"
         assert transcript["language"] == "es"
@@ -359,9 +356,7 @@ class TestLogCRUD:
             "INSERT INTO logs (level, message, timestamp) VALUES (?, ?, ?)",
             ("INFO", "after", "2022-06-15 12:00:00"),
         )
-        logs = real_db.query_logs(
-            from_time="2021-01-01 00:00:00", to_time="2021-12-31 23:59:59"
-        )
+        logs = real_db.query_logs(from_time="2021-01-01 00:00:00", to_time="2021-12-31 23:59:59")
         assert [log["message"] for log in logs] == ["inside"]
 
     def test_query_logs_ordered_desc(self, real_db):

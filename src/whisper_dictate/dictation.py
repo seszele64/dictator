@@ -47,9 +47,7 @@ class DictationService:
         self.clipboard = ClipboardManager()
 
         # Initialize audio converter for MP3 support
-        self.audio_converter = AudioConverter(
-            bitrate=config.audio.mp3_bitrate, keep_wav=config.audio.keep_wav
-        )
+        self.audio_converter = AudioConverter(bitrate=config.audio.mp3_bitrate, keep_wav=config.audio.keep_wav)
 
         # Initialize audio storage (per instance; database is lazy below)
         self._db: Database | None = None
@@ -113,15 +111,11 @@ class DictationService:
         Returns:
             Path: Final path of the persisted file
         """
-        staged: StagedAudio = self.audio_storage.stage_audio(
-            source_file, suffix=audio_format
-        )
+        staged: StagedAudio = self.audio_storage.stage_audio(source_file, suffix=audio_format)
 
         # Claim the final path before finalizing so cleanup can never race us
         if recording_id is not None:
-            self.database.update_recording_file_path(
-                recording_id, str(staged.relative_path)
-            )
+            self.database.update_recording_file_path(recording_id, str(staged.relative_path))
 
         try:
             return self.audio_storage.finalize_audio(staged)
@@ -132,14 +126,10 @@ class DictationService:
                 try:
                     self.database.update_recording_file_path(recording_id, "")
                 except Exception as rollback_error:
-                    logger.warning(
-                        f"Failed to roll back file_path claim: {rollback_error}"
-                    )
+                    logger.warning(f"Failed to roll back file_path claim: {rollback_error}")
             raise
 
-    def dictate(
-        self, duration: float | None = None
-    ) -> TranscriptionResult | None:
+    def dictate(self, duration: float | None = None) -> TranscriptionResult | None:
         """WHY THIS EXISTS: Users need a single method to perform complete
         dictation workflow without managing individual components.
 
@@ -166,10 +156,7 @@ class DictationService:
             # Check disk space before recording
             has_space, available_mb = self.check_disk_space()
             if not has_space:
-                logger.warning(
-                    f"Low disk space: only {available_mb}MB available. "
-                    f"Recording may fail if disk fills up."
-                )
+                logger.warning(f"Low disk space: only {available_mb}MB available. Recording may fail if disk fills up.")
 
             # Record audio
             logger.info("Starting dictation workflow")
@@ -183,12 +170,8 @@ class DictationService:
             audio_file = wav_file
             audio_format = "wav"
             if self.config.audio.mp3_enabled:
-                logger.info(
-                    f"Converting WAV to MP3 (bitrate={self.config.audio.mp3_bitrate})"
-                )
-                audio_file = self.audio_converter.convert(
-                    wav_file, delete_source=not self.config.audio.keep_wav
-                )
+                logger.info(f"Converting WAV to MP3 (bitrate={self.config.audio.mp3_bitrate})")
+                audio_file = self.audio_converter.convert(wav_file, delete_source=not self.config.audio.keep_wav)
                 if audio_file.suffix == ".mp3":
                     audio_format = "mp3"
                     logger.info(f"Using MP3 for transcription: {audio_file}")
@@ -262,9 +245,7 @@ class DictationService:
 
             # Save audio to persistent storage and update recording (claim-first)
             try:
-                saved_path = self._save_audio_claim_first(
-                    recording_id, persist_file, persist_format
-                )
+                saved_path = self._save_audio_claim_first(recording_id, persist_file, persist_format)
                 recording_saved = True
                 logger.info(f"Audio saved to persistent storage: {saved_path}")
             except Exception as e:
@@ -283,9 +264,7 @@ class DictationService:
                         model_used=self.config.openai.model,
                         confidence=confidence,
                     )
-                    logger.debug(
-                        f"Created transcript entry for recording {recording_id}"
-                    )
+                    logger.debug(f"Created transcript entry for recording {recording_id}")
                 except Exception as e:
                     logger.warning(f"Failed to create transcript entry: {e}")
 
@@ -412,9 +391,7 @@ class DictationService:
             # still points elsewhere.
             saved_path: Path | None = None
             try:
-                saved_path = self._save_audio_claim_first(
-                    recording_id, audio_file, audio_format
-                )
+                saved_path = self._save_audio_claim_first(recording_id, audio_file, audio_format)
                 audio_saved = True
                 logger.info(f"Audio saved to persistent storage: {saved_path}")
             except Exception as e:
@@ -431,9 +408,7 @@ class DictationService:
                     audio_info = sf.info(audio_to_transcribe)
                     duration = audio_info.duration
                     self.database.update_recording_duration(recording_id, duration)
-                    logger.debug(
-                        f"Updated recording {recording_id} with duration: {duration:.2f}s"
-                    )
+                    logger.debug(f"Updated recording {recording_id} with duration: {duration:.2f}s")
                 except Exception as e:
                     logger.warning(f"Failed to calculate recording duration: {e}")
 
@@ -442,9 +417,7 @@ class DictationService:
             # Handle silence detection - skip clipboard, DB transcript text,
             # and log; only the empty transcript row is written
             if result.silence_detected:
-                logger.info(
-                    "Silence detected - skipping clipboard copy and transcript storage"
-                )
+                logger.info("Silence detected - skipping clipboard copy and transcript storage")
 
                 if recording_id:
                     try:
@@ -473,18 +446,12 @@ class DictationService:
                         confidence=confidence,
                     )
                     transcript_stored = True
-                    logger.debug(
-                        f"Created transcript entry for recording {recording_id}"
-                    )
+                    logger.debug(f"Created transcript entry for recording {recording_id}")
                 except Exception as e:
                     logger.warning(f"Failed to create transcript entry: {e}")
 
             # Copy to clipboard if enabled (never for silence)
-            should_copy = (
-                self.config.copy_to_clipboard
-                if copy_to_clipboard is None
-                else copy_to_clipboard
-            )
+            should_copy = self.config.copy_to_clipboard if copy_to_clipboard is None else copy_to_clipboard
             if should_copy:
                 success = self.clipboard.copy_to_clipboard(result.text)
                 if success:
@@ -505,15 +472,11 @@ class DictationService:
             # do not leave orphaned rows in history. The row is kept when the
             # audio persisted OR a transcript was stored - deleting those
             # would orphan real data.
-            self._cleanup_failed_recording(
-                recording_id, audio_saved or transcript_stored
-            )
+            self._cleanup_failed_recording(recording_id, audio_saved or transcript_stored)
 
             raise
 
-    def _cleanup_failed_recording(
-        self, recording_id: int | None, recording_saved: bool
-    ) -> None:
+    def _cleanup_failed_recording(self, recording_id: int | None, recording_saved: bool) -> None:
         """Delete the in-progress recording row after a failure or interruption.
 
         Rows that already received their persisted audio are kept - deleting
@@ -530,9 +493,7 @@ class DictationService:
             return
         try:
             if self.database.delete_recording(recording_id):
-                logger.info(
-                    f"Removed in-progress recording entry {recording_id} after failure"
-                )
+                logger.info(f"Removed in-progress recording entry {recording_id} after failure")
         except Exception as e:
             logger.warning(f"Failed to clean up in-progress recording entry: {e}")
 

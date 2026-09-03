@@ -389,6 +389,8 @@ def tmp_recordings_dir(tmp_path):
     recordings = tmp_path / "recordings"
     recordings.mkdir(parents=True, exist_ok=True)
     yield recordings
+
+
 # ============ Legacy Database Fixture ============
 # The pre-versioning schema is exactly version 1: all current tables except
 # schema_versions, with transcripts lacking the updated_at column.
@@ -453,12 +455,10 @@ def legacy_db_path(tmp_path):
     try:
         conn.executescript(LEGACY_SCHEMA_SQL)
         conn.execute(
-            "INSERT INTO recordings (file_path, duration, format) "
-            "VALUES ('2024/01/01/legacy.wav', 3.5, 'wav')"
+            "INSERT INTO recordings (file_path, duration, format) VALUES ('2024/01/01/legacy.wav', 3.5, 'wav')"
         )
         conn.execute(
-            "INSERT INTO transcripts (recording_id, text, language) "
-            "VALUES (1, 'legacy transcription text', 'en')"
+            "INSERT INTO transcripts (recording_id, text, language) VALUES (1, 'legacy transcription text', 'en')"
         )
         conn.commit()
     finally:

@@ -115,9 +115,7 @@ class AudioRecorder:
             logger.debug("Recording completed")
 
             # Save to temporary file
-            with tempfile.NamedTemporaryFile(
-                suffix=".wav", delete=False, dir=tempfile.gettempdir()
-            ) as tmp_file:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, dir=tempfile.gettempdir()) as tmp_file:
                 sf.write(
                     tmp_file.name,
                     audio_data,
@@ -152,9 +150,7 @@ class AudioRecorder:
         """
         sd = self._get_sd()
         devices = sd.query_devices()
-        input_devices = tuple(
-            device["name"] for device in devices if device["max_input_channels"] > 0
-        )
+        input_devices = tuple(device["name"] for device in devices if device["max_input_channels"] > 0)
 
         logger.debug(f"Found {len(input_devices)} audio input devices")
         return input_devices

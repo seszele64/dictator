@@ -1,0 +1,26 @@
+# Why: local fast gates mirroring CI intent — lint+format Python, catch
+# trailing whitespace / missing EOF newlines / invalid YAML+TOML / conflict
+# markers before commit. Revs are pinned (no floating) so the gate is
+# reproducible; bump deliberately, one rev at a time.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # rev tracks the ruff version resolved in uv.lock (currently 0.16.1).
+    rev: v0.16.1
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # The two file-modifying hooks below must NOT touch test snapshots:
+      # they are byte-compared against fixtures and any normalization would
+      # break `tests/integration/test_cli_snapshots.py`.
+      - id: trailing-whitespace
+        exclude: '^tests/snapshots/'
+      - id: end-of-file-fixer
+        exclude: '^tests/snapshots/'
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict

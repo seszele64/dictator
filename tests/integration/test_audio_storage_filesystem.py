@@ -68,9 +68,7 @@ class TestDateBasedPath:
 
     def test_date_path_structure(self):
         """Path uses YYYY/MM/DD structure."""
-        assert _get_date_based_path(Path("/tmp"), datetime(2026, 8, 1)) == Path(
-            "/tmp/2026/08/01"
-        )
+        assert _get_date_based_path(Path("/tmp"), datetime(2026, 8, 1)) == Path("/tmp/2026/08/01")
 
     def test_date_path_default_now(self):
         """Without a timestamp, today's date is used."""
@@ -80,9 +78,7 @@ class TestDateBasedPath:
 
     def test_date_path_zero_padding(self):
         """Month and day are zero-padded."""
-        assert _get_date_based_path(Path("/tmp"), datetime(2026, 1, 5)) == Path(
-            "/tmp/2026/01/05"
-        )
+        assert _get_date_based_path(Path("/tmp"), datetime(2026, 1, 5)) == Path("/tmp/2026/01/05")
 
 
 class TestAudioStorageInit:

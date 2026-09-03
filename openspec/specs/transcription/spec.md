@@ -65,4 +65,3 @@ The system **SHALL** include a CLI regression test using the real `load_config()
 - Given: no API key is set in the environment, the real `load_config()` is used, and logging is stubbed
 - When: the CLI runner invokes a non-transcription command such as `migrate --status`
 - Then: the command exits with code 0 and no "API key not found" error is printed
-

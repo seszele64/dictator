@@ -51,7 +51,7 @@ class CursorResult:
 
     def fetchall(self) -> list[tuple[Any, ...]]:
         """Fetch all remaining result rows."""
-        rows = self._rows[self._index:]
+        rows = self._rows[self._index :]
         self._index = len(self._rows)
         return rows
 
@@ -168,9 +168,7 @@ class Database:
             self.initialize()
 
         if not self._connection:
-            raise RuntimeError(
-                "Database connection not available after initialization."
-            )
+            raise RuntimeError("Database connection not available after initialization.")
 
         return self._connection
 
@@ -244,9 +242,7 @@ class Database:
         with self.connection() as conn:
             conn.executemany(query, parameters)
 
-    def fetchone(
-        self, query: str, parameters: tuple[Any, ...] = ()
-    ) -> tuple[Any, ...] | None:
+    def fetchone(self, query: str, parameters: tuple[Any, ...] = ()) -> tuple[Any, ...] | None:
         """Execute a query and fetch one result.
 
         Args:
@@ -326,17 +322,13 @@ class Database:
         ]
 
         with self.connection() as conn:
-            cursor = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-            )
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
             rows = cursor.fetchall()
             existing_tables = {row[0] for row in rows}
 
         missing_tables = set(expected_tables) - existing_tables
         if missing_tables:
-            raise RuntimeError(
-                f"Database integrity check failed. Missing tables: {missing_tables}"
-            )
+            raise RuntimeError(f"Database integrity check failed. Missing tables: {missing_tables}")
 
         logger.info(f"Integrity check passed. Found tables: {sorted(existing_tables)}")
 
@@ -352,8 +344,7 @@ class Database:
                 # instead of silently stamping the current version onto an old
                 # schema (which broke update_transcript forever).
                 logger.info(
-                    "Legacy database detected (core tables without schema "
-                    "version). Backfilling schema migrations..."
+                    "Legacy database detected (core tables without schema version). Backfilling schema migrations..."
                 )
                 self._create_schema()  # idempotent; fills any missing tables/indexes
                 self._set_schema_version(1)
@@ -363,10 +354,7 @@ class Database:
                 self._create_schema()
                 self._set_schema_version(CURRENT_SCHEMA_VERSION)
         elif current_version < CURRENT_SCHEMA_VERSION:
-            logger.info(
-                f"Migrating schema from version {current_version} "
-                f"to {CURRENT_SCHEMA_VERSION}..."
-            )
+            logger.info(f"Migrating schema from version {current_version} to {CURRENT_SCHEMA_VERSION}...")
             self._run_migrations(current_version, CURRENT_SCHEMA_VERSION)
         else:
             logger.debug(f"Schema version is current: {current_version}")
@@ -399,9 +387,7 @@ class Database:
         """
         try:
             with self.connection() as conn:
-                cursor = conn.execute(
-                    "SELECT version FROM schema_versions ORDER BY applied_at DESC LIMIT 1"
-                )
+                cursor = conn.execute("SELECT version FROM schema_versions ORDER BY applied_at DESC LIMIT 1")
                 row = cursor.fetchone()
                 return int(row[0]) if row else 0
         except sqlite3.OperationalError:
@@ -415,8 +401,7 @@ class Database:
         """
         with self.connection() as conn:
             conn.execute(
-                "INSERT INTO schema_versions (version) VALUES (?) "
-                "ON CONFLICT(version) DO NOTHING",
+                "INSERT INTO schema_versions (version) VALUES (?) ON CONFLICT(version) DO NOTHING",
                 (version,),
             )
         logger.info(f"Schema version set to {version}")
@@ -485,22 +470,11 @@ class Database:
             """)
 
             # Create indexes for better query performance
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_recordings_timestamp "
-                "ON recordings(timestamp)"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_transcripts_recording_id "
-                "ON transcripts(recording_id)"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_transcripts_timestamp "
-                "ON transcripts(timestamp)"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_recordings_timestamp ON recordings(timestamp)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_transcripts_recording_id ON transcripts(recording_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_transcripts_timestamp ON transcripts(timestamp)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level)")
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_source ON logs(source)")
 
         logger.info("Database schema created")
@@ -537,13 +511,9 @@ class Database:
                 if "updated_at" not in column_names:
                     # SQLite doesn't support adding columns with non-constant default values
                     # So we add it with a constant default and then update
-                    conn.execute(
-                        "ALTER TABLE transcripts ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''"
-                    )
+                    conn.execute("ALTER TABLE transcripts ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''")
                     # Now update existing rows to have proper timestamp
-                    conn.execute(
-                        "UPDATE transcripts SET updated_at = datetime('now') WHERE updated_at = ''"
-                    )
+                    conn.execute("UPDATE transcripts SET updated_at = datetime('now') WHERE updated_at = ''")
                     logger.info("Added updated_at column to transcripts table")
 
         logger.info(f"Migration version {version} completed")
@@ -713,9 +683,7 @@ class Database:
             )
         return None
 
-    def get_transcript_by_recording(
-        self, recording_id: int
-    ) -> dict[str, Any] | None:
+    def get_transcript_by_recording(self, recording_id: int) -> dict[str, Any] | None:
         """Get transcript for a recording.
 
         Args:
@@ -724,9 +692,7 @@ class Database:
         Returns:
             Optional[dict]: Transcript data or None
         """
-        row = self.fetchone(
-            "SELECT * FROM transcripts WHERE recording_id = ?", (recording_id,)
-        )
+        row = self.fetchone("SELECT * FROM transcripts WHERE recording_id = ?", (recording_id,))
         if row:
             return self._row_to_dict(
                 row,
@@ -787,9 +753,7 @@ class Database:
             for row in rows
         ]
 
-    def list_transcriptions(
-        self, limit: int = 50, date: str | None = None
-    ) -> list[dict[str, Any]]:
+    def list_transcriptions(self, limit: int = 50, date: str | None = None) -> list[dict[str, Any]]:
         """List transcriptions with optional date filtering and pagination.
 
         Args:
@@ -844,9 +808,7 @@ class Database:
             for row in rows
         ]
 
-    def get_transcription_with_recording(
-        self, transcript_id: int
-    ) -> dict[str, Any] | None:
+    def get_transcription_with_recording(self, transcript_id: int) -> dict[str, Any] | None:
         """Get a transcript with full recording details by transcript ID.
 
         Args:
@@ -1030,10 +992,7 @@ class Database:
 
         rows = self.fetchall(query, tuple(params))
         return [
-            self._row_to_dict(
-                row, ["id", "level", "message", "source", "timestamp", "metadata_json"]
-            )
-            for row in rows
+            self._row_to_dict(row, ["id", "level", "message", "source", "timestamp", "metadata_json"]) for row in rows
         ]
 
     # ============ State Operations ============
@@ -1107,9 +1066,7 @@ class Database:
             deleted = cursor.rowcount
 
         if deleted > 0:
-            logger.info(
-                f"Cleaned up {deleted} old log entries (retention: {retention_days} days)"
-            )
+            logger.info(f"Cleaned up {deleted} old log entries (retention: {retention_days} days)")
 
         return deleted
 

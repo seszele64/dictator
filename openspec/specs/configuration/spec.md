@@ -60,4 +60,3 @@ The system **SHALL** include automated regression tests that exercise `load_conf
 - Given: a test suite covering `openai`, `groq`, `together`, `deepinfra`, `local`, `custom`, and an invalid provider string with controlled environment variables
 - When: the test suite is executed
 - Then: keyless local/custom and invalid-provider cases pass without exceptions, and key-requiring providers without keys still raise `ValueError`
-

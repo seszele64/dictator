@@ -77,10 +77,7 @@ class TestThreadSafeDatabase:
                 except Exception as e:  # noqa: BLE001 - capture any error for assertion
                     errors.put(e)
 
-            threads = [
-                threading.Thread(target=write_from_thread, args=(i,))
-                for i in range(3)
-            ]
+            threads = [threading.Thread(target=write_from_thread, args=(i,)) for i in range(3)]
             for t in threads:
                 t.start()
             for t in threads:
@@ -109,18 +106,13 @@ class TestThreadSafeDatabase:
                 db.set_state(...)
         """
         with real_db.transaction() as conn:
-            conn.execute(
-                "INSERT INTO recordings (file_path) VALUES (?)",
-                ("reentrant.wav",)
-            )
+            conn.execute("INSERT INTO recordings (file_path) VALUES (?)", ("reentrant.wav",))
             # Calling a public method inside transaction() acquires the
             # RLock reentrantly — this would deadlock with a plain Lock
             real_db.set_state("migration_status", "in_progress")
 
         # Verify both operations committed
-        row = real_db.fetchone(
-            "SELECT id FROM recordings WHERE file_path = ?", ("reentrant.wav",)
-        )
+        row = real_db.fetchone("SELECT id FROM recordings WHERE file_path = ?", ("reentrant.wav",))
         assert row is not None
         assert real_db.get_state("migration_status") == "in_progress"
 
@@ -144,9 +136,7 @@ class TestThreadSafeDatabase:
         finally:
             db.close()
 
-    def test_execute_result_survives_later_statements_and_close(
-        self, real_db_config
-    ):
+    def test_execute_result_survives_later_statements_and_close(self, real_db_config):
         """CursorResult from execute() remains valid after later statements and close().
 
         This verifies the materialized-result fix: the result holds no live

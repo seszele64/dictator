@@ -108,9 +108,7 @@ class TestAudioConverter:
         # Simulate FFmpeg not found by making from_wav raise FileNotFoundError
         original_from_wav = MockAudioSegment.from_wav
         MockAudioSegment.from_wav = classmethod(
-            lambda cls, path: (_ for _ in ()).throw(
-                FileNotFoundError("ffmpeg not found")
-            )
+            lambda cls, path: (_ for _ in ()).throw(FileNotFoundError("ffmpeg not found"))
         )
 
         try:
@@ -180,9 +178,7 @@ class TestAudioConverter:
         assert not temp_audio_file.exists()
         assert result.exists()
 
-    def test_convert_preserves_when_delete_source_false_and_keep_wav_false(
-        self, temp_audio_file
-    ):
+    def test_convert_preserves_when_delete_source_false_and_keep_wav_false(self, temp_audio_file):
         """Test WAV is preserved when delete_source=False and keep_wav=False."""
         from whisper_dictate.audio_converter import AudioConverter
 
@@ -254,10 +250,7 @@ class TestAudioConverter:
             converter.convert(temp_audio_file)
 
         # Check that start of conversion was logged
-        assert any(
-            "Starting WAV to MP3 conversion" in record.message
-            for record in caplog.records
-        )
+        assert any("Starting WAV to MP3 conversion" in record.message for record in caplog.records)
 
     def test_convert_logs_success_with_size_reduction(self, temp_audio_file, caplog):
         """Test that successful conversion with size reduction is logged."""
@@ -269,9 +262,7 @@ class TestAudioConverter:
             converter.convert(temp_audio_file)
 
         # Check success message with size info
-        assert any(
-            "Conversion successful" in record.message for record in caplog.records
-        )
+        assert any("Conversion successful" in record.message for record in caplog.records)
 
     def test_convert_logs_warning_on_ffmpeg_missing(self, temp_audio_file, caplog):
         """Test that warning is logged when FFmpeg is missing."""
@@ -282,9 +273,7 @@ class TestAudioConverter:
         # Simulate FFmpeg not found
         original_from_wav = MockAudioSegment.from_wav
         MockAudioSegment.from_wav = classmethod(
-            lambda cls, path: (_ for _ in ()).throw(
-                FileNotFoundError("ffmpeg not found")
-            )
+            lambda cls, path: (_ for _ in ()).throw(FileNotFoundError("ffmpeg not found"))
         )
 
         try:
@@ -292,9 +281,7 @@ class TestAudioConverter:
                 result = converter.convert(temp_audio_file)
 
             # Check warning message
-            assert any(
-                "FFmpeg not found" in record.message for record in caplog.records
-            )
+            assert any("FFmpeg not found" in record.message for record in caplog.records)
             # Should still return WAV path
             assert result == temp_audio_file
         finally:
@@ -359,8 +346,7 @@ class TestFileSizeReduction:
                 b"RIFF"
                 + (wav_size - 8).to_bytes(4, "little")
                 + b"WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x80>\x00\x00"
-                b"\x00}\x00\x00\x02\x00\x10\x00data"
-                + (wav_size - 44).to_bytes(4, "little")
+                b"\x00}\x00\x00\x02\x00\x10\x00data" + (wav_size - 44).to_bytes(4, "little")
             )
             # Pad with zeros to reach 10MB
             padding = b"\x00" * (wav_size - len(wav_header))
@@ -435,8 +421,7 @@ class TestFileSizeReduction:
                 b"RIFF"
                 + (wav_size - 8).to_bytes(4, "little")
                 + b"WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x80>\x00\x00"
-                b"\x00}\x00\x00\x02\x00\x10\x00data"
-                + (wav_size - 44).to_bytes(4, "little")
+                b"\x00}\x00\x00\x02\x00\x10\x00data" + (wav_size - 44).to_bytes(4, "little")
             )
             padding = b"\x00" * (wav_size - len(wav_header))
             tmp.write(wav_header + padding)
@@ -471,8 +456,7 @@ class TestFileSizeReduction:
 
             # 64k should be smaller than 128k
             assert mp3_sizes["64k"] < mp3_sizes["128k"], (
-                f"64k ({mp3_sizes['64k']}) should be smaller than "
-                f"128k ({mp3_sizes['128k']})"
+                f"64k ({mp3_sizes['64k']}) should be smaller than 128k ({mp3_sizes['128k']})"
             )
         finally:
             MockAudioSegment.export = original_export
@@ -523,8 +507,7 @@ class TestTranscriptionQualityEquivalence:
 
                 # Verify both produce the same transcription
                 assert wav_result.text == mp3_result.text, (
-                    f"WAV transcription ('{wav_result.text}') should match "
-                    f"MP3 transcription ('{mp3_result.text}')"
+                    f"WAV transcription ('{wav_result.text}') should match MP3 transcription ('{mp3_result.text}')"
                 )
                 assert wav_result.language == mp3_result.language
 

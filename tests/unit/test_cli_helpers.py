@@ -55,9 +55,7 @@ class TestWithDatabaseInitializes:
             runner.invoke(test_command)
 
             # Verify initialize was called
-            assert mock_database.initialize.called, (
-                "Database initialize() was not called"
-            )
+            assert mock_database.initialize.called, "Database initialize() was not called"
 
     def test_with_database_gets_database_instance(self, mock_database):
         """Verify decorator constructs a Database instance."""
@@ -97,9 +95,7 @@ class TestWithDatabaseCloses:
             runner.invoke(test_command)
 
             # Verify close was called
-            assert mock_database.close.called, (
-                "Database close() was not called after successful execution"
-            )
+            assert mock_database.close.called, "Database close() was not called after successful execution"
 
     def test_with_database_closes_db_on_exception(self, mock_database):
         """Verify decorator calls db.close() even when command raises exception."""
@@ -117,9 +113,7 @@ class TestWithDatabaseCloses:
             runner.invoke(test_command)
 
             # Verify close was called even though exception occurred
-            assert mock_database.close.called, (
-                "Database close() was not called after exception"
-            )
+            assert mock_database.close.called, "Database close() was not called after exception"
 
     def test_with_database_closes_db_on_click_exception(self, mock_database):
         """Verify decorator calls db.close() when Click raises an exception."""
@@ -138,9 +132,7 @@ class TestWithDatabaseCloses:
             runner.invoke(test_command)
 
             # Verify close was called even on Abort
-            assert mock_database.close.called, (
-                "Database close() was not called after Click.Abort"
-            )
+            assert mock_database.close.called, "Database close() was not called after Click.Abort"
 
 
 class TestWithDatabaseContext:
@@ -174,9 +166,7 @@ class TestWithDatabaseContext:
 
             # Verify the database was stored in context
             assert len(stored_db) == 1, "Command was not executed"
-            assert stored_db[0] is mock_database, (
-                f"Database was not stored in ctx.obj['db'], got: {stored_db[0]}"
-            )
+            assert stored_db[0] is mock_database, f"Database was not stored in ctx.obj['db'], got: {stored_db[0]}"
 
     def test_with_database_context_has_db_before_command(self, mock_database):
         """Verify db is available in context before the command function runs."""

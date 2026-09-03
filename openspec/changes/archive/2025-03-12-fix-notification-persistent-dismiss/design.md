@@ -34,7 +34,7 @@ The dunst maintainers recommend using **stack tags** (x-dunst-stack-tag hint) as
 
 ### 2. notify_recording_start() sends persistent notification with stack tag
 - **Decision**: Use `-h string:x-dunst-stack-tag:whisper-dictate-recording` with `-t 0` (infinite timeout) and `-u critical`
-- **Rationale**: 
+- **Rationale**:
   - Stack tag ensures this is the "active" recording notification
   - Timeout 0 makes it persistent (stays until replaced)
   - Critical urgency gives it red color and ensures it appears prominently
@@ -48,7 +48,7 @@ The dunst maintainers recommend using **stack tags** (x-dunst-stack-tag hint) as
 
 ### 4. Added RECORDING_STACK_TAG constant
 - **Decision**: Define `RECORDING_STACK_TAG = "whisper-dictate-recording"` as module constant
-- **Rationale**: 
+- **Rationale**:
   - Centralizes the stack tag value for consistency
   - Makes it easy to modify if needed
   - Documents the magic string in code

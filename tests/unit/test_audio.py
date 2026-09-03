@@ -83,9 +83,7 @@ class TestAudioRecorder:
 
     def test_record_to_file_with_device(self):
         """Test recording with specific device."""
-        config = AudioConfig(
-            sample_rate=16000, channels=1, duration=1.0, device="pulse"
-        )
+        config = AudioConfig(sample_rate=16000, channels=1, duration=1.0, device="pulse")
 
         recorder = AudioRecorder(config)
 

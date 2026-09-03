@@ -60,4 +60,3 @@ The system **SHALL** include automated regression tests using a hand-built legac
 - Given: a test suite with a legacy-schema fixture (old tables, no `schema_versions`), current-schema fixtures, and a drifted-query case
 - When: the test suite is executed
 - Then: the legacy fixture migrates to version 2 with `updated_at` present, recordings queries return full dicts without phantom columns, and the drifted query raises during mapping
-

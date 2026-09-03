@@ -29,7 +29,7 @@ This design addresses the need for comprehensive persistence by implementing:
 
 **Decision**: Use `aiosqlite` for async database operations.
 
-**Rationale**: 
+**Rationale**:
 - Python's `sqlite3` is synchronous, which would block the event loop during recording/transcription
 - `aiosqlite` provides async support that integrates well with the existing async patterns
 - SQLite is sufficient for single-user local application (no multi-user conflicts expected)
@@ -87,7 +87,7 @@ This design addresses the need for comprehensive persistence by implementing:
 ## Risks / Trade-offs
 
 ### Risk: Database file corruption
-**Mitigation**: 
+**Mitigation**:
 - Implement periodic VACUUM to prevent corruption
 - Keep WAL mode for better crash recovery
 - Add database integrity check on startup

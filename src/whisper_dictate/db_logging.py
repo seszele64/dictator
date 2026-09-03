@@ -56,11 +56,7 @@ class DatabaseLogHandler(logging.Handler):
         """
         try:
             self._ensure_initialized()
-            source = (
-                f"{self._source_prefix}.{record.module}"
-                if record.module
-                else self._source_prefix
-            )
+            source = f"{self._source_prefix}.{record.module}" if record.module else self._source_prefix
 
             # Extract metadata from record if present
             metadata: dict[str, Any] | None = None

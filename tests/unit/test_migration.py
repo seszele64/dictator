@@ -239,9 +239,7 @@ class TestRunMigrationFailure:
             with pytest.raises(MigrationError):
                 manager.run_migration()
         status_calls = [
-            call
-            for call in mock_migration_db.set_state.call_args_list
-            if call.args[0] == MIGRATION_STATUS_KEY
+            call for call in mock_migration_db.set_state.call_args_list if call.args[0] == MIGRATION_STATUS_KEY
         ]
         assert status_calls
         assert status_calls[-1].args[1]["status"] == MIGRATION_FAILED
@@ -257,9 +255,7 @@ class TestRunMigrationFailure:
         mock_migration_db.delete_state.assert_any_call("legacy_recording_state")
         mock_migration_db.delete_state.assert_any_call("legacy_pid_state")
         status_calls = [
-            call
-            for call in mock_migration_db.set_state.call_args_list
-            if call.args[0] == MIGRATION_STATUS_KEY
+            call for call in mock_migration_db.set_state.call_args_list if call.args[0] == MIGRATION_STATUS_KEY
         ]
         assert status_calls[-1].args[1]["status"] == MIGRATION_FAILED
 
@@ -271,11 +267,7 @@ class TestRunMigrationFailure:
         result = manager.run_migration()  # must not raise
         assert result["success"] is True
         assert result["skipped"] is False
-        pid_calls = [
-            call
-            for call in mock_migration_db.set_state.call_args_list
-            if call.args[0] == "legacy_pid_state"
-        ]
+        pid_calls = [call for call in mock_migration_db.set_state.call_args_list if call.args[0] == "legacy_pid_state"]
         assert len(pid_calls) == 1
         payload = pid_calls[0].args[1]
         assert "pid" not in payload
@@ -331,9 +323,7 @@ class TestModuleLevelErrorPropagation:
     surfaced as NameError instead of the real failure).
     """
 
-    def test_run_migration_backup_failure_propagates_migration_error(
-        self, mock_migration_db, tmp_legacy_paths
-    ):
+    def test_run_migration_backup_failure_propagates_migration_error(self, mock_migration_db, tmp_legacy_paths):
         """A failed backup copy aborts via MigrationError through the wrapper."""
         tmp_legacy_paths["state"].write_text("recording")
         with (
@@ -345,30 +335,20 @@ class TestModuleLevelErrorPropagation:
         ):
             run_migration()
 
-    def test_run_migration_inner_failure_not_masked_by_status_write(
-        self, mock_migration_db, tmp_legacy_paths
-    ):
+    def test_run_migration_inner_failure_not_masked_by_status_write(self, mock_migration_db, tmp_legacy_paths):
         """The best-effort FAILED-status write must not replace the original
         migration error with the secondary failure."""
         tmp_legacy_paths["state"].write_text("recording")
         mock_migration_db.transaction.return_value.__enter__ = Mock(
             side_effect=RuntimeError("db went away mid-migration")
         )
-        mock_migration_db.set_state = Mock(
-            side_effect=RuntimeError("status write failed")
-        )
+        mock_migration_db.set_state = Mock(side_effect=RuntimeError("status write failed"))
         with pytest.raises(MigrationError, match="db went away mid-migration"):
             run_migration()
 
-    def test_check_migration_status_init_failure_propagates_original_error(
-        self, mock_migration_db, tmp_legacy_paths
-    ):
+    def test_check_migration_status_init_failure_propagates_original_error(self, mock_migration_db, tmp_legacy_paths):
         """An initialize failure inside check_migration_status propagates the
         wrapped MigrationError, not a masked replacement."""
-        mock_migration_db.initialize = Mock(
-            side_effect=RuntimeError("cannot open database")
-        )
-        with pytest.raises(
-            MigrationError, match="Failed to initialize database"
-        ):
+        mock_migration_db.initialize = Mock(side_effect=RuntimeError("cannot open database"))
+        with pytest.raises(MigrationError, match="Failed to initialize database"):
             check_migration_status()

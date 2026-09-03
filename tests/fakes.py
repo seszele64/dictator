@@ -56,9 +56,9 @@ class FakeTranscriptionProvider(TranscriptionProvider):
         error: Exception | None = None,
         provider_name: str = "fake",
     ) -> None:
-        self._script = list(results) if results else [
-            TranscriptionResult(text="Hello from the fake provider.", language="en")
-        ]
+        self._script = (
+            list(results) if results else [TranscriptionResult(text="Hello from the fake provider.", language="en")]
+        )
         # Mutable on purpose: tests assign `fake.error = ...` to script an
         # error path (see test_snapshot_dictate_transcription_error).
         self.error: Exception | None = error

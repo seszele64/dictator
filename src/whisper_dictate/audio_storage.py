@@ -73,9 +73,7 @@ class StagedAudio:
     relative_path: str
 
 
-def check_disk_space(
-    path: Path, min_free_mb: int = DEFAULT_MIN_FREE_SPACE_MB
-) -> tuple[bool, int]:
+def check_disk_space(path: Path, min_free_mb: int = DEFAULT_MIN_FREE_SPACE_MB) -> tuple[bool, int]:
     """Check available disk space on the filesystem containing the given path.
 
     Args:
@@ -99,10 +97,7 @@ def check_disk_space(
 
         has_space = available_mb >= min_free_mb
 
-        logger.debug(
-            f"Disk space check for {path}: {available_mb}MB available, "
-            f"{min_free_mb}MB required"
-        )
+        logger.debug(f"Disk space check for {path}: {available_mb}MB available, {min_free_mb}MB required")
 
         return has_space, available_mb
 
@@ -125,9 +120,7 @@ def _generate_random_suffix(length: int = RANDOM_SUFFIX_LENGTH) -> str:
     return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
 
-def _generate_unique_filename(
-    timestamp: datetime | None = None, suffix: str = "wav"
-) -> str:
+def _generate_unique_filename(timestamp: datetime | None = None, suffix: str = "wav") -> str:
     """Generate a unique filename with timestamp and random suffix.
 
     Args:
@@ -161,12 +154,7 @@ def _get_date_based_path(base_path: Path, timestamp: datetime | None = None) -> 
     if timestamp is None:
         timestamp = datetime.now()
 
-    return (
-        base_path
-        / f"{timestamp.year:04d}"
-        / f"{timestamp.month:02d}"
-        / f"{timestamp.day:02d}"
-    )
+    return base_path / f"{timestamp.year:04d}" / f"{timestamp.month:02d}" / f"{timestamp.day:02d}"
 
 
 class AudioStorage:
@@ -202,9 +190,7 @@ class AudioStorage:
         """
         return self._recordings_path
 
-    def check_disk_space(
-        self, min_free_mb: int = DEFAULT_MIN_FREE_SPACE_MB
-    ) -> tuple[bool, int]:
+    def check_disk_space(self, min_free_mb: int = DEFAULT_MIN_FREE_SPACE_MB) -> tuple[bool, int]:
         """Check available disk space for the recordings directory.
 
         Args:
@@ -226,9 +212,7 @@ class AudioStorage:
             stat_result = os.statvfs(self._recordings_path)
 
             total_bytes = stat_result.f_blocks * stat_result.f_frsize
-            used_bytes = (
-                stat_result.f_blocks - stat_result.f_bfree
-            ) * stat_result.f_frsize
+            used_bytes = (stat_result.f_blocks - stat_result.f_bfree) * stat_result.f_frsize
             available_bytes = stat_result.f_bavail * stat_result.f_frsize
 
             return {
@@ -256,9 +240,7 @@ class AudioStorage:
         directory.mkdir(parents=True, exist_ok=True)
         logger.debug(f"Ensured directory exists: {directory}")
 
-    def get_date_directory(
-        self, timestamp: datetime | None = None, create: bool = True
-    ) -> Path:
+    def get_date_directory(self, timestamp: datetime | None = None, create: bool = True) -> Path:
         """Get the date-based directory for a recording.
 
         Args:
@@ -275,9 +257,7 @@ class AudioStorage:
 
         return directory
 
-    def generate_storage_path(
-        self, timestamp: datetime | None = None, suffix: str = "wav"
-    ) -> tuple[Path, str]:
+    def generate_storage_path(self, timestamp: datetime | None = None, suffix: str = "wav") -> tuple[Path, str]:
         """Generate a unique storage path for a new recording.
 
         Args:
@@ -330,10 +310,7 @@ class AudioStorage:
         # Ensure destination directory exists
         self.ensure_directory_exists(dest_path.parent)
 
-        staged_path = (
-            dest_path.parent
-            / f"{STAGING_PREFIX}{filename}.{_generate_random_suffix(6)}.part"
-        )
+        staged_path = dest_path.parent / f"{STAGING_PREFIX}{filename}.{_generate_random_suffix(6)}.part"
 
         try:
             shutil.copy2(str(source_path), str(staged_path))
@@ -474,9 +451,7 @@ class AudioStorage:
             UnsafeAudioPathError: If the path escapes the recordings root
         """
         if not relative_path or not relative_path.strip():
-            raise NoAudioFileError(
-                "Recording has no audio file stored (empty file path)"
-            )
+            raise NoAudioFileError("Recording has no audio file stored (empty file path)")
 
         root = self._recordings_path.resolve()
         candidate = (self._recordings_path / relative_path).resolve()
@@ -487,8 +462,7 @@ class AudioStorage:
                 f"{candidate}, which is outside the recordings root {root}"
             )
             raise UnsafeAudioPathError(
-                f"Stored path {relative_path!r} escapes the recordings root "
-                f"({root}); the file will not be accessed."
+                f"Stored path {relative_path!r} escapes the recordings root ({root}); the file will not be accessed."
             )
 
         return candidate
@@ -515,8 +489,7 @@ class AudioStorage:
         path = self._resolve_contained(relative_path)
         if verify_exists and not path.exists():
             raise FileNotFoundError(
-                f"Audio file not found: {path}\n"
-                "The file may have been deleted or moved outside the application."
+                f"Audio file not found: {path}\nThe file may have been deleted or moved outside the application."
             )
         return path
 
@@ -783,9 +756,7 @@ def get_orphaned_files(db: Database, storage: AudioStorage) -> list[dict[str, An
     return orphaned_files
 
 
-def cleanup_orphaned_files(
-    db: Database, storage: AudioStorage, dry_run: bool = True
-) -> tuple[int, int]:
+def cleanup_orphaned_files(db: Database, storage: AudioStorage, dry_run: bool = True) -> tuple[int, int]:
     """Clean up orphaned audio files not referenced in the database.
 
     Args:
@@ -822,13 +793,8 @@ def cleanup_orphaned_files(
                 logger.error(f"Failed to delete orphaned file {file_path}: {e}")
 
     if dry_run:
-        logger.info(
-            f"[DRY RUN] Would delete {deleted_count} orphaned files, "
-            f"freeing {total_size_freed} bytes"
-        )
+        logger.info(f"[DRY RUN] Would delete {deleted_count} orphaned files, freeing {total_size_freed} bytes")
     else:
-        logger.info(
-            f"Deleted {deleted_count} orphaned files, freed {total_size_freed} bytes"
-        )
+        logger.info(f"Deleted {deleted_count} orphaned files, freed {total_size_freed} bytes")
 
     return deleted_count, total_size_freed

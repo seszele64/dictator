@@ -80,9 +80,7 @@ class TestKeylessNonTranscriptionCommands:
 class TestDictateKeylessLocal:
     """dictate-path validation must accept a keyless local provider."""
 
-    def test_dictate_keyless_local_passes_validation(
-        self, cli_runner, real_load_config, clean_provider_env
-    ):
+    def test_dictate_keyless_local_passes_validation(self, cli_runner, real_load_config, clean_provider_env):
         """A keyless local provider must get past lazy key validation.
 
         Unit level: DictationService is mocked so no recording happens; we
@@ -102,9 +100,7 @@ class TestDictateKeylessLocal:
             assert "hello from local" in result.output
             mock_service_cls.assert_called_once()
 
-    def test_dictate_openai_without_key_fails_friendly(
-        self, cli_runner, real_load_config, clean_provider_env
-    ):
+    def test_dictate_openai_without_key_fails_friendly(self, cli_runner, real_load_config, clean_provider_env):
         """A keyless openai provider must fail with the friendly error, not a traceback."""
         clean_provider_env.setenv("WHISPER_PROVIDER", "openai")
 
@@ -113,10 +109,7 @@ class TestDictateKeylessLocal:
         assert result.exit_code == 1
         # Failure banner carries the version (P1): bug reports from this path
         # are self-identifying without the reporter running --version.
-        assert (
-            f"Configuration error (whisper-dictate v{__version__}): "
-            "API key not found" in result.output
-        )
+        assert f"Configuration error (whisper-dictate v{__version__}): API key not found" in result.output
 
 
 class TestDictateAndInfoCloseService:
@@ -129,9 +122,7 @@ class TestDictateAndInfoCloseService:
     across success, failure, and interrupt paths.
     """
 
-    def test_dictate_closes_service_on_success(
-        self, cli_runner, real_load_config, clean_provider_env
-    ):
+    def test_dictate_closes_service_on_success(self, cli_runner, real_load_config, clean_provider_env):
         """A completed dictate run must close the service (and its DB)."""
         with patch("whisper_dictate.cli.DictationService") as mock_service_cls:
             mock_service = mock_service_cls.return_value
@@ -154,9 +145,7 @@ class TestDictateAndInfoCloseService:
             assert result.exit_code == 1
             mock_service_cls.return_value.close.assert_called_once()
 
-    def test_dictate_closes_service_on_keyboard_interrupt(
-        self, cli_runner, real_load_config, clean_provider_env
-    ):
+    def test_dictate_closes_service_on_keyboard_interrupt(self, cli_runner, real_load_config, clean_provider_env):
         """Ctrl+C mid-recording must still close the service - not leak it."""
         with patch("whisper_dictate.cli.DictationService") as mock_service_cls:
             mock_service_cls.return_value.dictate.side_effect = KeyboardInterrupt

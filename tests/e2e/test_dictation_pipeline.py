@@ -78,19 +78,13 @@ def e2e_env(tmp_path, monkeypatch, mock_config):
     # Mock the transcription API factory (DictationService constructs its
     # own transcriber since the S4 delegation)
     transcriber = Mock()
-    transcriber.transcribe_audio.return_value = TranscriptionResult(
-        text="Hello world", language="en"
-    )
-    monkeypatch.setattr(
-        dictation, "create_transcriber", Mock(return_value=transcriber)
-    )
+    transcriber.transcribe_audio.return_value = TranscriptionResult(text="Hello world", language="en")
+    monkeypatch.setattr(dictation, "create_transcriber", Mock(return_value=transcriber))
 
     # Mock the clipboard (DictationService owns the ClipboardManager)
     clipboard = Mock()
     clipboard.copy_to_clipboard.return_value = True
-    monkeypatch.setattr(
-        dictation, "ClipboardManager", Mock(return_value=clipboard)
-    )
+    monkeypatch.setattr(dictation, "ClipboardManager", Mock(return_value=clipboard))
 
     # Mock soundfile.info duration probe (real float for SQLite storage);
     # probed by DictationService.transcribe_existing since S4
@@ -156,9 +150,7 @@ class TestDictationPipelineE2E:
 
     def test_full_dictation_cycle(self, e2e_env, mock_config):
         """The full cycle persists the recording + transcript and copies to clipboard."""
-        e2e_env.transcriber.transcribe_audio.return_value = TranscriptionResult(
-            text="Hello world", language="en"
-        )
+        e2e_env.transcriber.transcribe_audio.return_value = TranscriptionResult(text="Hello world", language="en")
 
         process = toggle.start_background_recording(mock_config)
         assert process is not None
@@ -200,9 +192,7 @@ class TestDictationPipelineE2E:
 
     def test_silence_detected_cycle(self, e2e_env, mock_config):
         """Silence skips the clipboard but still persists the empty transcript + audio."""
-        e2e_env.transcriber.transcribe_audio.return_value = TranscriptionResult(
-            text="", silence_detected=True
-        )
+        e2e_env.transcriber.transcribe_audio.return_value = TranscriptionResult(text="", silence_detected=True)
 
         recording_id = self._start_stop(e2e_env, mock_config)
         text = toggle.transcribe_audio(mock_config, recording_id)
@@ -230,8 +220,7 @@ class TestDictationPipelineE2E:
             assert isinstance(recording_id, int)
 
             row = db.fetchone(
-                "SELECT file_path, format, sample_rate, channels "
-                "FROM recordings WHERE id = ?",
+                "SELECT file_path, format, sample_rate, channels FROM recordings WHERE id = ?",
                 (recording_id,),
             )
             assert row is not None
@@ -267,24 +256,18 @@ class TestDictationPipelineE2E:
 
     def test_transcribe_updates_recording_duration(self, e2e_env, mock_config):
         """Transcription persists the audio duration onto the recording row."""
-        e2e_env.transcriber.transcribe_audio.return_value = TranscriptionResult(
-            text="Hello", language="en"
-        )
+        e2e_env.transcriber.transcribe_audio.return_value = TranscriptionResult(text="Hello", language="en")
 
         recording_id = self._start_stop(e2e_env, mock_config)
         toggle.transcribe_audio(mock_config, recording_id)
 
         with _verify_db(e2e_env.tmp_path) as db:
-            row = db.fetchone(
-                "SELECT duration FROM recordings WHERE id = ?", (recording_id,)
-            )
+            row = db.fetchone("SELECT duration FROM recordings WHERE id = ?", (recording_id,))
             assert row == (2.5,)
 
     def test_transcribe_saves_audio_to_storage(self, e2e_env, mock_config):
         """Audio is moved into the recordings dir and DB stores a relative path."""
-        e2e_env.transcriber.transcribe_audio.return_value = TranscriptionResult(
-            text="Hello", language="en"
-        )
+        e2e_env.transcriber.transcribe_audio.return_value = TranscriptionResult(text="Hello", language="en")
 
         recording_id = self._start_stop(e2e_env, mock_config)
         toggle.transcribe_audio(mock_config, recording_id)
@@ -293,25 +276,20 @@ class TestDictationPipelineE2E:
         assert len(saved_audio) == 1
 
         with _verify_db(e2e_env.tmp_path) as db:
-            row = db.fetchone(
-                "SELECT file_path FROM recordings WHERE id = ?", (recording_id,)
-            )
+            row = db.fetchone("SELECT file_path FROM recordings WHERE id = ?", (recording_id,))
             assert row is not None
             assert not Path(row[0]).is_absolute()
 
     def test_transcribe_creates_transcript_with_correct_fields(self, e2e_env, mock_config):
         """Transcript rows carry the text, language, and model used."""
-        e2e_env.transcriber.transcribe_audio.return_value = TranscriptionResult(
-            text="Test transcript", language="en"
-        )
+        e2e_env.transcriber.transcribe_audio.return_value = TranscriptionResult(text="Test transcript", language="en")
 
         recording_id = self._start_stop(e2e_env, mock_config)
         toggle.transcribe_audio(mock_config, recording_id)
 
         with _verify_db(e2e_env.tmp_path) as db:
             row = db.fetchone(
-                "SELECT text, language, model_used "
-                "FROM transcripts WHERE recording_id = ?",
+                "SELECT text, language, model_used FROM transcripts WHERE recording_id = ?",
                 (recording_id,),
             )
             assert row == ("Test transcript", "en", "whisper-1")

@@ -12,7 +12,7 @@ class TestClipboardManager:
         """Test initialization when no clipboard tools are available."""
         from subprocess import CalledProcessError
 
-        with patch('subprocess.run') as mock_run:
+        with patch("subprocess.run") as mock_run:
             # Simulate "which" command failing for all tools
             mock_run.side_effect = [
                 CalledProcessError(1, "which"),  # xclip not found
@@ -27,7 +27,7 @@ class TestClipboardManager:
         """Test initialization when xclip is available."""
         from subprocess import CalledProcessError
 
-        with patch('subprocess.run') as mock_run:
+        with patch("subprocess.run") as mock_run:
             # Simulate xclip being available
             mock_run.side_effect = [
                 Mock(returncode=0),  # xclip found
@@ -40,7 +40,7 @@ class TestClipboardManager:
 
     def test_init_with_multiple_tools_available(self):
         """Test initialization with multiple clipboard tools available."""
-        with patch('subprocess.run') as mock_run:
+        with patch("subprocess.run") as mock_run:
             # Simulate multiple tools being available
             mock_run.side_effect = [
                 Mock(returncode=0),  # xclip found
@@ -64,17 +64,14 @@ class TestClipboardManager:
         manager = ClipboardManager()
         manager.available_tools = ["xclip"]
 
-        with patch('subprocess.run') as mock_run:
+        with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=0)
 
             result = manager.copy_to_clipboard("test text")
             assert result is True
 
             mock_run.assert_called_once_with(
-                ["xclip", "-selection", "clipboard"],
-                input=b"test text",
-                check=True,
-                timeout=5
+                ["xclip", "-selection", "clipboard"], input=b"test text", check=True, timeout=5
             )
 
     def test_copy_to_clipboard_xsel_success(self):
@@ -82,17 +79,14 @@ class TestClipboardManager:
         manager = ClipboardManager()
         manager.available_tools = ["xsel"]
 
-        with patch('subprocess.run') as mock_run:
+        with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=0)
 
             result = manager.copy_to_clipboard("test text")
             assert result is True
 
             mock_run.assert_called_once_with(
-                ["xsel", "--clipboard", "--input"],
-                input=b"test text",
-                check=True,
-                timeout=5
+                ["xsel", "--clipboard", "--input"], input=b"test text", check=True, timeout=5
             )
 
     def test_copy_to_clipboard_wl_copy_success(self):
@@ -100,18 +94,13 @@ class TestClipboardManager:
         manager = ClipboardManager()
         manager.available_tools = ["wl-copy"]
 
-        with patch('subprocess.run') as mock_run:
+        with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=0)
 
             result = manager.copy_to_clipboard("test text")
             assert result is True
 
-            mock_run.assert_called_once_with(
-                ["wl-copy"],
-                input=b"test text",
-                check=True,
-                timeout=5
-            )
+            mock_run.assert_called_once_with(["wl-copy"], input=b"test text", check=True, timeout=5)
 
     def test_copy_to_clipboard_fallback_behavior(self):
         """Test fallback behavior when first tool fails."""
@@ -120,7 +109,7 @@ class TestClipboardManager:
         manager = ClipboardManager()
         manager.available_tools = ["xclip", "xsel"]
 
-        with patch('subprocess.run') as mock_run:
+        with patch("subprocess.run") as mock_run:
             # First call fails, second succeeds
             mock_run.side_effect = [
                 CalledProcessError(1, "xclip"),  # xclip fails
@@ -140,7 +129,7 @@ class TestClipboardManager:
         manager = ClipboardManager()
         manager.available_tools = ["xclip", "xsel"]
 
-        with patch('subprocess.run') as mock_run:
+        with patch("subprocess.run") as mock_run:
             mock_run.side_effect = [
                 CalledProcessError(1, "xclip"),
                 CalledProcessError(1, "xsel"),
@@ -154,8 +143,9 @@ class TestClipboardManager:
         manager = ClipboardManager()
         manager.available_tools = ["xclip"]
 
-        with patch('subprocess.run') as mock_run:
+        with patch("subprocess.run") as mock_run:
             from subprocess import TimeoutExpired
+
             mock_run.side_effect = TimeoutExpired("xclip", 5)
 
             result = manager.copy_to_clipboard("test text")
@@ -168,17 +158,14 @@ class TestClipboardManager:
 
         unicode_text = "Hello 世界 🌍"
 
-        with patch('subprocess.run') as mock_run:
+        with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=0)
 
             result = manager.copy_to_clipboard(unicode_text)
             assert result is True
 
             mock_run.assert_called_once_with(
-                ["xclip", "-selection", "clipboard"],
-                input=unicode_text.encode("utf-8"),
-                check=True,
-                timeout=5
+                ["xclip", "-selection", "clipboard"], input=unicode_text.encode("utf-8"), check=True, timeout=5
             )
 
     def test_copy_to_clipboard_empty_text(self):
@@ -186,15 +173,10 @@ class TestClipboardManager:
         manager = ClipboardManager()
         manager.available_tools = ["xclip"]
 
-        with patch('subprocess.run') as mock_run:
+        with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=0)
 
             result = manager.copy_to_clipboard("")
             assert result is True
 
-            mock_run.assert_called_once_with(
-                ["xclip", "-selection", "clipboard"],
-                input=b"",
-                check=True,
-                timeout=5
-            )
+            mock_run.assert_called_once_with(["xclip", "-selection", "clipboard"], input=b"", check=True, timeout=5)

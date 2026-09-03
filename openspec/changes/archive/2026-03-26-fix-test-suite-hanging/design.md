@@ -181,12 +181,12 @@ notifications_module.PersistentNotification._recording_notification = original_r
 async def async_cleanup(request):
     """Function-scoped async cleanup within the test's event loop."""
     finalizers = []
-    
+
     async def add_cleanup(coro):
         finalizers.append(coro)
-    
+
     yield add_cleanup
-    
+
     # Run finalizers in reverse order
     for finalizer in reversed(finalizers):
         try:

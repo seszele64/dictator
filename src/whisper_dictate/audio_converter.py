@@ -49,13 +49,9 @@ class AudioConverter:
         """
         self.bitrate = bitrate
         self.keep_wav = keep_wav
-        logger.debug(
-            f"AudioConverter initialized: bitrate={bitrate}, keep_wav={keep_wav}"
-        )
+        logger.debug(f"AudioConverter initialized: bitrate={bitrate}, keep_wav={keep_wav}")
 
-    def convert(
-        self, wav_path: Path | str, delete_source: bool | None = None
-    ) -> Path:
+    def convert(self, wav_path: Path | str, delete_source: bool | None = None) -> Path:
         """Convert a WAV file to MP3 format.
 
         WHY THIS EXISTS: Provides a simple interface for converting audio files
@@ -109,11 +105,7 @@ class AudioConverter:
             # Calculate file size reduction
             original_size = wav_path.stat().st_size
             converted_size = mp3_path.stat().st_size
-            reduction_percent = (
-                (original_size - converted_size) / original_size * 100
-                if original_size > 0
-                else 0
-            )
+            reduction_percent = (original_size - converted_size) / original_size * 100 if original_size > 0 else 0
 
             logger.info(
                 f"Conversion successful: {wav_path.name} -> {mp3_path.name} "

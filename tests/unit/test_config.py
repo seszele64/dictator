@@ -123,10 +123,7 @@ class TestDatabaseConfig:
 
     def test_get_recordings_path_explicit(self):
         """Explicit recordings path is returned as-is."""
-        assert (
-            DatabaseConfig(recordings_path=Path("/tmp/recordings")).get_recordings_path()
-            == Path("/tmp/recordings")
-        )
+        assert DatabaseConfig(recordings_path=Path("/tmp/recordings")).get_recordings_path() == Path("/tmp/recordings")
 
     def test_get_recordings_path_xdg(self, monkeypatch):
         """XDG_DATA_HOME is used for the recordings location."""
@@ -442,9 +439,7 @@ class TestDotenvImportPurity:
         result = self._run_python(tmp_path, code)
         assert result.returncode == 0, result.stderr
         payload = json.loads(result.stdout.strip())
-        assert payload["identical"] is True, (
-            "importing whisper_dictate.config mutated os.environ"
-        )
+        assert payload["identical"] is True, "importing whisper_dictate.config mutated os.environ"
         assert payload["probe_present"] is False
 
     def test_load_config_does_not_load_dotenv(self, tmp_path):

@@ -31,10 +31,7 @@ def _row_counts(db_path: Path) -> dict[str, int]:
     """Full row counts through an independent read-only connection."""
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
-        return {
-            table: conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-            for table in _TABLES
-        }
+        return {table: conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in _TABLES}
     finally:
         conn.close()
 
@@ -44,9 +41,7 @@ def _seed_one_recording_with_orphan(config: AppConfig) -> tuple[Path, Path]:
     db = Database(config.database)
     try:
         db.initialize()
-        rid = db.create_recording(
-            file_path="2024/01/01/kept.wav", duration=2.0, format="wav"
-        )
+        rid = db.create_recording(file_path="2024/01/01/kept.wav", duration=2.0, format="wav")
         db.create_transcript(rid, "kept recording transcript", language="en")
     finally:
         db.close()
@@ -77,15 +72,11 @@ def cleanup_env(env_isolator, monkeypatch):
         audio=AudioConfig(sample_rate=16000, channels=1, duration=1.0, mp3_enabled=False),
         openai=WhisperConfig(api_key="test-api-key", model="whisper-1"),
     )
-    monkeypatch.setattr(
-        "whisper_dictate.cli.bootstrap", lambda *a, **k: config
-    )
+    monkeypatch.setattr("whisper_dictate.cli.bootstrap", lambda *a, **k: config)
     return config, db_path
 
 
-@pytest.mark.parametrize(
-    "args", [["audio", "cleanup"], ["audio", "cleanup", "--dry-run"]]
-)
+@pytest.mark.parametrize("args", [["audio", "cleanup"], ["audio", "cleanup", "--dry-run"]])
 def test_dry_run_leaves_db_and_files_untouched(cleanup_env, args):
     """Dry run (plain or explicit) is display-only: identical DB row counts,
     files untouched, exit 0, and 'would delete' (not 'deleted') wording."""

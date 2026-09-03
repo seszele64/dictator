@@ -90,4 +90,3 @@ The system **SHALL** include automated regression tests covering deletion orderi
 - Given: a test suite covering history deletion outcomes, dictation failure/interruption cleanup, and CliRunner commands run against custom configured paths
 - When: the test suite is executed
 - Then: deletion leaves disk and database consistent in every outcome, no orphaned rows survive failures, and all commands honor the configured paths and threshold
-

@@ -54,9 +54,7 @@ def invoke_with_config(cli_runner, config, args):
 
 
 class TestConfiguredDatabasePath:
-    def test_history_list_creates_db_at_custom_path(
-        self, cli_runner, custom_config, tmp_path
-    ):
+    def test_history_list_creates_db_at_custom_path(self, cli_runner, custom_config, tmp_path):
         result = invoke_with_config(cli_runner, custom_config, ["history", "list"])
 
         assert result.exit_code == 0, result.output
@@ -67,28 +65,19 @@ class TestConfiguredDatabasePath:
         assert db_path.exists()
         probe = Database(custom_config.database)
         try:
-            tables = {
-                row[0]
-                for row in probe.fetchall(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                )
-            }
+            tables = {row[0] for row in probe.fetchall("SELECT name FROM sqlite_master WHERE type='table'")}
         finally:
             probe.close()
         assert {"recordings", "transcripts", "schema_versions"} <= tables
 
 
 class TestConfiguredDiskCheck:
-    def test_dictate_disk_check_uses_configured_values(
-        self, cli_runner, custom_config, tmp_path
-    ):
+    def test_dictate_disk_check_uses_configured_values(self, cli_runner, custom_config, tmp_path):
         recordings_path = tmp_path / "custom-recordings"
         success = TranscriptionResult(text="wired", language="en")
 
         with (
-            patch(
-                "whisper_dictate.cli.check_disk_space", return_value=(True, 500000)
-            ) as mock_check,
+            patch("whisper_dictate.cli.check_disk_space", return_value=(True, 500000)) as mock_check,
             patch.object(DictationService, "dictate", return_value=success),
         ):
             result = invoke_with_config(cli_runner, custom_config, ["dictate"])
@@ -117,18 +106,14 @@ class TestConfiguredLogRetention:
 
 
 class TestConfiguredRecordingsCleanup:
-    def test_audio_cleanup_removes_orphans_in_configured_dir(
-        self, cli_runner, custom_config, tmp_path
-    ):
+    def test_audio_cleanup_removes_orphans_in_configured_dir(self, cli_runner, custom_config, tmp_path):
         recordings_root = tmp_path / "custom-recordings"
         orphan_dir = recordings_root / "2026/08/31"
         orphan_dir.mkdir(parents=True)
         orphan = orphan_dir / "orphan.wav"
         orphan.write_bytes(b"orphan audio")
 
-        result = invoke_with_config(
-            cli_runner, custom_config, ["audio", "cleanup", "--confirm"]
-        )
+        result = invoke_with_config(cli_runner, custom_config, ["audio", "cleanup", "--confirm"])
 
         assert result.exit_code == 0, result.output
         assert "orphan.wav" in result.output  # listed before deletion

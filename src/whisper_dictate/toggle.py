@@ -179,9 +179,7 @@ def start_background_recording(config: AppConfig) -> subprocess.Popen[bytes] | N
         ]
 
         # Start the recording process
-        process = subprocess.Popen(
-            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         # Save PID for later management
         PID_FILE.write_text(str(process.pid))
@@ -283,9 +281,7 @@ def stop_background_recording(
             db.close()
 
 
-def transcribe_audio(
-    config: AppConfig, recording_id: int | None = None
-) -> str | None:
+def transcribe_audio(config: AppConfig, recording_id: int | None = None) -> str | None:
     """Transcribe the recorded audio.
 
     Delegates the transcribe → clipboard → database half to
@@ -323,9 +319,7 @@ def transcribe_audio(
             # copy_to_clipboard=True preserves the legacy toggle quirk of
             # always copying the transcribed text; revisit (defer to
             # config.copy_to_clipboard) with the S3 layout move.
-            result = service.transcribe_existing(
-                recording_id, AUDIO_FILE, copy_to_clipboard=True
-            )
+            result = service.transcribe_existing(recording_id, AUDIO_FILE, copy_to_clipboard=True)
 
         # Handle silence detection for the notification/return contract
         if result.silence_detected:
@@ -360,9 +354,7 @@ def main() -> None:
     try:
         # Ensure dunst is running for notifications
         if not ensure_dunst_running():
-            logging.warning(
-                "Dunst notification daemon not available - notifications may not work"
-            )
+            logging.warning("Dunst notification daemon not available - notifications may not work")
 
         # Fail fast on a missing API key BEFORE recording, replicating the
         # legacy startup UX (pre-batch): load_config() defaulted to
