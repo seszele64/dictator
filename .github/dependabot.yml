@@ -1,0 +1,36 @@
+version: 2
+
+updates:
+  # Bump the SHA-pinned actions in .github/workflows/*.yml.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      all:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
+
+  # Keep uv.lock in sync with pyproject.toml. Two known quirks (accepted):
+  #   (a) dependabot-core#14908 — for packages not on PyPI (this project until
+  #       P13 publishes it), uv PRs may bump pyproject.toml lower bounds
+  #       instead of (or alongside) uv.lock entries. Review those PRs before
+  #       merging so constraints don't drift from intent.
+  #   (b) dependabot-core#14073 / #15551 — transitive-only uv.lock updates
+  #       have had gaps: when only a transitive pin changes, Dependabot may
+  #       open no PR at all. If uv PRs go quiet, cover transitive pins with a
+  #       periodic manual `uv lock --upgrade` (then run the full local gate).
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      all:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
