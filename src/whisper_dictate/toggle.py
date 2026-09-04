@@ -25,7 +25,6 @@ import time
 import click
 
 from whisper_dictate.app import bootstrap
-from whisper_dictate.audio_storage import AudioStorage
 from whisper_dictate.config import AppConfig, AppPaths
 from whisper_dictate.database import Database
 from whisper_dictate.dictation import DictationService
@@ -37,6 +36,8 @@ from whisper_dictate.notifications import (
     notify_recording_stopped,
     notify_stopping_transcription,
 )
+from whisper_dictate.storage.audio_storage import AudioStorage
+from whisper_dictate.util.paths import AudioPathResolver
 
 # State and process tracking
 # Note: Using database for state management (preferred), with file fallbacks for compatibility
@@ -119,7 +120,7 @@ def get_db_and_storage(config: AppConfig | None = None) -> tuple[Database, Audio
     db_config = config.database
     db = Database(db_config)
     db.initialize()
-    audio_storage = AudioStorage(db_config)
+    audio_storage = AudioStorage(db_config, AudioPathResolver(db_config.get_recordings_path()))
     return db, audio_storage
 
 

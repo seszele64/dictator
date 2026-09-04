@@ -10,12 +10,13 @@ directly:
 - --confirm: actually deletes orphan files (and wins over --dry-run);
 - output distinguishes "would delete" (DRY RUN banner) from "deleted".
 
-The orphan scan itself (get_orphaned_files) is read-only, so a dry run must
+The orphan scan itself (OrphanScanner.find_orphans) is read-only, so a dry run must
 leave the database byte-identical (verified here via full row counts).
 """
 
 import sqlite3
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
@@ -23,6 +24,7 @@ from click.testing import CliRunner
 from whisper_dictate.cli import cli
 from whisper_dictate.config import AppConfig, AudioConfig, DatabaseConfig, WhisperConfig
 from whisper_dictate.database import Database
+from whisper_dictate.storage.orphan_scan import OrphanScanner
 
 _TABLES = ("logs", "recordings", "schema_versions", "state", "transcripts")
 
@@ -124,3 +126,38 @@ def test_confirm_wins_over_dry_run(cleanup_env):
     assert not orphan.exists()
     assert kept.exists()
     assert "Deleted 1 orphaned file(s)" in result.output
+
+
+def test_confirm_scans_orphans_exactly_once(cleanup_env):
+    """--confirm scans for orphans exactly once.
+
+    The scan is the safety-critical, potentially slow half of the command:
+    the deletion list must come from that single scan, with no hidden
+    second scan between display and delete (double-scan kill)."""
+    config, _db_path = cleanup_env
+    kept, orphan = _seed_one_recording_with_orphan(config)
+
+    with patch.object(OrphanScanner, "find_orphans", autospec=True, side_effect=OrphanScanner.find_orphans) as spy:
+        result = CliRunner().invoke(cli, ["audio", "cleanup", "--confirm"])
+
+    assert result.exit_code == 0, result.output
+    assert spy.call_count == 1
+    assert "orphan.wav" in result.output
+    assert not orphan.exists(), "--confirm must delete the orphan"
+    assert kept.exists()
+    assert "Deleted 1 orphaned file(s)" in result.output
+
+
+def test_dry_run_scans_orphans_exactly_once(cleanup_env):
+    """A dry run also performs exactly one orphan scan and deletes nothing."""
+    config, _db_path = cleanup_env
+    kept, orphan = _seed_one_recording_with_orphan(config)
+
+    with patch.object(OrphanScanner, "find_orphans", autospec=True, side_effect=OrphanScanner.find_orphans) as spy:
+        result = CliRunner().invoke(cli, ["audio", "cleanup"])
+
+    assert result.exit_code == 0, result.output
+    assert spy.call_count == 1
+    assert "DRY RUN" in result.output
+    assert orphan.exists(), "dry run must not delete the orphan file"
+    assert kept.exists()

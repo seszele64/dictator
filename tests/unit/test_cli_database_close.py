@@ -258,7 +258,7 @@ class TestHistoryShowClose:
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_with_data
 
-            with patch("whisper_dictate.audio_storage.AudioStorage") as mock_storage:
+            with patch("whisper_dictate.storage.audio_storage.AudioStorage") as mock_storage:
                 mock_storage.return_value.get_audio_path.return_value = Path("/fake/path")
 
                 result = cli_runner.invoke(cli, ["history", "show", "1", "--audio"])
@@ -311,7 +311,7 @@ class TestHistoryDeleteClose:
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db_with_data
 
-            with patch("whisper_dictate.audio_storage.AudioStorage") as mock_storage:
+            with patch("whisper_dictate.storage.audio_storage.AudioStorage") as mock_storage:
                 mock_audio_path = Mock()
                 mock_audio_path.exists.return_value = False
                 mock_storage.return_value.get_audio_path.return_value = mock_audio_path
@@ -752,7 +752,7 @@ class TestConnectionLeak:
             with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
                 mock_database_cls.return_value = mock_db
 
-                with patch("whisper_dictate.audio_storage.AudioStorage"):
+                with patch("whisper_dictate.storage.audio_storage.AudioStorage"):
                     cli_runner.invoke(cli, cmd)
 
                 assert mock_db.close.called, (
@@ -919,7 +919,7 @@ class TestHistoryDeleteFileFirst:
     def _invoke(self, cli_runner, mock_db, transcription_row):
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
-            with patch("whisper_dictate.audio_storage.AudioStorage") as mock_storage:
+            with patch("whisper_dictate.storage.audio_storage.AudioStorage") as mock_storage:
                 result = cli_runner.invoke(cli, ["history", "delete", "1", "--yes"])
         return result, mock_storage
 
@@ -930,7 +930,7 @@ class TestHistoryDeleteFileFirst:
 
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
-            with patch("whisper_dictate.audio_storage.AudioStorage") as mock_storage:
+            with patch("whisper_dictate.storage.audio_storage.AudioStorage") as mock_storage:
                 mock_audio_path = Mock()
                 mock_audio_path.unlink.side_effect = lambda *a, **kw: order.append("unlink")
                 mock_storage.return_value.get_audio_path.return_value = mock_audio_path
@@ -958,7 +958,7 @@ class TestHistoryDeleteFileFirst:
         mock_db.delete_recording.assert_called_once_with(42)
 
     def test_unsafe_path_deletes_row_only_and_warns(self, cli_runner, transcription_row):
-        from whisper_dictate.audio_storage import UnsafeAudioPathError
+        from whisper_dictate.util.paths import UnsafeAudioPathError
 
         mock_db = Mock()
         mock_db.get_transcription_with_recording = Mock(return_value=transcription_row)
@@ -966,7 +966,7 @@ class TestHistoryDeleteFileFirst:
 
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
-            with patch("whisper_dictate.audio_storage.AudioStorage") as mock_storage:
+            with patch("whisper_dictate.storage.audio_storage.AudioStorage") as mock_storage:
                 mock_storage.return_value.get_audio_path.side_effect = UnsafeAudioPathError(
                     "escapes the recordings root"
                 )
@@ -983,7 +983,7 @@ class TestHistoryDeleteFileFirst:
 
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
-            with patch("whisper_dictate.audio_storage.AudioStorage") as mock_storage:
+            with patch("whisper_dictate.storage.audio_storage.AudioStorage") as mock_storage:
                 mock_path = Mock()
                 mock_path.unlink.side_effect = PermissionError("denied")
                 mock_storage.return_value.get_audio_path.return_value = mock_path
@@ -1001,7 +1001,7 @@ class TestHistoryDeleteFileFirst:
 
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
-            with patch("whisper_dictate.audio_storage.AudioStorage") as mock_storage:
+            with patch("whisper_dictate.storage.audio_storage.AudioStorage") as mock_storage:
                 mock_path = Mock()
                 mock_path.unlink.side_effect = FileNotFoundError()
                 mock_storage.return_value.get_audio_path.return_value = mock_path
@@ -1013,8 +1013,9 @@ class TestHistoryDeleteFileFirst:
 
     def test_real_files_inside_and_outside_root(self, cli_runner, tmp_path):
         """End-to-end: in-root file is deleted, out-of-root file is never touched."""
-        from whisper_dictate.audio_storage import AudioStorage
         from whisper_dictate.config import DatabaseConfig
+        from whisper_dictate.storage.audio_storage import AudioStorage
+        from whisper_dictate.util.paths import AudioPathResolver
 
         recordings_root = tmp_path / "recordings"
         inside = recordings_root / "2024/03/14"
@@ -1024,7 +1025,8 @@ class TestHistoryDeleteFileFirst:
         outside_file = tmp_path / "outside.wav"
         outside_file.write_bytes(b"do not touch")
 
-        storage = AudioStorage(DatabaseConfig(recordings_path=recordings_root))
+        config = DatabaseConfig(recordings_path=recordings_root)
+        storage = AudioStorage(config, AudioPathResolver(config.get_recordings_path()))
 
         mock_db = Mock()
         mock_db.get_transcription_with_recording = Mock(
@@ -1040,7 +1042,7 @@ class TestHistoryDeleteFileFirst:
 
         with patch("whisper_dictate.cli_helpers.Database") as mock_database_cls:
             mock_database_cls.return_value = mock_db
-            with patch("whisper_dictate.audio_storage.AudioStorage", return_value=storage):
+            with patch("whisper_dictate.storage.audio_storage.AudioStorage", return_value=storage):
                 # Out-of-root absolute path: row-only delete
                 result1 = cli_runner.invoke(cli, ["history", "delete", "1", "--yes"])
                 # In-root relative path: file deleted + row deleted

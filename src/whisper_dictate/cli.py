@@ -9,11 +9,11 @@ import click
 
 from whisper_dictate import __version__
 from whisper_dictate.app import bootstrap
-from whisper_dictate.audio_storage import check_disk_space
 from whisper_dictate.cli_helpers import with_database
 from whisper_dictate.config import AppPaths, DatabaseConfig, validate_api_key
 from whisper_dictate.database import Database
 from whisper_dictate.dictation import DictationService
+from whisper_dictate.storage.audio_storage import check_disk_space
 
 
 def setup_logging(level: str, db: Database | None = None, enable_db_logging: bool = True):
@@ -497,7 +497,8 @@ def show_history(ctx: click.Context, transcript_id: int, audio: bool) -> None:
         whisper-dictate history show 42
         whisper-dictate history show 42 --audio
     """
-    from whisper_dictate.audio_storage import AudioStorage, NoAudioFileError, UnsafeAudioPathError
+    from whisper_dictate.storage.audio_storage import AudioStorage
+    from whisper_dictate.util.paths import NoAudioFileError, UnsafeAudioPathError
 
     db = ctx.obj["db"]
     db_config = ctx.obj["config"].database
@@ -538,9 +539,9 @@ def show_history(ctx: click.Context, transcript_id: int, audio: bool) -> None:
 
         # Audio file path
         if audio:
-            from whisper_dictate.audio_storage import NoAudioFileError, UnsafeAudioPathError
+            from whisper_dictate.util.paths import AudioPathResolver, NoAudioFileError, UnsafeAudioPathError
 
-            audio_storage = AudioStorage(db_config)
+            audio_storage = AudioStorage(db_config, AudioPathResolver(db_config.get_recordings_path()))
             try:
                 audio_path = audio_storage.get_audio_path(transcription["file_path"], verify_exists=True)
             except NoAudioFileError:
@@ -628,11 +629,8 @@ def delete_history(ctx: click.Context, transcript_id: int, confirm_yes: bool) ->
         whisper-dictate history delete 42
         whisper-dictate history delete 42 --yes
     """
-    from whisper_dictate.audio_storage import (
-        AudioStorage,
-        NoAudioFileError,
-        UnsafeAudioPathError,
-    )
+    from whisper_dictate.storage.audio_storage import AudioStorage
+    from whisper_dictate.util.paths import AudioPathResolver, NoAudioFileError, UnsafeAudioPathError
 
     db = ctx.obj["db"]
     db_config = ctx.obj["config"].database
@@ -667,7 +665,7 @@ def delete_history(ctx: click.Context, transcript_id: int, confirm_yes: bool) ->
         # root) are never accessed - those recordings are deleted row-only.
         unlink_path = None
         if stored_path:
-            audio_storage = AudioStorage(db_config)
+            audio_storage = AudioStorage(db_config, AudioPathResolver(db_config.get_recordings_path()))
             try:
                 unlink_path = audio_storage.get_audio_path(stored_path)
             except NoAudioFileError:
@@ -812,15 +810,15 @@ def cleanup_audio(ctx: click.Context, dry_run: bool, confirm: bool) -> None:
         whisper-dictate audio cleanup --dry-run      # List orphaned files
         whisper-dictate audio cleanup --confirm       # Actually delete them
     """
-    from whisper_dictate.audio_storage import (
-        AudioStorage,
-        cleanup_orphaned_files,
-        get_orphaned_files,
-    )
+    from whisper_dictate.storage.audio_storage import AudioStorage
+    from whisper_dictate.storage.orphan_scan import OrphanScanner
+    from whisper_dictate.util.paths import AudioPathResolver
 
     # Explicit per-command storage, built from the loaded configuration:
     # the orphan scan must use the user's configured recordings path.
-    storage = AudioStorage(ctx.obj["config"].database)
+    db_config = ctx.obj["config"].database
+    storage = AudioStorage(db_config, AudioPathResolver(db_config.get_recordings_path()))
+    scanner = OrphanScanner(storage)
 
     # Data-driven, not hardcoded: an explicit --confirm deletes, everything
     # else (plain invocation or explicit --dry-run) stays display-only. The
@@ -830,8 +828,10 @@ def cleanup_audio(ctx: click.Context, dry_run: bool, confirm: bool) -> None:
     actual_dry_run = dry_run and not confirm
 
     try:
-        # First, just get the orphaned files to display
-        orphaned_files = get_orphaned_files(ctx.obj["db"], storage)
+        # Scan ONCE: the same result feeds the orphan listing and the
+        # deletion (cleanup used to re-scan the database and filesystem
+        # internally — a second full pass on every --confirm).
+        orphaned_files = scanner.find_orphans(ctx.obj["db"])
 
         if not orphaned_files:
             click.echo("No orphaned audio files found.")
@@ -860,9 +860,11 @@ def cleanup_audio(ctx: click.Context, dry_run: bool, confirm: bool) -> None:
                 )
             )
         else:
-            # Perform the cleanup (actual_dry_run is False in this branch;
-            # passing the flag keeps the call site data-driven).
-            deleted_count, size_freed = cleanup_orphaned_files(ctx.obj["db"], storage, dry_run=actual_dry_run)
+            # Perform the cleanup on the SAME scan result that was displayed
+            # above (actual_dry_run is False in this branch; passing the flag
+            # keeps the call site data-driven). No second scan: the deletion
+            # list is by construction identical to the displayed one.
+            deleted_count, size_freed = scanner.cleanup(orphaned_files, dry_run=actual_dry_run)
 
             size_freed_mb = size_freed / (1024 * 1024)
             click.echo(

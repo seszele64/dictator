@@ -6,14 +6,14 @@ from unittest.mock import Mock
 
 import pytest
 
-from whisper_dictate.audio_storage import (
+from whisper_dictate.config import DatabaseConfig
+from whisper_dictate.storage.audio_storage import (
     DEFAULT_MIN_FREE_SPACE_MB,
     AudioStorage,
     check_disk_space,
-    cleanup_orphaned_files,
-    get_orphaned_files,
 )
-from whisper_dictate.config import DatabaseConfig
+from whisper_dictate.storage.orphan_scan import OrphanScanner
+from whisper_dictate.util.paths import AudioPathResolver
 
 
 @pytest.fixture
@@ -28,7 +28,7 @@ def audio_storage(temp_recordings_dir: Path) -> AudioStorage:
     """Create an AudioStorage instance with a temporary directory."""
     config = Mock(spec=DatabaseConfig)
     config.get_recordings_path.return_value = temp_recordings_dir
-    return AudioStorage(config)
+    return AudioStorage(config, AudioPathResolver(temp_recordings_dir))
 
 
 @pytest.fixture
@@ -190,7 +190,7 @@ class TestAudioStorageDiskSpace:
     def test_audio_storage_check_disk_space(self, tmp_path):
         """Test AudioStorage.check_disk_space method."""
         config = DatabaseConfig(recordings_path=tmp_path)
-        storage = AudioStorage(config)
+        storage = AudioStorage(config, AudioPathResolver(config.get_recordings_path()))
 
         has_space, available_mb = storage.check_disk_space()
         assert isinstance(has_space, bool)
@@ -199,7 +199,7 @@ class TestAudioStorageDiskSpace:
     def test_audio_storage_get_disk_usage(self, tmp_path):
         """Test AudioStorage.get_disk_usage method."""
         config = DatabaseConfig(recordings_path=tmp_path)
-        storage = AudioStorage(config)
+        storage = AudioStorage(config, AudioPathResolver(config.get_recordings_path()))
 
         usage = storage.get_disk_usage()
         assert "total_mb" in usage
@@ -210,7 +210,7 @@ class TestAudioStorageDiskSpace:
     def test_audio_storage_get_disk_usage_nonexistent(self):
         """Test AudioStorage.get_disk_usage with nonexistent path."""
         config = DatabaseConfig(recordings_path=Path("/nonexistent"))
-        storage = AudioStorage(config)
+        storage = AudioStorage(config, AudioPathResolver(config.get_recordings_path()))
 
         usage = storage.get_disk_usage()
         assert "error" in usage
@@ -233,7 +233,7 @@ class TestDiskSpaceConfiguration:
 # ============ Orphaned File Tests ============
 
 
-class TestGetOrphanedFiles:
+class TestFindOrphans:
     """Tests for orphaned file detection."""
 
     def test_no_orphaned_files_when_directory_empty(
@@ -243,7 +243,7 @@ class TestGetOrphanedFiles:
         # Ensure directory exists but is empty
         temp_recordings_dir.mkdir(parents=True, exist_ok=True)
 
-        orphaned = get_orphaned_files(mock_db_empty, audio_storage)
+        orphaned = OrphanScanner(audio_storage).find_orphans(mock_db_empty)
 
         assert orphaned == []
 
@@ -260,7 +260,7 @@ class TestGetOrphanedFiles:
         (temp_recordings_dir / "2024/03/14/recording1.wav").write_bytes(b"test")
         (temp_recordings_dir / "2024/03/15/recording2.wav").write_bytes(b"test")
 
-        orphaned = get_orphaned_files(mock_db_with_recordings, audio_storage)
+        orphaned = OrphanScanner(audio_storage).find_orphans(mock_db_with_recordings)
 
         assert orphaned == []
 
@@ -272,7 +272,7 @@ class TestGetOrphanedFiles:
         (temp_recordings_dir / "2024/03/14/orphan1.wav").write_bytes(b"orphan content 1")
         (temp_recordings_dir / "2024/03/15/orphan2.wav").write_bytes(b"orphan content 2")
 
-        orphaned = get_orphaned_files(mock_db_empty, audio_storage)
+        orphaned = OrphanScanner(audio_storage).find_orphans(mock_db_empty)
 
         assert len(orphaned) == 2
         orphaned_paths = [o["relative_path"] for o in orphaned]
@@ -298,7 +298,7 @@ class TestGetOrphanedFiles:
         (temp_recordings_dir / "2024/03/14/orphan1.wav").write_bytes(b"orphan")
         (temp_recordings_dir / "2024/03/15/orphan2.wav").write_bytes(b"orphan")
 
-        orphaned = get_orphaned_files(mock_db_with_recordings, audio_storage)
+        orphaned = OrphanScanner(audio_storage).find_orphans(mock_db_with_recordings)
 
         assert len(orphaned) == 2
         orphaned_paths = [o["relative_path"] for o in orphaned]
@@ -321,7 +321,7 @@ class TestGetOrphanedFiles:
         test_file.write_bytes(test_content)
         time.sleep(0.01)  # Ensure mtime changes
 
-        orphaned = get_orphaned_files(mock_db_empty, audio_storage)
+        orphaned = OrphanScanner(audio_storage).find_orphans(mock_db_empty)
 
         assert len(orphaned) == 1
         assert orphaned[0]["size"] == len(test_content)
@@ -332,16 +332,14 @@ class TestGetOrphanedFiles:
         self, audio_storage: AudioStorage, mock_db_empty, temp_recordings_dir: Path
     ):
         """Test that empty list is returned when recordings dir doesn't exist."""
-        # Make sure the directory doesn't exist
-        # (temp_recordings_dir is already a non-existent temp dir)
-
-        orphaned = get_orphaned_files(mock_db_empty, audio_storage)
+        # No files under the recordings root, so the scan reports no orphans.
+        orphaned = OrphanScanner(audio_storage).find_orphans(mock_db_empty)
 
         assert orphaned == []
 
 
-class TestCleanupOrphanedFiles:
-    """Tests for orphaned file cleanup."""
+class TestOrphanCleanup:
+    """Tests for orphaned file cleanup (find_orphans + cleanup)."""
 
     def test_dry_run_does_not_delete(self, audio_storage: AudioStorage, mock_db_empty, temp_recordings_dir: Path):
         """Test that dry_run=True doesn't actually delete files."""
@@ -350,7 +348,8 @@ class TestCleanupOrphanedFiles:
         test_file = temp_recordings_dir / "2024/03/14/orphan.wav"
         test_file.write_bytes(b"orphan content")
 
-        deleted_count, size_freed = cleanup_orphaned_files(mock_db_empty, audio_storage, dry_run=True)
+        scanner = OrphanScanner(audio_storage)
+        deleted_count, size_freed = scanner.cleanup(scanner.find_orphans(mock_db_empty), dry_run=True)
 
         # File should still exist
         assert test_file.exists()
@@ -365,7 +364,8 @@ class TestCleanupOrphanedFiles:
         test_content = b"orphan content"
         test_file.write_bytes(test_content)
 
-        deleted_count, size_freed = cleanup_orphaned_files(mock_db_empty, audio_storage, dry_run=False)
+        scanner = OrphanScanner(audio_storage)
+        deleted_count, size_freed = scanner.cleanup(scanner.find_orphans(mock_db_empty), dry_run=False)
 
         # File should be deleted
         assert not test_file.exists()
@@ -383,15 +383,18 @@ class TestCleanupOrphanedFiles:
         file1.write_bytes(content1)
         file2.write_bytes(content2)
 
-        deleted_count, size_freed = cleanup_orphaned_files(mock_db_empty, audio_storage, dry_run=False)
+        scanner = OrphanScanner(audio_storage)
+        deleted_count, size_freed = scanner.cleanup(scanner.find_orphans(mock_db_empty), dry_run=False)
 
         assert deleted_count == 2
         assert size_freed == len(content1) + len(content2)
 
     def test_cleanup_nonexistent_directory(self, audio_storage: AudioStorage, mock_db_empty, temp_recordings_dir: Path):
         """Test cleanup handles non-existent directory gracefully."""
-        # Directory doesn't exist
-        deleted_count, size_freed = cleanup_orphaned_files(mock_db_empty, audio_storage, dry_run=True)
+        # No files under the recordings root, so the scan reports no orphans
+        # and cleanup has nothing to delete.
+        scanner = OrphanScanner(audio_storage)
+        deleted_count, size_freed = scanner.cleanup(scanner.find_orphans(mock_db_empty), dry_run=True)
 
         assert deleted_count == 0
         assert size_freed == 0
