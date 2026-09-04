@@ -19,9 +19,9 @@ classifiers = [
 dependencies = [
     "openai>=1.0.0",
     "pydantic>=2.0.0",
-    "pydub==0.25.1",
     "click>=8.0.0",
     "python-dotenv>=1.0.0",
+    "numpy>=1.26",
     "sounddevice>=0.4.6",
     "soundfile>=0.12.1",
 ]
@@ -111,7 +111,8 @@ check_untyped_defs = true
 [[tool.mypy.overrides]]
 # Untyped third-party libraries (no py.typed marker shipped).
 # Every OTHER third-party dependency must be py.typed or it errors loudly here.
-module = ["soundfile", "sounddevice", "pydub"]
+# (numpy ships py.typed — direct dep since P10/ADR 0006, no override needed.)
+module = ["soundfile", "sounddevice"]
 ignore_missing_imports = true
 
 [tool.ruff]

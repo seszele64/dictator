@@ -11,7 +11,15 @@ import os
 import tempfile
 from pathlib import Path
 
+import numpy as np
 import pytest
+import soundfile as sf
+
+# NOTE: soundfile is bound at module import (collection) time, before
+# conftest's session-scoped patch_audio_modules swaps a mock into
+# sys.modules — so the fixture below writes REAL WAV files (same pattern as
+# tests/integration/test_audio_golden.py). A function-level `import
+# soundfile` would instead receive the session mock and write nothing.
 
 
 class TestFileSizeReductionIntegration:
@@ -41,24 +49,22 @@ class TestFileSizeReductionIntegration:
         return size_bytes < TestFileSizeReductionIntegration.SMALL_FILE_THRESHOLD_MB * 1024 * 1024
 
     @pytest.fixture
-    def real_wav_file(self):
-        """Create a real WAV file using pydub if available."""
-        try:
-            from pydub import AudioSegment
-        except ImportError:
-            pytest.skip("pydub not installed - cannot create real WAV file")
+    def real_wav_file(self, tmp_path):
+        """Create a real silent WAV file via soundfile (10 s, 16 kHz, mono).
 
-        # Generate 10 seconds of audio at 16kHz mono
-        # This simulates ~1.9MB WAV file (10s * 16000 * 2 bytes per sample)
-        audio = AudioSegment.silent(duration=10000, frame_rate=16000)
-        audio = audio.set_channels(1)
+        Replaces the pre-P10 generated fixture (P10/ADR 0006): writes a real
+        PCM_16 WAV of digital silence (~0.31 MB, i.e. a "small" file for the
+        size-aware assertions below). Silence encodes efficiently at CBR —
+        the reduction bands in these tests were verified against real
+        ffmpeg output of this exact fixture.
+        """
+        duration_s = 10
+        sample_rate = 16000
+        samples = np.zeros(duration_s * sample_rate, dtype=np.float32)
 
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            audio.export(tmp.name, format="wav")
-            yield Path(tmp.name)
-
-        with contextlib.suppress(OSError):
-            os.unlink(tmp.name)
+        wav_path = tmp_path / "real_silence.wav"
+        sf.write(str(wav_path), samples, sample_rate, subtype="PCM_16")
+        yield wav_path
 
     def test_real_file_size_reduction_128k(self, real_wav_file):
         """Test real WAV to MP3 conversion at 128k achieves expected reduction.
@@ -167,19 +173,11 @@ class TestFileSizeReductionIntegration:
         from whisper_dictate.audio_converter import AudioConverter
         from whisper_dictate.providers.openai_compatible import OpenAICompatibleProvider
 
-        # Check FFmpeg availability first
-        try:
-            from pydub import AudioSegment
-        except ImportError:
-            pytest.skip("pydub not installed")
-
         # Generate test audio - say "hello world" for 2 seconds
         # Note: This is silent audio, real test would use actual speech
-        audio = AudioSegment.silent(duration=2000, frame_rate=16000)
-        audio = audio.set_channels(1)
-
+        samples = np.zeros(2 * 16000, dtype=np.float32)
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as wav_tmp:
-            audio.export(wav_tmp.name, format="wav")
+            sf.write(wav_tmp.name, samples, 16000, subtype="PCM_16")
             wav_path = Path(wav_tmp.name)
 
         try:

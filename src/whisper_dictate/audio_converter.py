@@ -1,17 +1,17 @@
-"""Audio format conversion from WAV to MP3 using pydub.
+"""Audio format conversion from WAV to MP3 via an FFmpeg subprocess.
 
 WHY THIS EXISTS: WAV files are large (~10MB per minute at 44.1kHz stereo) and
 the Whisper API supports MP3 natively. Converting to MP3 achieves 80-90% size
 reduction with no impact on transcription quality for speech.
 
-RESPONSIBILITY: Convert WAV audio files to MP3 format using pydub with FFmpeg backend.
+RESPONSIBILITY: Convert WAV audio files to MP3 format using an FFmpeg subprocess.
 BOUNDARIES:
 - DOES: Convert WAV files to MP3, handle graceful fallback when FFmpeg unavailable
 - DOES NOT: Handle transcription, recording, or storage management
 
 DEPENDENCIES:
-- pydub: Audio format conversion library
-- FFmpeg: Audio encoding backend (system dependency)
+- FFmpeg: Audio encoding backend (system dependency, invoked directly —
+  "ffmpeg-only-when-needed"; no audio library in between, per ADR 0006)
 
 GRACEFUL DEGRADATION:
 - If FFmpeg is unavailable, logs a warning and returns the original WAV path
@@ -19,6 +19,7 @@ GRACEFUL DEGRADATION:
 """
 
 import logging
+import subprocess
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -28,13 +29,13 @@ class AudioConverter:
     """WHY THIS EXISTS: Encapsulates WAV to MP3 conversion logic with configurable
     bitrate and graceful fallback behavior.
 
-    RESPONSIBILITY: Convert WAV audio files to MP3 format.
+    RESPONSIBILITY: Convert WAV audio file to MP3 format.
     BOUNDARIES:
     - DOES: Convert single WAV file to MP3, respect bitrate settings
     - DOES NOT: Handle batch conversions, audio quality analysis, or format detection
 
     RELATIONSHIPS:
-    - DEPENDS ON: pydub library and FFmpeg backend
+    - DEPENDS ON: FFmpeg binary on PATH (invoked via subprocess)
     - USED BY: DictationService for pre-upload conversion
     """
 
@@ -89,18 +90,29 @@ class AudioConverter:
         logger.debug(f"Output MP3 path: {mp3_path}")
 
         try:
-            # Lazy import pydub to allow graceful absence
-            from pydub import AudioSegment
-
-            logger.debug(f"Loading WAV file: {wav_path}")
-            audio = AudioSegment.from_wav(str(wav_path))
-
             logger.debug(f"Encoding MP3 with bitrate={self.bitrate}: {mp3_path}")
-            audio.export(
-                str(mp3_path),
-                format="mp3",
-                bitrate=self.bitrate,
+            # Single-pass FFmpeg invocation (ADR 0006): decode WAV and encode
+            # MP3 in one process. check=False — a nonzero exit (corrupt input,
+            # bad options) is turned into an exception below so the generic
+            # handler can fall back gracefully.
+            result = subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",  # overwrite existing output
+                    "-i",
+                    str(wav_path),
+                    "-codec:a",
+                    "libmp3lame",
+                    "-b:a",
+                    self.bitrate,
+                    str(mp3_path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
             )
+            if result.returncode != 0:
+                raise RuntimeError(f"ffmpeg exited with code {result.returncode}: {result.stderr.strip()[-500:]}")
 
             # Calculate file size reduction
             original_size = wav_path.stat().st_size
@@ -125,7 +137,7 @@ class AudioConverter:
             return mp3_path
 
         except FileNotFoundError as e:
-            # FFmpeg not installed
+            # FFmpeg not installed (subprocess.run raises before spawning)
             logger.warning(
                 f"FFmpeg not found - conversion failed. "
                 f"Install FFmpeg to enable MP3 conversion: sudo pacman -S ffmpeg (Arch) "

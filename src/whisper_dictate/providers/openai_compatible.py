@@ -179,9 +179,14 @@ class OpenAICompatibleProvider(TranscriptionProvider):
                         temperature=self._temperature,
                     )
 
+            # openai>=3 renamed the transcription response field
+            # `language` -> `languages` (a list of detected languages).
+            # Read the new shape first and fall back to the legacy scalar
+            # so either SDK major records the language.
+            languages = getattr(response, "languages", None)
             result = TranscriptionResult(
                 text=response.text,
-                language=getattr(response, "language", None),
+                language=languages[0] if languages else getattr(response, "language", None),
                 provider=self._provider_name,
             )
 

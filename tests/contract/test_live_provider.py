@@ -63,7 +63,7 @@ def test_live_openai_compatible_transcribe(tmp_path: Path):
     config = WhisperConfig(
         provider=provider_name,
         api_key=os.getenv(env_var, "") if env_var else "",
-        # Silence detection needs pydub/soundfile, mocked out at session scope;
+        # Silence detection needs soundfile, mocked out at session scope;
         # the seam under test here is the real API round-trip.
         silence_threshold_dbfs=None,
     )

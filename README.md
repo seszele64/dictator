@@ -509,7 +509,7 @@ The CLI uses sensible defaults:
 
 #### MP3 Conversion
 
-WAV files are large (~10MB per minute at 44.1kHz stereo) but the Whisper API supports MP3 natively. By default, audio is automatically converted to MP3 before upload, achieving **80-90% file size reduction** with no impact on transcription quality for speech.
+WAV files are large (~10MB per minute at 44.1kHz stereo) but the Whisper API supports MP3 natively. By default, audio is automatically converted to MP3 before upload, achieving **80-90% file size reduction** with no impact on transcription quality for speech. Mechanism: soundfile handles WAV I/O and silence analysis, and MP3 encoding runs through a single FFmpeg subprocess call.
 
 MP3 conversion is currently configured only through code defaults in
 `whisper_dictate/config.py` (`AudioConfig`): `mp3_enabled` (true),
