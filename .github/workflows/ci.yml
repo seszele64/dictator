@@ -52,7 +52,7 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
-          python-version: "3.x"
+          python-version: "3.12"
       - name: Install locked environment
         run: uv sync --locked --extra dev
       - name: Ruff lint
