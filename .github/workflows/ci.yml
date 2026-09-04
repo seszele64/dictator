@@ -1,46 +1,169 @@
+# CI for whisper-dictate (P9, Day 7) — uv-native, SHA-pinned actions.
+#
+# Dependency policy: the environment comes exclusively from uv.lock via
+# `uv sync --locked --extra dev` (dev tooling lives in the
+# [project.optional-dependencies].dev extra). `--locked` is used deliberately —
+# NOT `--frozen`: it asserts that uv.lock is current with pyproject.toml and
+# fails loudly on drift, so a stale lockfile can never silently ship to CI.
+#
+# =============================================================================
+# P10 BRIDGE — Python 3.13 leg is allow-fail. DO NOT REMOVE THIS BLOCK YET.
+# =============================================================================
+# pydub 0.25.1 imports `audioop`, a module removed in Python 3.13 — any real
+# pydub import dies there (verified: ModuleNotFoundError: No module named
+# 'pyaudioop'). Today the 3.13 leg still passes (verified 2026-09-04:
+# 659 passed / 4 skipped, identical to 3.11) because tests/conftest.py mocks
+# pydub/sounddevice in sys.modules before any lazy import executes — src/
+# imports pydub only lazily. One deliberate exception: dictation.py's
+# module-level soundfile import is real (it fires at collection, before the
+# fixture) but harmless — soundfile >=0.12 wheels bundle libsndfile, and e2e
+# patches the dictation.sf seam. Until P10 removes/replaces pydub, the pydub
+# shield is one accidental real import away from breaking. The 3.13 entry
+# below therefore carries `allow-fail: true` and the job-level
+# `continue-on-error` keeps the overall run green even if the 3.13 leg turns
+# red.
+# WHEN P10 LANDS: delete the `include` block and the `continue-on-error` line
+# in the `test` job, letting 3.13 join the normal (must-pass) matrix.
+# =============================================================================
+
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Skip redundant work: rapid pushes / PR updates cancel the superseded run.
+  group: ${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: "3.x"
+      - name: Install locked environment
+        run: uv sync --locked --extra dev
+      - name: Ruff lint
+        run: uv run --no-sync ruff check .
+      - name: Ruff format check
+        run: uv run --no-sync ruff format --check .
+
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          # mypy is configured for 3.11 semantics ([tool.mypy] python_version).
           python-version: "3.11"
-      - name: Install ruff
-        run: pip install "ruff>=0.6.0"
-      - name: Run ruff
-        run: ruff check .
+      - name: Install locked environment
+        run: uv sync --locked --extra dev
+      - name: mypy (strict core)
+        run: uv run --no-sync mypy
 
   test:
+    # P10 bridge: the 3.13 leg is allowed to fail (see file header). Remove the
+    # include + continue-on-error here when P10 removes pydub.
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: ${{ matrix.allow-fail == true }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+        include:
+          - python-version: "3.13"
+            allow-fail: true
     steps:
-      - uses: actions/checkout@v4
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg libportaudio2
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          python-version: "3.11"
-      - name: Install uv
-        run: pip install uv
-      - name: Install dependencies
-        run: uv sync --extra dev
-      - name: Run tests with coverage
-        run: uv run pytest --cov=whisper_dictate --cov-report=term-missing --cov-report=xml --cov-report=json
-      - name: Enforce per-module coverage thresholds
-        run: uv run python scripts/check_coverage.py
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: ${{ matrix.python-version }}
+      - name: Install locked environment
+        run: uv sync --locked --extra dev
+      # Plain pytest — no --cov here; coverage has its own dedicated job.
+      # The suite is hermetic: system binaries (dunstify, xclip) and audio
+      # devices are mocked at the seams, so no apt packages are needed.
+      - name: Pytest
+        run: uv run --no-sync pytest -q
+
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: "3.12"
+      - name: Install locked environment
+        run: uv sync --locked --extra dev
+      # fail_under=70 is enforced by coverage's own report step (pyproject).
+      - name: Pytest with coverage
+        run: uv run --no-sync pytest -q --cov --cov-report=json:coverage.json
+      - name: Enforce per-module coverage floors
+        run: uv run --no-sync python scripts/check_coverage.py --coverage-file coverage.json
+      - name: Upload coverage.json
         if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: coverage-report
-          path: coverage.xml
+          name: coverage-json
+          path: coverage.json
+          if-no-files-found: error
+          retention-days: 7
+
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: "3.12"
+      # Export RUNTIME deps only: `--no-emit-project` drops whisper-dictate
+      # itself (not on PyPI until P13 — pip-audit would error on it), extras
+      # like dev are excluded by default, and `--no-dev` keeps that guarantee
+      # even if a [dependency-groups] dev section is added later. `--locked`
+      # asserts lock↔pyproject currency, same as `uv sync --locked`.
+      - name: Export runtime requirements
+        run: uv export --locked --format requirements-txt --no-emit-project --no-dev -o /tmp/requirements.txt
+      # The export is fully resolved, so audit exactly those pins (--no-deps)
+      # instead of re-resolving; --strict fails on any parse/audit anomaly.
+      #
+      # TRANSITIONAL ignores — remove after the next uv.lock refresh. Both
+      # have fixes already permitted by pyproject bounds, so a plain
+      # `uv lock --upgrade` clears them; do not let these become permanent:
+      #   - PYSEC-2026-2132 (CVE-2026-7246): click <=8.3.2 command injection
+      #     in click.edit(); locked 8.3.1, fixed in 8.3.3. click.edit() is
+      #     unused by this CLI (local attack vector).
+      #   - PYSEC-2026-215 (CVE-2026-45409): idna <3.15 DoS via crafted
+      #     idna.encode() input; locked 3.11 (transitive via httpx/openai),
+      #     fixed in 3.15.
+      #   (idna's advisory is reported once per parent package — attributed
+      #   via both anyio and httpx — hence "3 ignored" from these 2 flags.)
+      - name: pip-audit
+        run: >-
+          uvx pip-audit --strict --no-deps
+          --ignore-vuln PYSEC-2026-2132
+          --ignore-vuln PYSEC-2026-215
+          -r /tmp/requirements.txt
