@@ -12,19 +12,21 @@ from pathlib import Path
 
 import pytest
 
-from whisper_dictate.audio_storage import (
-    AudioStorage,
+from whisper_dictate.config import DatabaseConfig
+from whisper_dictate.storage.audio_storage import AudioStorage
+from whisper_dictate.util.paths import (
+    AudioPathResolver,
     _generate_random_suffix,
     _generate_unique_filename,
     _get_date_based_path,
 )
-from whisper_dictate.config import DatabaseConfig
 
 
 @pytest.fixture
 def storage(tmp_path) -> AudioStorage:
     """Create an AudioStorage instance backed by a tmp_path directory."""
-    return AudioStorage(DatabaseConfig(recordings_path=tmp_path / "recordings"))
+    config = DatabaseConfig(recordings_path=tmp_path / "recordings")
+    return AudioStorage(config, AudioPathResolver(config.get_recordings_path()))
 
 
 class TestFilenameGeneration:
@@ -86,19 +88,22 @@ class TestAudioStorageInit:
 
     def test_init_with_config(self, tmp_path):
         """recordings_path comes from the provided config."""
-        storage = AudioStorage(DatabaseConfig(recordings_path=tmp_path / "recordings"))
+        config = DatabaseConfig(recordings_path=tmp_path / "recordings")
+        storage = AudioStorage(config, AudioPathResolver(config.get_recordings_path()))
         assert storage.recordings_path == tmp_path / "recordings"
 
     def test_init_default_config(self, env_isolator):
         """Explicit default config resolves XDG-based recordings path.
 
         (Config is REQUIRED since S2: no silent default-config fallback.)"""
-        storage = AudioStorage(DatabaseConfig())
+        config = DatabaseConfig()
+        storage = AudioStorage(config, AudioPathResolver(config.get_recordings_path()))
         assert storage.recordings_path == env_isolator / "data" / "whisper-dictate" / "recordings"
 
     def test_recordings_path_property(self, tmp_path):
         """recordings_path is read-only and returns the configured path."""
-        storage = AudioStorage(DatabaseConfig(recordings_path=tmp_path / "rec"))
+        config = DatabaseConfig(recordings_path=tmp_path / "rec")
+        storage = AudioStorage(config, AudioPathResolver(config.get_recordings_path()))
         assert storage.recordings_path == tmp_path / "rec"
         with pytest.raises(AttributeError):
             storage.recordings_path = tmp_path / "other"

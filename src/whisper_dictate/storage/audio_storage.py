@@ -1,61 +1,46 @@
 """Audio storage management for whisper-dictate.
 
 Provides audio file storage with:
-- XDG Base Directory spec compliance
+- XDG Base Directory spec compliance (root resolved from configuration by
+  the caller and injected via ``AudioPathResolver``)
 - Date-based directory structure (YYYY/MM/DD)
 - Unique filename generation (timestamp + random suffix)
 - File save, retrieve, and cleanup operations
 - Disk space checking for safe recording
+
+Pure path computation lives in ``whisper_dictate.util.paths`` and is
+injected as an ``AudioPathResolver``; this module performs the I/O.
+Orphan scanning/cleanup lives in ``whisper_dictate.storage.orphan_scan``
+(``OrphanScanner``); this module does not depend on the database.
 """
 
 import contextlib
 import logging
 import os
-import random
 import shutil
-import string
-import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from whisper_dictate.config import DatabaseConfig
-from whisper_dictate.database import Database
+from whisper_dictate.util.paths import (
+    AudioPathError,
+    AudioPathResolver,
+    NoAudioFileError,
+    UnsafeAudioPathError,
+)
 
 logger = logging.getLogger(__name__)
-
-# Length of random suffix for unique filenames
-RANDOM_SUFFIX_LENGTH = 8
 
 # Default minimum free space threshold in MB
 DEFAULT_MIN_FREE_SPACE_MB = 100
 
 # Prefix for staged (in-progress) audio files inside the destination directory.
 # Files are staged under this name and atomically renamed into place, so the
-# final path never contains a partial file.
+# final path never contains a partial file. The orphan scan
+# (``whisper_dictate.storage.orphan_scan``) skips files with this prefix.
 STAGING_PREFIX = ".staging-"
-
-# Age (seconds) after which a leftover staging file is treated as an orphan by
-# the cleanup scan. Younger files may belong to a save currently in progress.
-STAGING_RETENTION_SECONDS = 3600
-
-
-class AudioPathError(Exception):
-    """Base error for audio path resolution failures."""
-
-
-class NoAudioFileError(AudioPathError):
-    """The recording has no audio file stored (empty file_path sentinel)."""
-
-
-class UnsafeAudioPathError(AudioPathError):
-    """A stored path resolves outside the recordings root and is never accessed.
-
-    Raised for absolute paths outside the recordings directory, ``..`` traversal,
-    and symlinks that escape the root. Files outside the root must never be read
-    or unlinked based on database contents.
-    """
 
 
 @dataclass(frozen=True)
@@ -108,55 +93,6 @@ def check_disk_space(path: Path, min_free_mb: int = DEFAULT_MIN_FREE_SPACE_MB) -
         return True, 0
 
 
-def _generate_random_suffix(length: int = RANDOM_SUFFIX_LENGTH) -> str:
-    """Generate a random alphanumeric suffix for unique filenames.
-
-    Args:
-        length: Length of the random suffix
-
-    Returns:
-        str: Random alphanumeric string
-    """
-    return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
-
-
-def _generate_unique_filename(timestamp: datetime | None = None, suffix: str = "wav") -> str:
-    """Generate a unique filename with timestamp and random suffix.
-
-    Args:
-        timestamp: Datetime for the filename (defaults to now)
-        suffix: File extension (without dot)
-
-    Returns:
-        str: Unique filename in format YYYYMMDD_HHMMSS_random.wav
-    """
-    if timestamp is None:
-        timestamp = datetime.now()
-
-    date_part = timestamp.strftime("%Y%m%d_%H%M%S")
-    random_part = _generate_random_suffix()
-
-    return f"{date_part}_{random_part}.{suffix}"
-
-
-def _get_date_based_path(base_path: Path, timestamp: datetime | None = None) -> Path:
-    """Get the date-based directory path for a recording.
-
-    Creates directory structure: base_path/YYYY/MM/DD/
-
-    Args:
-        base_path: Base recordings directory
-        timestamp: Datetime for the path (defaults to now)
-
-    Returns:
-        Path: Full path to the date-based directory
-    """
-    if timestamp is None:
-        timestamp = datetime.now()
-
-    return base_path / f"{timestamp.year:04d}" / f"{timestamp.month:02d}" / f"{timestamp.day:02d}"
-
-
 class AudioStorage:
     """Audio storage manager for whisper-dictate.
 
@@ -169,16 +105,19 @@ class AudioStorage:
     - DOES NOT: Handle transcription, database operations, or audio recording
     """
 
-    def __init__(self, config: DatabaseConfig):
-        """Initialize audio storage with configuration.
+    def __init__(self, config: DatabaseConfig, paths: AudioPathResolver) -> None:
+        """Initialize audio storage with configuration and an injected path resolver.
 
         Args:
             config: Database configuration containing recordings path (REQUIRED:
                 a None config used to silently fall back to default paths,
                 which broke user-configured recordings directories)
+            paths: Injected pure path resolver (``whisper_dictate.util.paths.
+                AudioPathResolver``) built from the same configuration; it is
+                the single source of truth for all path computation
         """
-        self._config = config
-        self._recordings_path = config.get_recordings_path()
+        self._paths = paths
+        self._recordings_path = paths.recordings_path
         logger.debug(f"AudioStorage initialized with path: {self._recordings_path}")
 
     @property
@@ -250,7 +189,7 @@ class AudioStorage:
         Returns:
             Path: Full path to the date-based directory
         """
-        directory = _get_date_based_path(self._recordings_path, timestamp)
+        directory = self._paths.get_date_directory(timestamp)
 
         if create:
             self.ensure_directory_exists(directory)
@@ -267,14 +206,14 @@ class AudioStorage:
         Returns:
             tuple[Path, str]: Full file path and the filename
         """
-        # Get date-based directory
-        directory = self.get_date_directory(timestamp, create=True)
+        # Generate unique storage path (pure computation)
+        dest_path, filename = self._paths.generate_storage_path(timestamp, suffix)
 
-        # Generate unique filename
-        filename = _generate_unique_filename(timestamp, suffix)
+        # Ensure destination directory exists
+        self.ensure_directory_exists(dest_path.parent)
 
         # Return full path
-        return directory / filename, filename
+        return dest_path, filename
 
     def stage_audio(
         self,
@@ -310,7 +249,7 @@ class AudioStorage:
         # Ensure destination directory exists
         self.ensure_directory_exists(dest_path.parent)
 
-        staged_path = dest_path.parent / f"{STAGING_PREFIX}{filename}.{_generate_random_suffix(6)}.part"
+        staged_path = dest_path.parent / f"{STAGING_PREFIX}{filename}.{self._paths.generate_random_suffix(6)}.part"
 
         try:
             shutil.copy2(str(source_path), str(staged_path))
@@ -434,10 +373,8 @@ class AudioStorage:
     def _resolve_contained(self, relative_path: str) -> Path:
         """Resolve a stored path against the recordings root, enforcing containment.
 
-        Empty paths are the explicit "no file" sentinel. Absolute paths and
-        ``..`` traversal are accepted only when they resolve inside the
-        recordings root (legacy absolute in-root paths keep working); anything
-        else is rejected and never accessed.
+        Delegates the pure containment validation to the injected
+        ``AudioPathResolver``.
 
         Args:
             relative_path: Stored path (relative to the recordings root, or a
@@ -450,22 +387,7 @@ class AudioStorage:
             NoAudioFileError: If the stored path is empty (no file stored)
             UnsafeAudioPathError: If the path escapes the recordings root
         """
-        if not relative_path or not relative_path.strip():
-            raise NoAudioFileError("Recording has no audio file stored (empty file path)")
-
-        root = self._recordings_path.resolve()
-        candidate = (self._recordings_path / relative_path).resolve()
-
-        if candidate == root or not candidate.is_relative_to(root):
-            logger.warning(
-                f"Refusing unsafe audio path {relative_path!r}: resolves to "
-                f"{candidate}, which is outside the recordings root {root}"
-            )
-            raise UnsafeAudioPathError(
-                f"Stored path {relative_path!r} escapes the recordings root ({root}); the file will not be accessed."
-            )
-
-        return candidate
+        return self._paths.resolve_contained(relative_path)
 
     def get_audio_path(self, relative_path: str, verify_exists: bool = False) -> Path:
         """Resolve a stored path to an absolute path inside the recordings directory.
@@ -644,157 +566,3 @@ class AudioStorage:
             "total_size_mb": round(total_size / (1024 * 1024), 2),
             "recordings_path": str(self._recordings_path),
         }
-
-
-# ============ Orphaned File Cleanup Functions ============
-
-
-def get_orphaned_files(db: Database, storage: AudioStorage) -> list[dict[str, Any]]:
-    """Scan for orphaned audio files not referenced in the database.
-
-    Compares files in the recordings directory against database records
-    to find audio files that exist on disk but are not in the database.
-
-    Args:
-        db: Database instance (must have list_recordings method)
-        storage: AudioStorage instance providing the recordings root. Explicit
-            (not a global): this fixes a default-configuration bug where the
-            scan silently used DEFAULT recordings paths regardless of what
-            the user configured.
-
-    Returns:
-        list[dict]: List of orphaned file info with keys:
-            - path: Path to the orphaned file
-            - relative_path: Relative path from recordings root
-            - size: File size in bytes
-            - modified: Last modified timestamp
-    """
-    # Compare resolved-vs-resolved: the DB side canonicalizes stored paths
-    # through get_audio_path() (resolve()), so the scan root must be
-    # canonicalized too. With the raw configured root (e.g. a symlinked
-    # recordings directory), every resolved DB path fails relative_to() and
-    # gets dropped from db_files — making all real recordings look orphaned
-    # and exposing them to mass deletion via `audio cleanup --confirm`.
-    recordings_path = storage.recordings_path.resolve()
-
-    if not recordings_path.exists():
-        logger.info("Recordings directory does not exist, no orphaned files")
-        return []
-
-    # Get all file paths from the filesystem
-    filesystem_files: set[str] = set()
-    orphaned_files = []
-
-    if recordings_path.exists():
-        now = time.time()
-        for path in recordings_path.rglob("*"):
-            if not path.is_file():
-                continue
-            # Skip staging files from saves that may still be in progress;
-            # older leftovers are treated as orphans and cleaned up.
-            if path.name.startswith(STAGING_PREFIX):
-                try:
-                    age = now - path.stat().st_mtime
-                except OSError:
-                    continue
-                if age < STAGING_RETENTION_SECONDS:
-                    logger.debug(f"Skipping in-progress staging file: {path}")
-                    continue
-            try:
-                relative = str(path.relative_to(recordings_path))
-                filesystem_files.add(relative)
-            except ValueError:
-                logger.warning(f"Could not compute relative path for: {path}")
-
-    # Get all file paths from the database, normalized through the containment
-    # check so empty/unsafe stored paths reference nothing inside the tree and
-    # legacy absolute in-root paths match their relative form.
-    db_files: set[str] = set()
-    try:
-        # Use a high limit to get all recordings
-        recordings = db.list_recordings(limit=100000, offset=0)
-        for recording in recordings:
-            file_path = recording.get("file_path")
-            if not file_path:
-                # Empty file_path is the "no file" sentinel
-                continue
-            try:
-                resolved = storage.get_audio_path(file_path)
-            except AudioPathError as e:
-                logger.warning(
-                    f"Recording path {file_path!r} not accessible "
-                    f"({type(e).__name__}); its file will not be treated for cleanup"
-                )
-                continue
-            try:
-                db_files.add(str(resolved.relative_to(recordings_path)))
-            except ValueError:
-                logger.warning(f"Could not normalize stored path: {file_path}")
-    except Exception as e:
-        logger.error(f"Failed to fetch recordings from database: {e}")
-        return []
-
-    # Find orphaned files (in filesystem but not in database)
-    for relative_path in filesystem_files:
-        if relative_path not in db_files:
-            full_path = recordings_path / relative_path
-            try:
-                stat = full_path.stat()
-                orphaned_files.append(
-                    {
-                        "path": full_path,
-                        "relative_path": relative_path,
-                        "size": stat.st_size,
-                        "modified": stat.st_mtime,
-                    }
-                )
-            except OSError as e:
-                logger.warning(f"Could not stat file {full_path}: {e}")
-
-    logger.info(f"Found {len(orphaned_files)} orphaned audio files")
-
-    return orphaned_files
-
-
-def cleanup_orphaned_files(db: Database, storage: AudioStorage, dry_run: bool = True) -> tuple[int, int]:
-    """Clean up orphaned audio files not referenced in the database.
-
-    Args:
-        db: Database instance with sync methods
-        storage: AudioStorage instance providing the recordings root (explicit,
-            not a global - see get_orphaned_files)
-        dry_run: If True, only return what would be deleted without deleting
-
-    Returns:
-        tuple[int, int]: (deleted_count, total_size_freed)
-            - deleted_count: Number of files deleted (or would be deleted)
-            - total_size_freed: Total size in bytes freed (or would be freed)
-    """
-    orphaned_files = get_orphaned_files(db, storage)
-
-    deleted_count = 0
-    total_size_freed = 0
-
-    for file_info in orphaned_files:
-        file_path = file_info["path"]
-        file_size = file_info["size"]
-
-        if dry_run:
-            logger.info(f"[DRY RUN] Would delete orphaned file: {file_path}")
-            deleted_count += 1
-            total_size_freed += file_size
-        else:
-            try:
-                file_path.unlink()
-                logger.info(f"Deleted orphaned file: {file_path}")
-                deleted_count += 1
-                total_size_freed += file_size
-            except OSError as e:
-                logger.error(f"Failed to delete orphaned file {file_path}: {e}")
-
-    if dry_run:
-        logger.info(f"[DRY RUN] Would delete {deleted_count} orphaned files, freeing {total_size_freed} bytes")
-    else:
-        logger.info(f"Deleted {deleted_count} orphaned files, freed {total_size_freed} bytes")
-
-    return deleted_count, total_size_freed

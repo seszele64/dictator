@@ -15,7 +15,7 @@ The MP3 audio conversion capability enables:
 
 ### Requirement: AudioConverter converts WAV files to MP3 format
 
-The system SHALL provide an AudioConverter class that converts WAV audio files to MP3 format using pydub with FFmpeg backend.
+The system SHALL provide an AudioConverter class that converts WAV audio files to MP3 format using an FFmpeg subprocess for MP3 encoding (soundfile for audio analysis).
 
 #### Scenario: Successful WAV to MP3 conversion
 

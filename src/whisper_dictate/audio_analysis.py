@@ -10,11 +10,25 @@ BOUNDARIES:
 - DOES NOT: Perform speech recognition or audio conversion
 
 DEPENDENCIES:
-- pydub: Audio analysis library (already used by audio_converter.py)
+- soundfile: audio decoding (bundled libsndfile; WAV I/O and MP3 decode)
+- numpy: RMS math
+
+dBFS SEMANTICS (ADR 0006): identical to the pre-P10 implementation this
+module replaces — that stack computed 20*log10(rms/32768) over the
+interleaved 16-bit PCM stream (audioop.rms semantics, all channels
+flattened); here samples are read normalized to ±1.0 (float32), where a
+16-bit sample s maps to s/32768, so 20*log10(rms(normalized)) equals that
+value exactly (goldens in tests/integration/test_audio_golden.py pin the
+equivalence, including asymmetric stereo and the -inf result for digital
+silence).
 """
 
 import logging
+import math
 from pathlib import Path
+
+import numpy as np
+import soundfile as sf
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +42,11 @@ def is_audio_silent(audio_file: Path, threshold_dbfs: float = -50.0) -> bool:
 
     RESPONSIBILITY: Analyze audio energy and return silence verdict.
     BOUNDARIES:
-    - DOES: Load audio with pydub, measure dBFS, compare to threshold
+    - DOES: Load audio with soundfile, measure dBFS, compare to threshold
     - DOES NOT: Transcribe audio, modify files, or handle API calls
 
     Args:
-        audio_file: Path to audio file (WAV, MP3, or any pydub-supported format)
+        audio_file: Path to audio file (WAV, MP3, or any soundfile-supported format)
         threshold_dbfs: RMS energy threshold in dBFS. Audio below this is considered silent.
                        Default: -50.0 dBFS. Typical values:
                        - -50.0: Conservative (default) - catches empty recordings
@@ -44,10 +58,17 @@ def is_audio_silent(audio_file: Path, threshold_dbfs: float = -50.0) -> bool:
         On error, returns False (fail-open: let the API decide).
     """
     try:
-        from pydub import AudioSegment
+        # str() on the path: callers/tests pin that soundfile receives a str.
+        samples, _sample_rate = sf.read(str(audio_file), dtype="float32")
 
-        audio = AudioSegment.from_file(str(audio_file))
-        dbfs = audio.dBFS
+        # Flatten all channels into one rms (matches the replaced
+        # implementation, whose audioop.rms ran over the interleaved byte
+        # stream of every channel).
+        data = np.asarray(samples, dtype=np.float64)
+        rms = 0.0 if data.size == 0 else float(math.sqrt(float(np.mean(data * data))))
+
+        # Digital silence (rms == 0) is -inf dBFS — same as the pre-P10 dBFS.
+        dbfs = -math.inf if rms == 0.0 else 20.0 * math.log10(rms)
 
         is_silent: bool = dbfs < threshold_dbfs
 

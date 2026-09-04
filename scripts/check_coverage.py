@@ -20,7 +20,10 @@ COVERAGE_THRESHOLDS: dict[str, float] = {
     "whisper_dictate/config.py": 80.0,
     "whisper_dictate/db_logging.py": 60.0,
     "whisper_dictate/migration.py": 50.0,
-    "whisper_dictate/audio_storage.py": 80.0,
+    # Floors sit below the cross-interpreter min (3.11/3.12/3.13; coverage varies slightly; CI coverage leg runs 3.12).
+    "whisper_dictate/storage/audio_storage.py": 89.94,
+    "whisper_dictate/storage/orphan_scan.py": 84.72,
+    "whisper_dictate/util/paths.py": 98.08,
     "whisper_dictate/providers/openai_compatible.py": 80.0,
     # Ratchets added after the S1 dead-code purge, which removed these
     # modules' only direct test coverage (deleted PersistentNotification /

@@ -2,7 +2,6 @@
 
 import contextlib
 import os
-import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -10,50 +9,27 @@ from unittest.mock import Mock, patch
 import pytest
 
 
-# Create mock pydub module for testing
-class MockAudioSegment:
-    """Mock AudioSegment class for pydub."""
-
-    def __init__(self):
-        self._data = b""
-        self._sample_rate = 16000
-        self._channels = 1
-        self._duration = 1.0
-
-    @classmethod
-    def from_wav(cls, filepath):
-        return cls()
-
-    def export(self, filepath, format=None, bitrate=None, **kwargs):
-        # Create empty file to simulate export
-        Path(filepath).touch()
-
-    @property
-    def duration_seconds(self):
-        return self._duration
-
-    @property
-    def frame_rate(self):
-        return self._sample_rate
-
-    @property
-    def channels(self):
-        return self._channels
-
-
-class MockPydub:
-    """Mock pydub module."""
-
-    AudioSegment = MockAudioSegment
-
-
 @pytest.fixture(autouse=True)
-def mock_pydub_in_sys_modules():
-    """Add mock pydub module to sys.modules before tests."""
-    mock_module = Mock()
-    mock_module.AudioSegment = MockAudioSegment
-    with patch.dict(sys.modules, {"pydub": mock_module}):
-        yield mock_module
+def mock_ffmpeg_subprocess():
+    """Mock the ffmpeg subprocess seam of AudioConverter.
+
+    Success path: 'encodes' by creating the output file (the last argv
+    element), mirroring the empty-file behavior of the old export mock.
+    Individual tests override ``mock_run.side_effect`` to simulate specific
+    failure modes (FileNotFoundError -> 'FFmpeg not found' fallback; generic
+    Exception / nonzero exit -> generic fallback).
+    """
+    with patch("whisper_dictate.audio_converter.subprocess.run") as mock_run:
+
+        def fake_run(cmd, **kwargs):
+            Path(cmd[-1]).touch()  # create the output MP3
+            result = Mock()
+            result.returncode = 0
+            result.stderr = ""
+            return result
+
+        mock_run.side_effect = fake_run
+        yield mock_run
 
 
 class TestAudioConverter:
@@ -99,45 +75,69 @@ class TestAudioConverter:
         assert result == temp_audio_file.with_suffix(".mp3")
         assert result.exists()
 
-    def test_convert_fallback_when_ffmpeg_unavailable(self, temp_audio_file):
+    def test_convert_fallback_when_ffmpeg_unavailable(self, temp_audio_file, mock_ffmpeg_subprocess):
         """Test fallback to original WAV when FFmpeg is not available."""
         from whisper_dictate.audio_converter import AudioConverter
 
         converter = AudioConverter()
 
-        # Simulate FFmpeg not found by making from_wav raise FileNotFoundError
-        original_from_wav = MockAudioSegment.from_wav
-        MockAudioSegment.from_wav = classmethod(
-            lambda cls, path: (_ for _ in ()).throw(FileNotFoundError("ffmpeg not found"))
-        )
+        # Simulate FFmpeg not found by making subprocess.run raise FileNotFoundError
+        mock_ffmpeg_subprocess.side_effect = FileNotFoundError("ffmpeg not found")
 
-        try:
-            result = converter.convert(temp_audio_file)
+        result = converter.convert(temp_audio_file)
 
-            # Should return original WAV path
-            assert result == temp_audio_file
-        finally:
-            MockAudioSegment.from_wav = original_from_wav
+        # Should return original WAV path
+        assert result == temp_audio_file
 
-    def test_convert_fallback_on_generic_error(self, temp_audio_file):
+    def test_convert_fallback_on_generic_error(self, temp_audio_file, mock_ffmpeg_subprocess):
         """Test fallback to original WAV on any conversion error."""
         from whisper_dictate.audio_converter import AudioConverter
 
         converter = AudioConverter()
 
         # Simulate any conversion error
-        original_from_wav = MockAudioSegment.from_wav
-        MockAudioSegment.from_wav = classmethod(
-            lambda cls, path: (_ for _ in ()).throw(Exception("Corrupt audio file"))
-        )
+        mock_ffmpeg_subprocess.side_effect = Exception("Corrupt audio file")
 
-        try:
-            result = converter.convert(temp_audio_file)
+        result = converter.convert(temp_audio_file)
 
-            # Should return original WAV path
-            assert result == temp_audio_file
-        finally:
-            MockAudioSegment.from_wav = original_from_wav
+        # Should return original WAV path
+        assert result == temp_audio_file
+
+    def test_convert_fallback_on_nonzero_ffmpeg_exit(self, temp_audio_file, mock_ffmpeg_subprocess):
+        """Test fallback to original WAV when ffmpeg exits nonzero (e.g. corrupt input)."""
+        from whisper_dictate.audio_converter import AudioConverter
+
+        converter = AudioConverter()
+
+        failed = Mock()
+        failed.returncode = 1
+        failed.stderr = "ffmpeg error: invalid data"
+        mock_ffmpeg_subprocess.side_effect = None
+        mock_ffmpeg_subprocess.return_value = failed
+
+        result = converter.convert(temp_audio_file)
+
+        # Should return original WAV path (generic fallback, never raises)
+        assert result == temp_audio_file
+
+    def test_convert_invokes_ffmpeg_with_expected_args(self, temp_audio_file, mock_ffmpeg_subprocess):
+        """Pin the ffmpeg argv contract: single-pass encode at the configured bitrate."""
+        from whisper_dictate.audio_converter import AudioConverter
+
+        converter = AudioConverter(bitrate="64k")
+        converter.convert(temp_audio_file)
+
+        assert mock_ffmpeg_subprocess.call_count == 1
+        cmd = mock_ffmpeg_subprocess.call_args.args[0]
+        assert cmd[0] == "ffmpeg"
+        assert "-y" in cmd  # overwrite output
+        assert cmd[cmd.index("-i") + 1] == str(temp_audio_file)
+        assert cmd[cmd.index("-codec:a") + 1] == "libmp3lame"
+        assert cmd[cmd.index("-b:a") + 1] == "64k"
+        assert cmd[-1] == str(temp_audio_file.with_suffix(".mp3"))
+        kwargs = mock_ffmpeg_subprocess.call_args.kwargs
+        assert kwargs["check"] is False
+        assert kwargs["capture_output"] is True
 
     def test_convert_deletes_source_by_default(self, temp_audio_file):
         """Test that source WAV is deleted after successful conversion."""
@@ -264,28 +264,22 @@ class TestAudioConverter:
         # Check success message with size info
         assert any("Conversion successful" in record.message for record in caplog.records)
 
-    def test_convert_logs_warning_on_ffmpeg_missing(self, temp_audio_file, caplog):
+    def test_convert_logs_warning_on_ffmpeg_missing(self, temp_audio_file, caplog, mock_ffmpeg_subprocess):
         """Test that warning is logged when FFmpeg is missing."""
         from whisper_dictate.audio_converter import AudioConverter
 
         converter = AudioConverter()
 
         # Simulate FFmpeg not found
-        original_from_wav = MockAudioSegment.from_wav
-        MockAudioSegment.from_wav = classmethod(
-            lambda cls, path: (_ for _ in ()).throw(FileNotFoundError("ffmpeg not found"))
-        )
+        mock_ffmpeg_subprocess.side_effect = FileNotFoundError("ffmpeg not found")
 
-        try:
-            with caplog.at_level("WARNING"):
-                result = converter.convert(temp_audio_file)
+        with caplog.at_level("WARNING"):
+            result = converter.convert(temp_audio_file)
 
-            # Check warning message
-            assert any("FFmpeg not found" in record.message for record in caplog.records)
-            # Should still return WAV path
-            assert result == temp_audio_file
-        finally:
-            MockAudioSegment.from_wav = original_from_wav
+        # Check warning message
+        assert any("FFmpeg not found" in record.message for record in caplog.records)
+        # Should still return WAV path
+        assert result == temp_audio_file
 
 
 class TestAudioConfigDefaults:
@@ -329,11 +323,16 @@ class TestFileSizeReduction:
     A 10MB WAV should become 1-2MB MP3.
     """
 
-    def test_file_size_reduction_at_128k(self):
+    def test_file_size_reduction_at_128k(self, mock_ffmpeg_subprocess):
         """Test that WAV to MP3 at 128k achieves 80-90% size reduction.
 
         This test creates a simulated WAV file of ~10MB and verifies
         that the resulting MP3 is between 1-2MB (80-90% reduction).
+
+        Note: ``mock_ffmpeg_subprocess`` MUST be a fixture parameter here.
+        Without it, the name resolves to the module-level fixture function
+        (not the yielded mock) and the side_effect assignment silently lands
+        on the function object, leaving the autouse 0-byte fake_run in charge.
         """
         from whisper_dictate.audio_converter import AudioConverter
 
@@ -361,46 +360,44 @@ class TestFileSizeReduction:
 
             converter = AudioConverter(bitrate="128k")
 
-            # For this test, we need to simulate realistic export
-            # Since MockAudioSegment creates empty files, we need to
-            # verify the logic separately
-            original_export = MockAudioSegment.export
-
-            # Create a mock that simulates MP3 file size (10-20% of original)
-            def mock_export(self, filepath, **kwargs):
-                mp3_path = Path(filepath)
+            # Simulate a realistic encode on the subprocess seam: the "MP3"
+            # written is 10-20% of the original size (80-90% compression),
+            # same simulation the old export mock performed.
+            def fake_run(cmd, **kwargs):
+                mp3_path = Path(cmd[-1])
                 # Simulate MP3 being 10-20% of original size
                 # This simulates 80-90% compression
                 simulated_mp3_size = int(original_size * 0.15)
                 mp3_path.write_bytes(b"\x00" * simulated_mp3_size)
+                result = Mock()
+                result.returncode = 0
+                result.stderr = ""
+                return result
 
-            MockAudioSegment.export = mock_export
+            mock_ffmpeg_subprocess.side_effect = fake_run
 
-            try:
-                result = converter.convert(wav_path)
+            result = converter.convert(wav_path)
 
-                # Verify MP3 was created
-                assert result.suffix == ".mp3"
-                assert result.exists()
+            # Verify MP3 was created
+            assert result.suffix == ".mp3"
+            assert result.exists()
 
-                mp3_size = result.stat().st_size
-                reduction_ratio = mp3_size / original_size
+            mp3_size = result.stat().st_size
+            reduction_ratio = mp3_size / original_size
 
-                # MP3 should be 10-20% of original (80-90% reduction)
-                assert 0.10 <= reduction_ratio <= 0.20, (
-                    f"MP3 size ({mp3_size}) should be 10-20% of WAV size ({original_size}), "
-                    f"got {reduction_ratio * 100:.1f}%"
-                )
+            # MP3 should be 10-20% of original (80-90% reduction)
+            assert 0.10 <= reduction_ratio <= 0.20, (
+                f"MP3 size ({mp3_size}) should be 10-20% of WAV size ({original_size}), "
+                f"got {reduction_ratio * 100:.1f}%"
+            )
 
-                # In actual bytes: 10MB -> 1-2MB
-                expected_min = int(original_size * 0.10)
-                expected_max = int(original_size * 0.20)
-                assert expected_min <= mp3_size <= expected_max, (
-                    f"MP3 should be between {expected_min / 1024 / 1024:.1f}MB and "
-                    f"{expected_max / 1024 / 1024:.1f}MB, got {mp3_size / 1024 / 1024:.2f}MB"
-                )
-            finally:
-                MockAudioSegment.export = original_export
+            # In actual bytes: 10MB -> 1-2MB
+            expected_min = int(original_size * 0.10)
+            expected_max = int(original_size * 0.20)
+            assert expected_min <= mp3_size <= expected_max, (
+                f"MP3 should be between {expected_min / 1024 / 1024:.1f}MB and "
+                f"{expected_max / 1024 / 1024:.1f}MB, got {mp3_size / 1024 / 1024:.2f}MB"
+            )
         finally:
             # Cleanup
             with contextlib.suppress(OSError):
@@ -408,7 +405,7 @@ class TestFileSizeReduction:
             with contextlib.suppress(OSError):
                 os.unlink(str(wav_path.with_suffix(".mp3")))
 
-    def test_lower_bitrate_produces_smaller_files(self):
+    def test_lower_bitrate_produces_smaller_files(self, mock_ffmpeg_subprocess):
         """Test that lower bitrate produces smaller MP3 files.
 
         64k should produce smaller files than 128k.
@@ -430,7 +427,6 @@ class TestFileSizeReduction:
 
         try:
             original_size = wav_path.stat().st_size
-            original_export = MockAudioSegment.export
 
             # Simulate different MP3 sizes based on bitrate
             size_by_bitrate = {"64k": 0.08, "128k": 0.15, "192k": 0.22}
@@ -439,15 +435,19 @@ class TestFileSizeReduction:
 
             for bitrate in ["64k", "128k"]:
 
-                def make_mock_export(br):
-                    def mock_export(self, filepath, **kwargs):
-                        mp3_path = Path(filepath)
+                def make_fake_run(br):
+                    def fake_run(cmd, **kwargs):
+                        mp3_path = Path(cmd[-1])
                         ratio = size_by_bitrate[br]
                         mp3_path.write_bytes(b"\x00" * int(original_size * ratio))
+                        result = Mock()
+                        result.returncode = 0
+                        result.stderr = ""
+                        return result
 
-                    return mock_export
+                    return fake_run
 
-                MockAudioSegment.export = make_mock_export(bitrate)
+                mock_ffmpeg_subprocess.side_effect = make_fake_run(bitrate)
                 converter = AudioConverter(bitrate=bitrate, keep_wav=True)
                 result = converter.convert(wav_path)
                 mp3_sizes[bitrate] = result.stat().st_size
@@ -459,7 +459,6 @@ class TestFileSizeReduction:
                 f"64k ({mp3_sizes['64k']}) should be smaller than 128k ({mp3_sizes['128k']})"
             )
         finally:
-            MockAudioSegment.export = original_export
             with contextlib.suppress(OSError):
                 os.unlink(wav_path)
 
@@ -492,6 +491,7 @@ class TestTranscriptionQualityEquivalence:
             mock_response = Mock()
             mock_response.text = "This is a test transcription."
             mock_response.language = "en"
+            mock_response.languages = ["en"]
 
             with patch("openai.OpenAI") as mock_client_class:
                 mock_client = Mock()
@@ -539,6 +539,7 @@ class TestTranscriptionQualityEquivalence:
             mock_response = Mock()
             mock_response.text = "Transcription from MP3."
             mock_response.language = "en"
+            mock_response.languages = ["en"]
 
             with patch("openai.OpenAI") as mock_client_class:
                 mock_client = Mock()

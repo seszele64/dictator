@@ -14,15 +14,16 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from whisper_dictate.audio_storage import (
+from whisper_dictate.config import DatabaseConfig
+from whisper_dictate.database import Database
+from whisper_dictate.storage.audio_storage import (
     STAGING_PREFIX,
     AudioStorage,
     NoAudioFileError,
     UnsafeAudioPathError,
-    get_orphaned_files,
 )
-from whisper_dictate.config import DatabaseConfig
-from whisper_dictate.database import Database
+from whisper_dictate.storage.orphan_scan import OrphanScanner
+from whisper_dictate.util.paths import AudioPathResolver
 
 
 @pytest.fixture
@@ -34,7 +35,7 @@ def recordings_root(tmp_path) -> Path:
 
 @pytest.fixture
 def storage(recordings_root: Path) -> AudioStorage:
-    return AudioStorage(DatabaseConfig(recordings_path=recordings_root))
+    return AudioStorage(DatabaseConfig(recordings_path=recordings_root), AudioPathResolver(recordings_root))
 
 
 class TestPathContainment:
@@ -117,7 +118,7 @@ class TestAtomicSave:
         staged = storage.stage_audio(source)
 
         with (
-            patch("whisper_dictate.audio_storage.os.replace", side_effect=OSError("ENOSPC")),
+            patch("whisper_dictate.storage.audio_storage.os.replace", side_effect=OSError("ENOSPC")),
             pytest.raises(OSError, match="Failed to finalize"),
         ):
             storage.finalize_audio(staged)
@@ -129,7 +130,7 @@ class TestAtomicSave:
         source = recordings_root / "source.wav"
         source.write_bytes(b"data")
         with (
-            patch("whisper_dictate.audio_storage.shutil.copy2", side_effect=OSError("disk full")),
+            patch("whisper_dictate.storage.audio_storage.shutil.copy2", side_effect=OSError("disk full")),
             pytest.raises(OSError, match="Failed to stage"),
         ):
             storage.stage_audio(source)
@@ -155,7 +156,7 @@ class TestOrphanScanStagingFiles:
         staged_file = staging / f"{STAGING_PREFIX}x.wav.abc123.part"
         staged_file.write_bytes(b"partial")
 
-        orphaned = get_orphaned_files(self._db_with([]), storage)
+        orphaned = OrphanScanner(storage).find_orphans(self._db_with([]))
 
         assert orphaned == []
         assert staged_file.exists()
@@ -168,7 +169,7 @@ class TestOrphanScanStagingFiles:
         old = time.time() - 7200
         os.utime(staged_file, (old, old))
 
-        deleted, _ = get_orphaned_files_and_cleanup(self._db_with([]), storage)
+        deleted, _ = find_orphans_and_cleanup(self._db_with([]), storage)
 
         assert not staged_file.exists()
         assert deleted == 1
@@ -182,7 +183,7 @@ class TestOrphanScanStagingFiles:
 
         db = self._db_with(["", str(recordings_root.parent / "elsewhere.wav")])
 
-        orphaned = get_orphaned_files(db, storage)
+        orphaned = OrphanScanner(storage).find_orphans(db)
 
         assert [o["relative_path"] for o in orphaned] == ["2024/01/01/orphan.wav"]
 
@@ -194,7 +195,7 @@ class TestOrphanScanStagingFiles:
 
         db = self._db_with([str(referenced)])  # legacy absolute form
 
-        orphaned = get_orphaned_files(db, storage)
+        orphaned = OrphanScanner(storage).find_orphans(db)
 
         assert orphaned == []
 
@@ -216,7 +217,7 @@ class TestOrphanScanSymlinkedRoot:
         link = tmp_path / "linked-recordings"
         link.symlink_to(real_root, target_is_directory=True)
         config = DatabaseConfig(path=tmp_path / "test.db", recordings_path=link)
-        storage = AudioStorage(config)
+        storage = AudioStorage(config, AudioPathResolver(link))
         db = Database(config)
         db.initialize()
         return storage, db, link, real_root
@@ -228,9 +229,9 @@ class TestOrphanScanSymlinkedRoot:
         final, relative = storage.save_audio(source)
         db.create_recording(file_path=relative, duration=2.5, format="wav")
 
-        deleted, _ = get_orphaned_files_and_cleanup(db, storage)
+        deleted, _ = find_orphans_and_cleanup(db, storage)
 
-        orphaned = get_orphaned_files(db, storage)
+        orphaned = OrphanScanner(storage).find_orphans(db)
 
         assert orphaned == []
         assert deleted == 0
@@ -243,13 +244,14 @@ class TestOrphanScanSymlinkedRoot:
         stray = day_dir / "stray.wav"
         stray.write_bytes(b"untracked")
 
-        orphaned = get_orphaned_files(db, storage)
+        orphaned = OrphanScanner(storage).find_orphans(db)
 
         assert [o["relative_path"] for o in orphaned] == ["2024/01/01/stray.wav"]
-        assert stray.exists()  # get_orphaned_files only reports, never deletes
+        assert stray.exists()  # find_orphans only reports, never deletes
 
 
-def get_orphaned_files_and_cleanup(db, storage):
-    from whisper_dictate.audio_storage import cleanup_orphaned_files
-
-    return cleanup_orphaned_files(db, storage, dry_run=False)
+def find_orphans_and_cleanup(db, storage):
+    """Scan once with an OrphanScanner, then delete what the scan reported."""
+    scanner = OrphanScanner(storage)
+    orphans = scanner.find_orphans(db)
+    return scanner.cleanup(orphans, dry_run=False)

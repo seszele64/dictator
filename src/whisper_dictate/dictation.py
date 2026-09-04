@@ -9,14 +9,15 @@ import soundfile as sf
 
 from whisper_dictate.audio import AudioRecorder
 from whisper_dictate.audio_converter import AudioConverter
-from whisper_dictate.audio_storage import AudioStorage, StagedAudio
 from whisper_dictate.clipboard import ClipboardManager
 from whisper_dictate.config import AppConfig
 from whisper_dictate.database import Database
+from whisper_dictate.storage.audio_storage import AudioStorage, StagedAudio
 from whisper_dictate.transcription import (
     TranscriptionResult,
     create_transcriber,
 )
+from whisper_dictate.util.paths import AudioPathResolver
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,10 @@ class DictationService:
             AudioStorage: Initialized audio storage instance
         """
         if self._storage is None:
-            self._storage = AudioStorage(self.config.database)
+            self._storage = AudioStorage(
+                self.config.database,
+                AudioPathResolver(self.config.database.get_recordings_path()),
+            )
         return self._storage
 
     def check_disk_space(self) -> tuple[bool, int]:

@@ -76,21 +76,20 @@ def mock_cli_setup():
         yield
 
 
-# Session-scoped fixture to patch sounddevice/soundfile/pydub before any imports
+# Session-scoped fixture to patch sounddevice/soundfile before any imports
 # This must run BEFORE any other fixtures to prevent the real modules from loading
 @pytest.fixture(scope="session", autouse=True)
 def patch_audio_modules():
-    """Patch sounddevice, soundfile, and pydub modules in sys.modules before any imports.
+    """Patch sounddevice and soundfile modules in sys.modules before any imports.
 
     This prevents the real audio libraries from being loaded at module import time,
-    which can cause hangs when no audio device is available.
+    which can cause hangs when no audio device is available. (The pre-P10
+    audio stack was removed from this shield in P10 — the audio seam no
+    longer needs it; see ADR 0006.)
     """
     # Create mock modules
     mock_sd = Mock()
     mock_sf = Mock()
-    mock_pydub = Mock()
-    mock_audio_segment = Mock()
-    mock_pydub.AudioSegment = mock_audio_segment
 
     # Configure mock sounddevice
     mock_sd.rec = Mock()
@@ -110,12 +109,10 @@ def patch_audio_modules():
     # Store original modules if they exist
     original_sd = sys.modules.get("sounddevice")
     original_sf = sys.modules.get("soundfile")
-    original_pydub = sys.modules.get("pydub")
 
     # Patch sys.modules
     sys.modules["sounddevice"] = mock_sd
     sys.modules["soundfile"] = mock_sf
-    sys.modules["pydub"] = mock_pydub
 
     yield
 
@@ -129,11 +126,6 @@ def patch_audio_modules():
         sys.modules["soundfile"] = original_sf
     else:
         sys.modules.pop("soundfile", None)
-
-    if original_pydub is not None:
-        sys.modules["pydub"] = original_pydub
-    else:
-        sys.modules.pop("pydub", None)
 
 
 # Ensure sounddevice cleanup on exit
@@ -261,6 +253,7 @@ def mock_openai_client() -> Generator[Mock, None, None]:
         mock_response = Mock()
         mock_response.text = "This is a test transcription."
         mock_response.language = "en"
+        mock_response.languages = ["en"]
         mock_client.audio.transcriptions.create.return_value = mock_response
 
         yield mock_client

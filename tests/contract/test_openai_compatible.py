@@ -109,7 +109,9 @@ class TestTranscribeAudio:
     def test_transcribe_success(self, temp_audio_file):
         """Successful transcription returns a populated result."""
         provider = self._make_provider()
-        provider._client.audio.transcriptions.create.return_value = Mock(text="hello world", language="en")
+        provider._client.audio.transcriptions.create.return_value = Mock(
+            text="hello world", language="en", languages=["en"]
+        )
         with patch("whisper_dictate.audio_analysis.is_audio_silent", return_value=False):
             result = provider.transcribe_audio(temp_audio_file)
         assert result.text == "hello world"
@@ -117,10 +119,26 @@ class TestTranscribeAudio:
         assert result.provider == provider.provider_name
         assert result.silence_detected is False
 
+    def test_transcribe_language_fallback_to_legacy_field(self, temp_audio_file):
+        """openai<3 responses expose only the legacy `language` scalar — still recorded.
+
+        openai>=3 renamed the response field to `languages` (a list); the
+        provider falls back to the legacy attribute when `languages` is
+        absent so either SDK major records the detected language.
+        """
+        provider = self._make_provider()
+        provider._client.audio.transcriptions.create.return_value = Mock(
+            spec=["text", "language"], text="hello legacy", language="en"
+        )
+        with patch("whisper_dictate.audio_analysis.is_audio_silent", return_value=False):
+            result = provider.transcribe_audio(temp_audio_file)
+        assert result.text == "hello legacy"
+        assert result.language == "en"
+
     def test_transcribe_translates_when_task_translate(self, temp_audio_file):
         """task='translate' uses the translations API, not transcriptions."""
         provider = self._make_provider(task="translate")
-        provider._client.audio.translations.create.return_value = Mock(text="bonjour", language="fr")
+        provider._client.audio.translations.create.return_value = Mock(text="bonjour", language="fr", languages=None)
         with patch("whisper_dictate.audio_analysis.is_audio_silent", return_value=False):
             result = provider.transcribe_audio(temp_audio_file)
         provider._client.audio.translations.create.assert_called_once()
@@ -130,7 +148,7 @@ class TestTranscribeAudio:
     def test_transcribe_transcribe_when_task_transcribe(self, temp_audio_file):
         """task='transcribe' uses the transcriptions API, not translations."""
         provider = self._make_provider(task="transcribe")
-        provider._client.audio.transcriptions.create.return_value = Mock(text="hello", language="en")
+        provider._client.audio.transcriptions.create.return_value = Mock(text="hello", language="en", languages=["en"])
         with patch("whisper_dictate.audio_analysis.is_audio_silent", return_value=False):
             provider.transcribe_audio(temp_audio_file)
         provider._client.audio.transcriptions.create.assert_called_once()
@@ -148,7 +166,7 @@ class TestTranscribeAudio:
     def test_transcribe_silence_disabled_calls_api(self, temp_audio_file):
         """silence_threshold_dbfs=None skips silence detection and calls the API."""
         provider = self._make_provider(silence_threshold_dbfs=None)
-        provider._client.audio.transcriptions.create.return_value = Mock(text="hello", language="en")
+        provider._client.audio.transcriptions.create.return_value = Mock(text="hello", language="en", languages=["en"])
         with patch("whisper_dictate.audio_analysis.is_audio_silent") as mock_silent:
             result = provider.transcribe_audio(temp_audio_file)
         mock_silent.assert_not_called()
@@ -181,7 +199,9 @@ class TestTranscribeAudio:
     def test_transcribe_forwards_params(self, temp_audio_file):
         """Model, temperature, language and response format are forwarded."""
         provider = self._make_provider(model="whisper-large-v3", language="fr", temperature=0.3)
-        provider._client.audio.transcriptions.create.return_value = Mock(text="bonjour", language="fr")
+        provider._client.audio.transcriptions.create.return_value = Mock(
+            text="bonjour", language="fr", languages=["fr"]
+        )
         with patch("whisper_dictate.audio_analysis.is_audio_silent", return_value=False):
             provider.transcribe_audio(temp_audio_file)
         kwargs = provider._client.audio.transcriptions.create.call_args.kwargs

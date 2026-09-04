@@ -75,8 +75,8 @@ openspec/
 - `uv run pre-commit run --all-files` — local gate mirror (ruff lint+format, whitespace/EOF, YAML/TOML, merge-conflict checks); hooks pinned (ruff v0.16.1, pre-commit-hooks v6.0.0); `tests/snapshots/` excluded from file-modifying hooks.
 
 ### CI
-- GitHub Actions on push/PR (`.github/workflows/ci.yml`), uv-native + SHA-pinned actions: lint (ruff check + format check), typecheck (mypy strict), test matrix 3.11/3.12/3.13, coverage job (per-module floors via `scripts/check_coverage.py` + artifact), pip-audit. Env from `uv sync --locked --extra dev` — a uv.lock/pyproject desync fails loudly.
-- The 3.13 leg is `allow-fail` as a documented P10 bridge (pydub imports `audioop`, removed in 3.13; today green because conftest mocks pydub) — remove the bridge when P10 lands.
+- GitHub Actions on push/PR (`.github/workflows/ci.yml`), uv-native + SHA-pinned actions: lint (ruff check + format check), typecheck (mypy strict), test matrix 3.11/3.12/3.13 (all must-pass), coverage job (per-module floors via `scripts/check_coverage.py` + artifact), pip-audit. Env from `uv sync --locked --extra dev` — a uv.lock/pyproject desync fails loudly.
 - `.github/dependabot.yml`: `github-actions` + `uv` ecosystems, weekly, grouped, 7-day cooldown.
+- Audio: soundfile (WAV I/O, silence analysis) + FFmpeg subprocess (MP3 encode); pydub removed (P10, ADR 0006).
 
 <!-- MANUAL ADDITIONS END -->

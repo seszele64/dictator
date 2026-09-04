@@ -74,6 +74,7 @@ class TestOpenAICompatibleProvider:
             mock_response = Mock()
             mock_response.text = "Hello world"
             mock_response.language = "en"
+            mock_response.languages = ["en"]
             mock_openai_client.audio.transcriptions.create.return_value = mock_response
 
             result = provider.transcribe_audio(temp_audio_file)
@@ -96,6 +97,7 @@ class TestOpenAICompatibleProvider:
             mock_response = Mock()
             mock_response.text = "Hello world"
             mock_response.language = "en"
+            mock_response.languages = ["en"]
             mock_create.return_value = mock_response
 
             result = provider.transcribe_audio(temp_audio_file)
@@ -129,6 +131,7 @@ class TestTranslateBranch:
         mock_response = Mock()
         mock_response.text = "Hola mundo"
         mock_response.language = "spanish"
+        mock_response.languages = None
         mock_openai_client.audio.translations.create.return_value = mock_response
 
         result = provider.transcribe_audio(temp_audio_file)
@@ -158,6 +161,7 @@ class TestTranslateBranch:
 
         mock_response = Mock()
         mock_response.text = "Hola mundo"
+        mock_response.languages = None
         mock_openai_client.audio.translations.create.return_value = mock_response
 
         result = provider.transcribe_audio(temp_audio_file)
@@ -180,6 +184,7 @@ class TestTranslateBranch:
         mock_response = Mock()
         mock_response.text = "Hallo Welt"
         mock_response.language = "de"
+        mock_response.languages = ["de"]
         mock_openai_client.audio.transcriptions.create.return_value = mock_response
 
         result = provider.transcribe_audio(temp_audio_file)
