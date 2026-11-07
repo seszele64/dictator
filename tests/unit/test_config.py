@@ -25,11 +25,12 @@ class TestWhisperProvider:
     """Tests for the WhisperProvider enum."""
 
     def test_provider_values(self):
-        """All 6 enum members have correct string values."""
+        """All 7 enum members have correct string values."""
         assert WhisperProvider.OPENAI == "openai"
         assert WhisperProvider.GROQ == "groq"
         assert WhisperProvider.TOGETHER == "together"
         assert WhisperProvider.DEEPINFRA == "deepinfra"
+        assert WhisperProvider.OPENROUTER == "openrouter"
         assert WhisperProvider.LOCAL == "local"
         assert WhisperProvider.CUSTOM == "custom"
 
@@ -47,9 +48,9 @@ class TestWhisperProvider:
             WhisperProvider("unknown")
 
     def test_provider_defaults_keys(self):
-        """PROVIDER_DEFAULTS has exactly the 6 providers as keys."""
+        """PROVIDER_DEFAULTS has exactly the 7 providers as keys."""
         assert set(PROVIDER_DEFAULTS) == set(WhisperProvider)
-        assert len(PROVIDER_DEFAULTS) == 6
+        assert len(PROVIDER_DEFAULTS) == 7
 
     def test_provider_defaults_structure(self):
         """Each provider default has base_url and env_var keys."""
@@ -74,6 +75,12 @@ class TestWhisperProvider:
         defaults = PROVIDER_DEFAULTS[WhisperProvider.LOCAL]
         assert defaults["base_url"] == "http://localhost:8000/v1"
         assert defaults["env_var"] is None
+
+    def test_openrouter_defaults(self):
+        """OpenRouter uses its OpenAI-compatible endpoint and OPENROUTER_API_KEY."""
+        defaults = PROVIDER_DEFAULTS[WhisperProvider.OPENROUTER]
+        assert defaults["base_url"] == "https://openrouter.ai/api/v1"
+        assert defaults["env_var"] == "OPENROUTER_API_KEY"
 
     def test_custom_defaults(self):
         """Custom providers require explicit configuration."""
@@ -317,7 +324,13 @@ class TestLoadConfig:
     @staticmethod
     def _delete_api_key_env(monkeypatch):
         """Delete all provider API key environment variables."""
-        for key in ("OPENAI_API_KEY", "GROQ_API_KEY", "TOGETHER_API_KEY", "DEEPINFRA_API_KEY"):
+        for key in (
+            "OPENAI_API_KEY",
+            "GROQ_API_KEY",
+            "TOGETHER_API_KEY",
+            "DEEPINFRA_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
             monkeypatch.delenv(key, raising=False)
 
     @staticmethod
@@ -404,18 +417,45 @@ class TestDotenvImportPurity:
     module/console script) calls; the config module import and load_config()
     itself stay side-effect-free.
 
-    Both tests run real subprocesses with a .env file present in the working
-    directory, because in-process imports would already be cached.
+    These tests run real subprocesses with a .env file present in the working
+    directory, because in-process imports would already be cached. The child
+    process gets a scrubbed environment (_run_python) so results reflect the
+    code under test, not whatever WHISPER_*/provider variables the developer's
+    shell happens to export.
     """
 
     _PROBE_DOTENV = "WHISPER_MODEL=probe-model-from-dotenv\n"
 
-    def _run_python(self, tmp_path: Path, code: str) -> subprocess.CompletedProcess:
+    # Environment variables the child interpreter needs to start and import the
+    # package. Everything else is deliberately dropped: an exported WHISPER_* or
+    # provider key in the developer's shell would otherwise satisfy a probe
+    # assertion (or cause one to fail) without the code under test doing
+    # anything, because load_dotenv(override=False) keeps existing values.
+    _ENV_ALLOWLIST = (
+        "PATH",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TZ",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        "SYSTEMROOT",  # Windows: required by os/socket initialization
+        "COMSPEC",
+        "PATHEXT",
+        "VIRTUAL_ENV",
+    )
+
+    def _run_python(self, cwd: Path, code: str) -> subprocess.CompletedProcess[str]:
         repo_root = Path(__file__).resolve().parents[2]
-        env = {**os.environ, "PYTHONPATH": str(repo_root)}
+        env = {name: os.environ[name] for name in self._ENV_ALLOWLIST if name in os.environ}
+        # Repo root keeps `tests.*` importable; the package itself resolves from
+        # the virtualenv that owns sys.executable.
+        env["PYTHONPATH"] = str(repo_root)
         return subprocess.run(
             [sys.executable, "-c", code],
-            cwd=tmp_path,
+            cwd=cwd,
             env=env,
             capture_output=True,
             text=True,
@@ -444,7 +484,12 @@ class TestDotenvImportPurity:
 
     def test_load_config_does_not_load_dotenv(self, tmp_path):
         """load_config() is side-effect-free: .env values are NOT picked up
-        without the explicit bootstrap step."""
+        without the explicit bootstrap step.
+
+        The child env is scrubbed (see _run_python), so the default model is
+        the only acceptable answer: a match here means neither the cwd .env
+        nor an exported WHISPER_MODEL leaked into the configuration.
+        """
         (tmp_path / ".env").write_text(self._PROBE_DOTENV)
         code = (
             "from whisper_dictate.config import load_config\n"
@@ -453,17 +498,33 @@ class TestDotenvImportPurity:
         )
         result = self._run_python(tmp_path, code)
         assert result.returncode == 0, result.stderr
-        assert result.stdout.strip() != "probe-model-from-dotenv"
+        assert result.stdout.strip() == "whisper-1", (
+            f"load_config() picked up .env or an exported WHISPER_MODEL: {result.stdout.strip()!r}"
+        )
 
-    def test_bootstrap_loads_dotenv(self, tmp_path):
-        """bootstrap() picks up .env values — entry-point behavior is
-        preserved now that the composition root owns .env loading."""
-        (tmp_path / ".env").write_text(self._PROBE_DOTENV)
+    def test_bootstrap_loads_dotenv_from_explicit_path(self, tmp_path):
+        """bootstrap() loads the .env named by dotenv_path, not the cwd one.
+
+        The probe .env lives in a subdirectory while the child process runs in
+        an empty directory, so python-dotenv's own discovery finds nothing:
+        under ``python -c`` find_dotenv() starts at os.getcwd(). If bootstrap()
+        ignored dotenv_path the model would fall back to the default
+        "whisper-1" and this test fails — that is the discrimination the old
+        cwd-based test lacked.
+        """
+        env_dir = tmp_path / "envs"
+        env_dir.mkdir()
+        probe_model = "probe-model-from-explicit-path"
+        probe_dotenv = env_dir / ".env"
+        probe_dotenv.write_text(f"WHISPER_MODEL={probe_model}\n")
+
+        run_dir = tmp_path / "cwd-without-a-dotenv"
+        run_dir.mkdir()
         code = (
             "from whisper_dictate.app import bootstrap\n"
-            "config = bootstrap(require_api_key=False)\n"
+            f"config = bootstrap(require_api_key=False, dotenv_path={str(probe_dotenv)!r})\n"
             "print(config.openai.model)\n"
         )
-        result = self._run_python(tmp_path, code)
+        result = self._run_python(run_dir, code)
         assert result.returncode == 0, result.stderr
-        assert result.stdout.strip() == "probe-model-from-dotenv"
+        assert result.stdout.strip() == probe_model

@@ -5,8 +5,8 @@ Covers the fix-provider-crash change:
   back to CUSTOM) must load WITHOUT an API key — previously load_config()
   crashed with an error (env_var=None passed to os.getenv) and then rejected
   keyless providers outright.
-- Auth-requiring providers (openai, groq, together, deepinfra) must still
-  raise ValueError when no key is available.
+- Auth-requiring providers (openai, groq, together, deepinfra, openrouter)
+  must still raise ValueError when no key is available.
 - load_config(require_api_key=False) and validate_api_key() support lazy
   validation for non-transcription CLI commands.
 """
@@ -16,7 +16,7 @@ import pytest
 from whisper_dictate.config import load_config, validate_api_key
 
 # Providers that declare an auth env var in PROVIDER_DEFAULTS
-AUTH_PROVIDERS = ["openai", "groq", "together", "deepinfra"]
+AUTH_PROVIDERS = ["openai", "groq", "together", "deepinfra", "openrouter"]
 # Providers that are keyless by design (env_var=None), plus an unknown string
 # that resolves to CUSTOM
 KEYLESS_PROVIDERS = ["local", "custom", "definitely-not-a-provider"]
@@ -27,6 +27,7 @@ ALL_KEY_ENV_VARS = [
     "GROQ_API_KEY",
     "TOGETHER_API_KEY",
     "DEEPINFRA_API_KEY",
+    "OPENROUTER_API_KEY",
 ]
 
 
@@ -58,7 +59,7 @@ class TestLoadConfigProviders:
 
     @pytest.mark.parametrize("provider", AUTH_PROVIDERS)
     def test_auth_provider_without_key_raises(self, clean_provider_env, provider):
-        """openai/groq/together/deepinfra without any key must raise ValueError."""
+        """openai/groq/together/deepinfra/openrouter without any key must raise ValueError."""
         clean_provider_env.setenv("WHISPER_PROVIDER", provider)
         with pytest.raises(ValueError, match="API key not found"):
             load_config()
@@ -90,6 +91,7 @@ class TestLoadConfigProviders:
             ("groq", "GROQ_API_KEY"),
             ("together", "TOGETHER_API_KEY"),
             ("deepinfra", "DEEPINFRA_API_KEY"),
+            ("openrouter", "OPENROUTER_API_KEY"),
         ],
     )
     def test_provider_env_var_fallback(self, clean_provider_env, provider, env_var):
@@ -144,6 +146,7 @@ class TestValidateApiKey:
             ("groq", "GROQ_API_KEY"),
             ("together", "TOGETHER_API_KEY"),
             ("deepinfra", "DEEPINFRA_API_KEY"),
+            ("openrouter", "OPENROUTER_API_KEY"),
         ],
     )
     def test_auth_provider_with_env_key_passes(self, clean_provider_env, provider, env_var):

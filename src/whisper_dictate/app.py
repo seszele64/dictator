@@ -15,12 +15,17 @@ BOUNDARIES:
   beyond reading .env
 """
 
+from pathlib import Path
+
 from dotenv import load_dotenv
 
 from whisper_dictate.config import AppConfig, load_config
 
 
-def bootstrap(require_api_key: bool = False) -> AppConfig:
+def bootstrap(
+    require_api_key: bool = False,
+    dotenv_path: str | Path | None = None,
+) -> AppConfig:
     """Load the application environment and configuration.
 
     This is the composition root entry point: every application entry point
@@ -37,6 +42,10 @@ def bootstrap(require_api_key: bool = False) -> AppConfig:
             provider declares an auth env var but no key is available.
             Entry points for database-only commands pass False and validate
             the key lazily on transcription paths instead.
+        dotenv_path: Explicit path to the ``.env`` file to load. When None
+            (default), python-dotenv auto-discovers the file by walking up
+            from this module's location (the project root). Tests pass an
+            explicit path so they never pick up a developer's real ``.env``.
 
     Returns:
         AppConfig: Validated application configuration.
@@ -44,5 +53,5 @@ def bootstrap(require_api_key: bool = False) -> AppConfig:
     Raises:
         ValueError: If required configuration is missing (see validate_api_key()).
     """
-    load_dotenv()
+    load_dotenv(dotenv_path)
     return load_config(require_api_key=require_api_key)

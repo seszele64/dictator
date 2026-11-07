@@ -29,8 +29,16 @@ def real_load_config():
     The session autouse fixture in tests/conftest.py mocks
     whisper_dictate.cli.bootstrap to keep other CLI tests hermetic; these
     tests must exercise the real env-var resolution and key validation.
+
+    load_dotenv is neutered here too: the real bootstrap() would otherwise
+    auto-discover the developer's .env in the repo root (python-dotenv walks
+    up from app.py, not from cwd) and re-inject user API keys, which would
+    make these tests depend on the local .env content.
     """
-    with patch("whisper_dictate.cli.bootstrap", bootstrap):
+    with (
+        patch("whisper_dictate.cli.bootstrap", bootstrap),
+        patch("whisper_dictate.app.load_dotenv"),
+    ):
         yield
 
 
@@ -50,6 +58,7 @@ def clean_provider_env(monkeypatch, tmp_path):
         "GROQ_API_KEY",
         "TOGETHER_API_KEY",
         "DEEPINFRA_API_KEY",
+        "OPENROUTER_API_KEY",
     ):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("WHISPER_PROVIDER", "local")
