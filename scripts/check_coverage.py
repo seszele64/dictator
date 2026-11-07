@@ -29,6 +29,11 @@ COVERAGE_THRESHOLDS: dict[str, float] = {
     # new test_dunst_monitor.py) so they ratchet, not trip.
     "whisper_dictate/notifications.py": 40.0,
     "whisper_dictate/dunst_monitor.py": 60.0,
+    # post-process-prompt (Group 8): new modules land with their own floors so
+    # the feature's failure-prone seams (launcher matrix, chat request shape)
+    # cannot regress silently.
+    "whisper_dictate/post_processor.py": 80.0,
+    "whisper_dictate/prompting.py": 80.0,
 }
 
 

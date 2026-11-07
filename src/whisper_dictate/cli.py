@@ -226,6 +226,112 @@ def info(ctx: click.Context) -> None:
     click.echo(f"  • View logs: tail -f {log_file}")
 
 
+@cli.command()
+@click.option(
+    "--prompt",
+    "prompt_text",
+    default=None,
+    help="Prompt to apply to the latest transcript (skips the interactive popup)",
+)
+@click.option(
+    "--no-clipboard",
+    is_flag=True,
+    default=False,
+    help="Do not copy the processed result to the clipboard",
+)
+@with_database
+def process(ctx: click.Context, prompt_text: str | None, no_clipboard: bool) -> None:
+    """Process the latest transcript with a prompt and copy the result.
+
+    Reads the newest non-empty transcript, applies a prompt through the
+    configured OpenAI-compatible chat endpoint, persists the result on the
+    same transcript row, and (unless --no-clipboard) copies it to the
+    clipboard. The raw transcript is never modified.
+
+    Examples:
+        whisper-dictate process --prompt "Summarize this"
+        whisper-dictate process
+        whisper-dictate process --prompt "Translate to German" --no-clipboard
+    """
+    from whisper_dictate.clipboard import ClipboardManager
+    from whisper_dictate.config import validate_post_process_config
+    from whisper_dictate.notifications import (
+        notify_error,
+        notify_processed,
+        notify_processing_skipped,
+    )
+    from whisper_dictate.post_processor import PostProcessError, create_post_processor
+    from whisper_dictate.prompting import PromptUnavailableError, acquire_prompt
+    from whisper_dictate.toggle import is_recording
+
+    config = ctx.obj["config"]
+    db = ctx.obj["db"]
+
+    # 1. Advisory recording guard. is_recording() is read ONCE here; a
+    #    recording that starts afterwards does not abort this in-flight run
+    #    (documented TOCTOU window). The guard exists to avoid processing a
+    #    transcript that is still being written, not to hold a lock across the
+    #    network call (which would block dictation itself).
+    if is_recording(config):
+        notify_processing_skipped("Stop recording first.")
+        ctx.exit(1)
+
+    # 2. Select the newest non-empty transcript before any user interaction:
+    #    "no transcript" is a common empty state and should not make the user
+    #    type a prompt first.
+    transcript = db.get_latest_processable_transcript()
+    if transcript is None:
+        notify_processing_skipped("No transcript to process.")
+        ctx.exit(1)
+
+    # 3. Validate chat configuration before opening a popup or sending a
+    #    request, so a static misconfiguration fails without user effort.
+    try:
+        validate_post_process_config(config.post_process)
+    except ValueError as e:
+        notify_error(str(e))
+        ctx.exit(1)
+
+    # 4. Prompt acquisition. A None result is a silent user cancellation
+    #    (Escape / blank input) and exits 0 with no side effects; a launcher
+    #    failure (timeout / unavailable) is an error.
+    try:
+        prompt = acquire_prompt(prompt_text, config.post_process.prompt)
+    except PromptUnavailableError as e:
+        notify_error(str(e))
+        ctx.exit(1)
+    if prompt is None:
+        ctx.exit(0)
+
+    # 5. Strip the model ONCE: the same value reaches the client, the database
+    #    write, and any log line, so a padded value cannot reach either sink.
+    effective_model = config.post_process.model.strip()
+
+    # 6. Run the completion. A failure here (including an oversized transcript
+    #    rejected by the provider) leaves the clipboard and every processed_*
+    #    column untouched.
+    try:
+        processor = create_post_processor(config.post_process)
+        processed = processor.process(transcript["text"], prompt)
+    except PostProcessError as e:
+        notify_error(str(e))
+        ctx.exit(1)
+
+    # 7. Persist BEFORE the clipboard copy: if the copy fails the result is
+    #    still saved and previewed (no rollback), but the command exits
+    #    non-zero so scripts can detect the delivery failure.
+    db.set_processed_transcript(transcript["id"], processed, prompt, effective_model)
+
+    # 8. Clipboard + exactly one notification. --no-clipboard is an explicit
+    #    opt-out, not a failure, so clipboard_copied stays True.
+    copied = True
+    if not no_clipboard:
+        copied = ClipboardManager().copy_to_clipboard(processed)
+    notify_processed(processed, clipboard_copied=copied)
+
+    ctx.exit(0 if copied else 1)
+
+
 @click.group()
 def logs() -> None:
     """Query and manage application logs stored in the database.
@@ -559,6 +665,37 @@ def show_history(ctx: click.Context, transcript_id: int, audio: bool) -> None:
         click.echo("📝 Transcript:")
         click.echo("-" * 60)
         click.echo(transcription.get("text", ""))
+
+        # Additive processed block. Printed only when processed_text is
+        # non-null and non-empty after stripping, so an unprocessed
+        # transcript's output stays byte-identical to the pre-change format.
+        # Null metadata renders "(not recorded)" rather than being omitted, so
+        # the block's shape is stable.
+        processed_text = transcription.get("processed_text")
+        if processed_text is not None and processed_text.strip():
+            click.echo("")
+            click.echo("=" * 60)
+            click.echo("🧠 Processed")
+            click.echo("=" * 60)
+            click.echo("")
+            click.echo(processed_text)
+            click.echo("")
+            click.echo(f"🧾 Prompt: {transcription.get('processed_prompt') or '(not recorded)'}")
+            click.echo(f"🤖 Processed with: {transcription.get('processed_model') or '(not recorded)'}")
+            click.echo(f"🕒 Processed at: {transcription.get('processed_at') or '(not recorded)'}")
+
+            # Staleness is derived, not stored: both timestamps come from
+            # datetime('now') (UTC, 'YYYY-MM-DD HH:MM:SS'), so a lexicographic
+            # comparison is valid. The block is never hidden or emptied because
+            # the raw text changed (keep-not-clear policy); the warning explains
+            # the mismatch instead.
+            updated_at = transcription.get("updated_at")
+            processed_at = transcription.get("processed_at")
+            if updated_at and processed_at and updated_at > processed_at:
+                click.echo("")
+                click.echo(
+                    "⚠️  Raw transcript was edited after this processing; the result may be stale. Reprocess to refresh."
+                )
 
     except Exception as e:
         click.echo(f"Error showing transcription: {e}", err=True)

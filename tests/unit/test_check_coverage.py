@@ -46,6 +46,8 @@ def _passing_files(prefix: str = "") -> dict[str, dict]:
         f"{prefix}whisper_dictate/providers/openai_compatible.py": _make_file_entry(96.72),
         f"{prefix}whisper_dictate/notifications.py": _make_file_entry(44.0),
         f"{prefix}whisper_dictate/dunst_monitor.py": _make_file_entry(66.67),
+        f"{prefix}whisper_dictate/post_processor.py": _make_file_entry(100.0),
+        f"{prefix}whisper_dictate/prompting.py": _make_file_entry(100.0),
     }
 
 

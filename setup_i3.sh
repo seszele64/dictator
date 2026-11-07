@@ -12,8 +12,26 @@ if [ -x "$REPO_ROOT/.venv/bin/whisper-dictate-toggle" ]; then
 else
     TOGGLE_CMD="whisper-dictate-toggle"
 fi
+# Same resolution strategy for the post-processing command: prefer the
+# repo-local console script, fall back to PATH for a system-wide install.
+if [ -x "$REPO_ROOT/.venv/bin/whisper-dictate" ]; then
+    PROCESS_CMD="$REPO_ROOT/.venv/bin/whisper-dictate process"
+else
+    PROCESS_CMD="whisper-dictate process"
+fi
 DICTATE_BINDING="bindsym \$mod+t exec --no-startup-id $TOGGLE_CMD"
+PROCESS_BINDING="bindsym \$mod+p exec --no-startup-id $PROCESS_CMD"
 DUNST_CONTEXT_BINDING="bindsym Ctrl+Shift+. exec dunstctl context"
+
+# A line is treated as a binding only when its first non-whitespace token is
+# `bindsym`; `#` is i3's comment character, so `# bindsym ...` and indented
+# comments never match and stay byte-identical.
+#   MODP_BINDING_PATTERN  - an active $mod+p / Mod4+p / Super+p binding.
+#   PROCESS_ACTIVE_PATTERN - an active binding that runs the process command
+#                            (current `whisper-dictate process` or the legacy
+#                            `post-process-prompt` shim).
+MODP_BINDING_PATTERN='^[[:space:]]*bindsym[[:space:]]+(\$mod|Mod4|Super)\+p([[:space:]]|$)'
+PROCESS_ACTIVE_PATTERN='^[[:space:]]*bindsym[[:space:]].*(whisper-dictate[[:space:]]+process|post-process-prompt)'
 
 echo "Setting up i3 global key binding for whisper-dictate..."
 
@@ -57,6 +75,39 @@ else
     echo "Added key binding: Super+T"
 fi
 
+# --- Post-processing binding ($mod+p) ---
+# Normalize any existing whisper-dictate process binding (the current
+# `whisper-dictate process` command or the legacy `post-process-prompt` shim)
+# to the canonical line, regardless of the modifier key. Only active lines
+# whose first non-whitespace token is `bindsym` match, so `# bindsym ...` and
+# indented comments are left byte-identical.
+sed -i -E "s#^[[:space:]]*bindsym[[:space:]].*(whisper-dictate[[:space:]]+process|post-process-prompt).*\$#$PROCESS_BINDING#" "$I3_CONFIG"
+
+# Collapse duplicate canonical process lines down to the first occurrence,
+# printing unrelated lines verbatim (same approach as the $mod+t pass above).
+I3_TMP="$(mktemp "$I3_CONFIG.XXXXXX")"
+awk -v canon="$PROCESS_BINDING" '
+    $0 == canon { if (seen++) next }
+    { print }
+' "$I3_CONFIG" > "$I3_TMP" && cat "$I3_TMP" > "$I3_CONFIG" && rm -f "$I3_TMP"
+
+# Append only when no active process binding exists. An unrelated active
+# $mod+p / Mod4+p / Super+p binding is never clobbered: i3 resolves duplicate
+# keys last-binding-wins, so appending would silently disable the user's
+# command. Print the exact line to add manually instead.
+if grep -Eq "$PROCESS_ACTIVE_PATTERN" "$I3_CONFIG"; then
+    echo "Key binding already exists in i3 config for whisper-dictate process"
+elif grep -Eq "$MODP_BINDING_PATTERN" "$I3_CONFIG"; then
+    echo "WARNING: an unrelated \$mod+p binding already exists; not overwriting it."
+    echo "Add this line manually to install the post-processing binding:"
+    echo "    $PROCESS_BINDING"
+else
+    echo "" >> "$I3_CONFIG"
+    echo "# Post-process latest transcript - Meta+P" >> "$I3_CONFIG"
+    echo "$PROCESS_BINDING" >> "$I3_CONFIG"
+    echo "Added key binding: Meta+P"
+fi
+
 # Check if dunstctl context binding already exists (required for notification actions)
 if grep -q "dunstctl context" "$I3_CONFIG"; then
     echo "Dunst context keybinding already exists in i3 config"
@@ -72,4 +123,5 @@ fi
 i3-msg reload
 echo "i3 configuration reloaded!"
 echo "Press Super+T to test voice dictation"
+echo "Press Meta+P to post-process the latest transcript with a prompt"
 echo "Press Ctrl+Shift+. to access dunst context menu (for notification actions)"

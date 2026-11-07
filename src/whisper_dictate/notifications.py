@@ -263,3 +263,80 @@ def notify_stopping_transcription() -> bool:
         urgency="normal",
         timeout=2000,
     )
+
+
+# Maximum number of characters of processed text shown in a notification body.
+# Only the preview is truncated; the fixed clipboard-failure line is always
+# appended intact (it is not counted against this budget).
+PROCESSED_PREVIEW_LIMIT = 200
+
+# Exact body appended when the clipboard copy failed. Kept as a module constant
+# so the CLI and its tests assert the same literal.
+CLIPBOARD_FAILURE_LINE = "⚠️ Clipboard copy failed. Result saved to history."
+
+
+def notify_processing_skipped(reason: str) -> bool:
+    """
+    WHY THIS EXISTS: The `process` command has two refusal paths (a recording is
+    in progress, or no transcript exists) that must tell the user why nothing
+    happened without looking like an error.
+
+    RESPONSIBILITY: Send a normal-urgency "Post-processing" notification whose
+    body is the supplied reason.
+
+    BOUNDARIES:
+    - DOES: Send one best-effort notification with the caller's reason
+    - DOES NOT: Raise, retry, or include any transcript or secret content
+
+    Args:
+        reason: Short, user-facing explanation (e.g. "No transcript to process.")
+
+    Returns:
+        bool: True if notification sent successfully, False otherwise
+    """
+    return send_notification(
+        summary="Post-processing",
+        body=reason,
+        urgency="normal",
+        timeout=5000,
+    )
+
+
+def notify_processed(text_preview: str, *, clipboard_copied: bool = True) -> bool:
+    """
+    WHY THIS EXISTS: A successful processing run needs exactly one toast: a
+    preview of the result, plus the clipboard-failure note when the copy failed.
+    Two sequential toasts (preview then error) overlap on i3/dunst and the
+    second can be mistaken for the first, so the failure is folded into a single
+    body via the `clipboard_copied` flag.
+
+    RESPONSIBILITY: Send a normal-urgency "Processed" notification previewing
+    the processed text, optionally noting a clipboard failure.
+
+    BOUNDARIES:
+    - DOES: Truncate only the preview (at PROCESSED_PREVIEW_LIMIT) and append
+      the exact failure line after a blank line when the copy failed
+    - DOES NOT: Raise, expose more than the capped preview, or include the
+      prompt, transcript, or API key
+
+    Args:
+        text_preview: The processed text to preview (already trimmed by caller).
+        clipboard_copied: False when the clipboard copy failed; the body then
+            ends with a blank line and CLIPBOARD_FAILURE_LINE.
+
+    Returns:
+        bool: True if notification sent successfully, False otherwise
+    """
+    preview = (
+        text_preview[:PROCESSED_PREVIEW_LIMIT] + "…" if len(text_preview) > PROCESSED_PREVIEW_LIMIT else text_preview
+    )
+    body = preview
+    if not clipboard_copied:
+        body = f"{preview}\n\n{CLIPBOARD_FAILURE_LINE}"
+
+    return send_notification(
+        summary="Processed",
+        body=body,
+        urgency="normal",
+        timeout=5000,
+    )

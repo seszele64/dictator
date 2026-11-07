@@ -351,12 +351,12 @@ class TestLegacyDatabaseMigration:
 
     def test_reinitialize_is_idempotent(self, legacy_db_path):
         from whisper_dictate.config import DatabaseConfig
-        from whisper_dictate.database import Database
+        from whisper_dictate.database import CURRENT_SCHEMA_VERSION, Database
 
         db = Database(DatabaseConfig(path=legacy_db_path))
         db.initialize()
         db.initialize()  # second run must not re-migrate or fail
-        assert self._schema_version(db) == 2
+        assert self._schema_version(db) == CURRENT_SCHEMA_VERSION
         db.close()
 
     def test_fresh_db_still_works(self, tmp_path):

@@ -96,7 +96,7 @@ See `.env.example` for all supported providers and configuration options.
 Run the setup script to configure i3:
 
 ```bash
-# This will modify your i3 config to add the key binding
+# This will modify your i3 config to add the key bindings
 ./setup_i3.sh
 ```
 
@@ -105,7 +105,15 @@ Or manually add to your i3 config (`~/.config/i3/config`):
 ```bash
 # Bind whisper dictate toggle (using mod+t)
 bindsym $mod+t exec whisper-dictate-toggle
+
+# Bind post-processing of the latest transcript (using mod+p / Meta+P)
+bindsym $mod+p exec whisper-dictate process
 ```
+
+`setup_i3.sh` installs both bindings idempotently: re-running it normalizes an
+existing whisper-dictate binding instead of duplicating it. If `$mod+p` is
+already bound to an unrelated command, the script leaves your config unchanged
+and prints the exact line to add manually instead of overwriting it.
 
 ### 4. Test the CLI
 
@@ -165,6 +173,48 @@ clipboard, and shows a dunst notification. This is the mode intended for i3
 keybindings — point `bindsym` at `whisper-dictate-toggle` (it is also exposed
 as `whisper-dictate toggle`). Run `setup_i3.sh` to (re)install the i3
 binding; it points at `whisper-dictate-toggle`.
+
+#### Post-Processing (Meta+P)
+
+```bash
+whisper-dictate process [--prompt TEXT] [--no-clipboard]
+```
+
+Process the newest non-empty transcript with a prompt through the configured
+OpenAI-compatible chat endpoint, persist the result on the same transcript row
+(the raw text is never modified), and copy the result to the clipboard.
+
+**Options:**
+- `--prompt TEXT` - Use this prompt directly (skips the popup)
+- `--no-clipboard` - Do not copy the result to the clipboard
+
+**Prompt sources and precedence:**
+1. `--prompt TEXT` when non-empty (no popup, no subprocess)
+2. `rofi -dmenu -p "Prompt:"` when `rofi` is on `PATH` (prefilled with `POST_PROCESS_PROMPT` via `-filter`)
+3. `dmenu -p "Prompt:"` when `dmenu` is on `PATH` (the preset is a single accept-or-replace entry; dmenu has no editable prefill)
+4. `POST_PROCESS_PROMPT` without a popup when no launcher exists
+5. Otherwise an error notification
+
+**Examples:**
+```bash
+# Interactive popup (also bound to Meta+P by setup_i3.sh)
+whisper-dictate process
+
+# Scriptable, no popup
+whisper-dictate process --prompt "Summarize this"
+
+# Translate and skip the clipboard
+whisper-dictate process --prompt "Translate to German" --no-clipboard
+```
+
+**Exit codes:**
+- `0` - success, or a silent user cancellation (Escape / blank prompt)
+- non-zero - a recording is in progress, no transcript exists, no prompt source
+  is available, the chat configuration is invalid, or the model/copy step failed
+
+**Privacy:** the transcript is sent to the chat provider configured by
+`POST_PROCESS_*` (never to the transcription provider). The raw transcript
+stays local; the notification preview is capped at 200 characters.
 
 #### System Information
 
@@ -485,9 +535,28 @@ If `WHISPER_API_KEY` is not set, the system falls back to provider-specific env 
 - `DEEPINFRA_API_KEY` (for `deepinfra`)
 - `OPENROUTER_API_KEY` (for `openrouter`)
 
+#### Post-Processing (Chat) Configuration
+
+`whisper-dictate process` (Meta+P) uses a **separate** `POST_PROCESS_*` block.
+It never inherits `WHISPER_MODEL` or any other `WHISPER_*` value: chat models
+and transcription models are different, and `whisper-1` is a transcription-only
+model that is invalid for chat completions.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `POST_PROCESS_PROVIDER` | Chat provider: `openai`, `groq`, `together`, `deepinfra`, `openrouter`, `local`, `custom` | `openai` |
+| `POST_PROCESS_MODEL` | **Required** chat model, e.g. `gpt-4o-mini` (unrelated to `WHISPER_MODEL`) | (none — must be set) |
+| `POST_PROCESS_BASE_URL` | Custom chat base URL | Provider default (required for `custom`) |
+| `POST_PROCESS_API_KEY` | Chat API key | Provider key env var (keyless for `local`/`custom`) |
+| `POST_PROCESS_TIMEOUT` | Chat request timeout in seconds | `60` (non-numeric/zero/negative falls back to `60`) |
+| `POST_PROCESS_PROMPT` | Preset prompt (prefills rofi; headless fallback) | (unset) |
+
+The chat API key falls back to the same provider-specific env vars listed
+above. See `.env.example` for a commented block.
+
 #### Other Configuration
 
-The only environment variable read outside the `WHISPER_*` set is:
+Environment variables read outside the `WHISPER_*` and `POST_PROCESS_*` sets:
 
 | Variable | Description | Default |
 |----------|-------------|---------|

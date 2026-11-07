@@ -4,8 +4,12 @@ import unittest
 from unittest.mock import Mock, patch
 
 from whisper_dictate.notifications import (
+    CLIPBOARD_FAILURE_LINE,
+    PROCESSED_PREVIEW_LIMIT,
     is_dunstify_available,
     notify_error,
+    notify_processed,
+    notify_processing_skipped,
     notify_recording_stopped,
     notify_stopping_transcription,
     send_notification,
@@ -235,3 +239,127 @@ class TestIsDunstifyAvailable:
             result = is_dunstify_available()
             assert result is False
             mock_which.assert_called_once_with("dunstify")
+
+
+class TestNotifyProcessingSkipped:
+    """Group 5: notify_processing_skipped carries the caller's reason verbatim."""
+
+    def test_argv_and_body(self):
+        with patch("whisper_dictate.notifications.send_notification") as mock_send:
+            mock_send.return_value = True
+
+            result = notify_processing_skipped("No transcript to process.")
+
+            assert result is True
+            mock_send.assert_called_once_with(
+                summary="Post-processing",
+                body="No transcript to process.",
+                urgency="normal",
+                timeout=5000,
+            )
+
+    def test_recording_reason_body(self):
+        with patch("whisper_dictate.notifications.send_notification") as mock_send:
+            mock_send.return_value = True
+
+            notify_processing_skipped("Stop recording first.")
+
+            assert mock_send.call_args.kwargs["body"] == "Stop recording first."
+
+    def test_returns_false_when_dunstify_missing(self):
+        """Best-effort: a missing dunstify returns False and never raises."""
+        with patch("whisper_dictate.notifications.send_notification") as mock_send:
+            mock_send.return_value = False
+
+            assert notify_processing_skipped("No transcript to process.") is False
+
+    def test_never_raises_when_subprocess_fails(self):
+        """A subprocess failure propagates as False, not an exception."""
+        with patch("subprocess.run", side_effect=FileNotFoundError()):
+            assert notify_processing_skipped("No transcript to process.") is False
+
+
+class TestNotifyProcessed:
+    """Group 5: notify_processed previews the result and folds in copy failure."""
+
+    def test_short_preview_untouched(self):
+        with patch("whisper_dictate.notifications.send_notification") as mock_send:
+            mock_send.return_value = True
+
+            result = notify_processed("Short result")
+
+            assert result is True
+            mock_send.assert_called_once_with(
+                summary="Processed",
+                body="Short result",
+                urgency="normal",
+                timeout=5000,
+            )
+
+    def test_empty_preview(self):
+        with patch("whisper_dictate.notifications.send_notification") as mock_send:
+            mock_send.return_value = True
+
+            notify_processed("")
+
+            assert mock_send.call_args.kwargs["body"] == ""
+
+    def test_long_preview_truncated_at_limit_with_ellipsis(self):
+        with patch("whisper_dictate.notifications.send_notification") as mock_send:
+            mock_send.return_value = True
+
+            long_text = "x" * (PROCESSED_PREVIEW_LIMIT + 50)
+            notify_processed(long_text)
+
+            body = mock_send.call_args.kwargs["body"]
+            assert body == "x" * PROCESSED_PREVIEW_LIMIT + "…"
+            assert len(body) == PROCESSED_PREVIEW_LIMIT + 1
+
+    def test_preview_exactly_at_limit_not_truncated(self):
+        with patch("whisper_dictate.notifications.send_notification") as mock_send:
+            mock_send.return_value = True
+
+            exact = "y" * PROCESSED_PREVIEW_LIMIT
+            notify_processed(exact)
+
+            assert mock_send.call_args.kwargs["body"] == exact
+
+    def test_clipboard_failure_appends_exact_line_after_blank_line(self):
+        with patch("whisper_dictate.notifications.send_notification") as mock_send:
+            mock_send.return_value = True
+
+            notify_processed("Clean output", clipboard_copied=False)
+
+            body = mock_send.call_args.kwargs["body"]
+            assert body == f"Clean output\n\n{CLIPBOARD_FAILURE_LINE}"
+            assert body.endswith("⚠️ Clipboard copy failed. Result saved to history.")
+
+    def test_clipboard_failure_line_survives_preview_truncation(self):
+        """Only the preview is truncated; the fixed failure line is intact."""
+        with patch("whisper_dictate.notifications.send_notification") as mock_send:
+            mock_send.return_value = True
+
+            notify_processed("z" * (PROCESSED_PREVIEW_LIMIT + 100), clipboard_copied=False)
+
+            body = mock_send.call_args.kwargs["body"]
+            assert body.startswith("z" * PROCESSED_PREVIEW_LIMIT + "…")
+            assert body.endswith(CLIPBOARD_FAILURE_LINE)
+
+    def test_clipboard_copied_default_is_single_toast_without_failure_line(self):
+        with patch("whisper_dictate.notifications.send_notification") as mock_send:
+            mock_send.return_value = True
+
+            notify_processed("Clean output")
+
+            body = mock_send.call_args.kwargs["body"]
+            assert CLIPBOARD_FAILURE_LINE not in body
+
+    def test_returns_false_when_dunstify_missing(self):
+        with patch("whisper_dictate.notifications.send_notification") as mock_send:
+            mock_send.return_value = False
+
+            assert notify_processed("Clean output") is False
+
+    def test_never_raises_when_subprocess_fails(self):
+        with patch("subprocess.run", side_effect=FileNotFoundError()):
+            assert notify_processed("Clean output") is False

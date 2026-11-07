@@ -21,7 +21,13 @@ from whisper_dictate.config import DatabaseConfig
 logger = logging.getLogger(__name__)
 
 # Current schema version
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
+
+# The exact ASCII whitespace set shared with Python's ``str.strip`` default for
+# ASCII (space, \t, \n, \r, \f, \v). SQLite's plain ``TRIM(text)`` strips only
+# spaces, so a tab/newline-only row would be treated as processable; this
+# explicit set keeps the SQL predicate and the Python guard in agreement.
+_SQLITE_TRIM_WHITESPACE = "' ' || char(9) || char(10) || char(13) || char(12) || char(11)"
 
 
 class CursorResult:
@@ -444,6 +450,10 @@ class Database:
                     timestamp TEXT NOT NULL DEFAULT (datetime('now')),
                     created_at TEXT NOT NULL DEFAULT (datetime('now')),
                     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    processed_text TEXT,
+                    processed_prompt TEXT,
+                    processed_model TEXT,
+                    processed_at TEXT,
                     FOREIGN KEY (recording_id) REFERENCES recordings(id) ON DELETE CASCADE
                 )
             """)
@@ -515,6 +525,24 @@ class Database:
                     # Now update existing rows to have proper timestamp
                     conn.execute("UPDATE transcripts SET updated_at = datetime('now') WHERE updated_at = ''")
                     logger.info("Added updated_at column to transcripts table")
+
+        elif version == 3:
+            # Migration 3: Add nullable processed-output columns to transcripts.
+            # Guarded per column so partial or repeated runs are safe, and
+            # additive-only so a code revert leaves columns older code ignores.
+            processed_columns = (
+                "processed_text",
+                "processed_prompt",
+                "processed_model",
+                "processed_at",
+            )
+            with self.connection() as conn:
+                cursor = conn.execute("PRAGMA table_info(transcripts)")
+                column_names = {col[1] for col in cursor.fetchall()}
+                for column in processed_columns:
+                    if column not in column_names:
+                        conn.execute(f"ALTER TABLE transcripts ADD COLUMN {column} TEXT")
+                        logger.info(f"Added {column} column to transcripts table")
 
         logger.info(f"Migration version {version} completed")
 
@@ -679,6 +707,10 @@ class Database:
                     "timestamp",
                     "created_at",
                     "updated_at",
+                    "processed_text",
+                    "processed_prompt",
+                    "processed_model",
+                    "processed_at",
                 ],
             )
         return None
@@ -706,6 +738,10 @@ class Database:
                     "timestamp",
                     "created_at",
                     "updated_at",
+                    "processed_text",
+                    "processed_prompt",
+                    "processed_model",
+                    "processed_at",
                 ],
             )
         return None
@@ -745,6 +781,10 @@ class Database:
                     "timestamp",
                     "created_at",
                     "updated_at",
+                    "processed_text",
+                    "processed_prompt",
+                    "processed_model",
+                    "processed_at",
                     "file_path",
                     "recording_timestamp",
                     "duration",
@@ -800,6 +840,10 @@ class Database:
                     "timestamp",
                     "created_at",
                     "updated_at",
+                    "processed_text",
+                    "processed_prompt",
+                    "processed_model",
+                    "processed_at",
                     "file_path",
                     "recording_timestamp",
                     "duration",
@@ -839,6 +883,10 @@ class Database:
                     "timestamp",
                     "created_at",
                     "updated_at",
+                    "processed_text",
+                    "processed_prompt",
+                    "processed_model",
+                    "processed_at",
                     "file_path",
                     "recording_timestamp",
                     "duration",
@@ -880,6 +928,93 @@ class Database:
             params = (text, transcript_id)
 
         result = self.execute(query, params)
+        return result.rowcount > 0
+
+    def get_latest_processable_transcript(self) -> dict[str, Any] | None:
+        """Return the newest transcript whose trimmed text is non-empty.
+
+        WHY the explicit whitespace set: SQLite's plain ``TRIM(text)`` strips
+        only spaces, so a tab/newline-only row (e.g. from silence detection)
+        would be selected and sent to the provider as empty content. The
+        six-character set (space, ``\\t``, ``\\n``, ``\\r``, ``\\f``, ``\\v``)
+        matches Python's ASCII whitespace; the CLI-side guard uses the same
+        literal set (``.strip(" \\t\\n\\r\\f\\v")``) so both layers agree.
+
+        Ordering is ``timestamp DESC, id DESC``: SQLite timestamps have second
+        precision and multiple transcripts can share a second, so id makes the
+        selection deterministic and matches insertion order.
+
+        Returns:
+            Optional[dict]: The newest processable transcript, or None when the
+            table is empty or every row's text is whitespace-only.
+        """
+        row = self.fetchone(
+            f"""
+            SELECT * FROM transcripts
+            WHERE TRIM(text, {_SQLITE_TRIM_WHITESPACE}) <> ''
+            ORDER BY timestamp DESC, id DESC
+            LIMIT 1
+            """
+        )
+        if row:
+            return self._row_to_dict(
+                row,
+                [
+                    "id",
+                    "recording_id",
+                    "text",
+                    "language",
+                    "model_used",
+                    "confidence",
+                    "timestamp",
+                    "created_at",
+                    "updated_at",
+                    "processed_text",
+                    "processed_prompt",
+                    "processed_model",
+                    "processed_at",
+                ],
+            )
+        return None
+
+    def set_processed_transcript(
+        self,
+        transcript_id: int,
+        processed_text: str,
+        prompt: str,
+        model: str,
+    ) -> bool:
+        """Store a processing result on a transcript in one atomic UPDATE.
+
+        WHY a single UPDATE: the four processed columns are one logical result;
+        a partial write would leave a row with, say, new text but a stale
+        prompt. ``processed_at`` is stamped from ``datetime('now')`` (UTC) so it
+        is directly comparable with ``updated_at`` for the staleness signal.
+
+        The raw ``text`` and ``updated_at`` are deliberately left untouched:
+        the transcript is immutable and ``updated_at`` tracks edits to it, not
+        processing. Stale processed values are kept, never cleared — the UI
+        derives staleness from ``updated_at > processed_at``.
+
+        Args:
+            transcript_id: ID of the transcript to update.
+            processed_text: The processed output (already trimmed by the caller).
+            prompt: The exact prompt used.
+            model: The stripped effective model (the caller strips it; this
+                method never re-derives or defaults it).
+
+        Returns:
+            bool: True if a row was updated, False for an unknown id.
+        """
+        result = self.execute(
+            """
+            UPDATE transcripts
+            SET processed_text = ?, processed_prompt = ?, processed_model = ?,
+                processed_at = datetime('now')
+            WHERE id = ?
+            """,
+            (processed_text, prompt, model, transcript_id),
+        )
         return result.rowcount > 0
 
     def update_recording_file_path(self, recording_id: int, file_path: str) -> bool:

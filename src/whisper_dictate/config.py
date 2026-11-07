@@ -1,11 +1,14 @@
 """Configuration management for whisper-dictate."""
 
+import logging
 import os
 from enum import StrEnum
 from pathlib import Path
 from typing import TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+logger = logging.getLogger(__name__)
 
 
 class WhisperProvider(StrEnum):
@@ -348,6 +351,96 @@ class WhisperConfig(BaseModel):
 OpenAIConfig = WhisperConfig
 
 
+class PostProcessConfig(BaseModel):
+    """WHY THIS EXISTS: Prompt-driven post-processing talks to an
+    OpenAI-compatible chat-completions endpoint, which is a different
+    request/response contract (and often a different model) than audio
+    transcription. Keeping the chat block in its own model makes the
+    isolation from ``WHISPER_*`` explicit and enforced by construction.
+
+    RESPONSIBILITY: Store chat-processing settings.
+    BOUNDARIES:
+    - DOES: Hold provider, model, base URL, key, timeout and preset prompt
+    - DOES NOT: Resolve provider facts, validate, or construct clients
+
+    RELATIONSHIPS:
+    - USED BY: validate_post_process_config() and create_post_processor()
+    """
+
+    provider: str = Field(
+        default="openai",
+        description="Chat provider: openai, groq, together, deepinfra, openrouter, local, custom",
+    )
+    model: str = Field(
+        default="",
+        description="Chat model name (required; no default and never derived from "
+        "WHISPER_MODEL or the provider's transcription default_model).",
+    )
+    base_url: str | None = Field(
+        default=None,
+        description="Custom chat API base URL. Overrides the provider default.",
+    )
+    api_key: str = Field(
+        default="",
+        description="Chat API key. If empty, resolved from the provider's default env var.",
+    )
+    timeout: float = Field(
+        default=60.0,
+        description="Chat request timeout in seconds, passed to the OpenAI client.",
+    )
+    prompt: str = Field(
+        default="",
+        description="Preset prompt used to prefill the interactive launcher and as a "
+        "headless fallback when no launcher is available.",
+    )
+
+
+def _load_post_process_config_from_env() -> PostProcessConfig:
+    """Load PostProcessConfig from POST_PROCESS_* environment variables.
+
+    Reads ONLY the ``POST_PROCESS_*`` variables — never ``WHISPER_MODEL`` or any
+    other ``WHISPER_*`` value — so chat processing can never inherit a
+    transcription model or key.
+
+    Env vars supported:
+    - POST_PROCESS_PROVIDER: Chat provider. Default: "openai"
+    - POST_PROCESS_MODEL: Chat model (required at validation time). Default: ""
+    - POST_PROCESS_BASE_URL: Custom base URL. Default: None (provider default)
+    - POST_PROCESS_API_KEY: Explicit key. Default: "" (provider env var fallback)
+    - POST_PROCESS_TIMEOUT: Request timeout in seconds. Default: 60.0
+    - POST_PROCESS_PROMPT: Preset prompt. Default: ""
+
+    The timeout is parsed defensively: because this loader runs during
+    ``AppConfig`` construction, a non-numeric, zero, or negative value must not
+    make unrelated commands (``info``, ``history list``) fail at startup. Such
+    values fall back to 60.0 with a warning naming the variable.
+
+    Returns:
+        PostProcessConfig: Configuration loaded from environment variables.
+    """
+    raw_timeout = os.getenv("POST_PROCESS_TIMEOUT")
+    timeout = 60.0
+    if raw_timeout is not None and raw_timeout != "":
+        try:
+            parsed = float(raw_timeout)
+        except ValueError:
+            logger.warning("Invalid POST_PROCESS_TIMEOUT value (non-numeric); falling back to 60.0 seconds")
+        else:
+            if parsed > 0:
+                timeout = parsed
+            else:
+                logger.warning("Invalid POST_PROCESS_TIMEOUT value (must be positive); falling back to 60.0 seconds")
+
+    return PostProcessConfig(
+        provider=os.getenv("POST_PROCESS_PROVIDER", "openai"),
+        model=os.getenv("POST_PROCESS_MODEL") or "",
+        base_url=os.getenv("POST_PROCESS_BASE_URL") or None,
+        api_key=os.getenv("POST_PROCESS_API_KEY", ""),
+        timeout=timeout,
+        prompt=os.getenv("POST_PROCESS_PROMPT") or "",
+    )
+
+
 def _load_whisper_config_from_env() -> WhisperConfig:
     """Load WhisperConfig from WHISPER_* environment variables.
 
@@ -393,6 +486,7 @@ class AppConfig(BaseModel):
     database: DatabaseConfig = Field(default_factory=lambda: DatabaseConfig())
     audio: AudioConfig = Field(default_factory=AudioConfig)
     openai: OpenAIConfig = Field(default_factory=_load_whisper_config_from_env)
+    post_process: PostProcessConfig = Field(default_factory=_load_post_process_config_from_env)
     copy_to_clipboard: bool = Field(default=True, description="Copy transcription to clipboard")
 
     @property
@@ -521,6 +615,70 @@ def validate_api_key(config: AppConfig) -> None:
         raise ValueError(
             "API key not found. Set the appropriate environment variable "
             "(OPENAI_API_KEY, GROQ_API_KEY, etc.) or configure api_key explicitly."
+        )
+
+
+def validate_post_process_config(config: PostProcessConfig) -> None:
+    """WHY THIS EXISTS: Chat-processing settings must be validated lazily — only
+    when the ``process`` command runs — so a missing ``POST_PROCESS_MODEL`` never
+    breaks unrelated commands (``info``, ``history list``) that build AppConfig.
+
+    RESPONSIBILITY: Enforce the fixed validation order for chat configuration.
+    BOUNDARIES:
+    - DOES: Check the model, resolve the provider, resolve the base URL, and
+      resolve the API key, reporting only the FIRST failure
+    - DOES NOT: Mutate config, construct clients, contact any API, call
+      ``_resolve_model()``, or read ``PROVIDER_DEFAULTS[...]["default_model"]``
+
+    The order is pinned so an error always names the earliest missing setting:
+    1. non-empty stripped model
+    2. provider resolution through ``_resolve_provider_enum()`` (unknown → custom)
+    3. effective base URL from ``config.base_url`` or the provider default;
+       ``custom`` requires a non-empty result
+    4. effective API key from ``config.api_key`` or the provider key env var;
+       ``local``/``custom`` are keyless, auth providers require a key
+
+    The provider table is reused for base URL and key env var — provider facts
+    shared with transcription — but its ``default_model`` is deliberately never
+    consulted: those entries are transcription ids (``whisper-1``, ...) and
+    substituting one would send an audio model to a chat endpoint.
+
+    Args:
+        config: Chat-processing configuration to validate.
+
+    Raises:
+        ValueError: On the first missing/invalid setting, naming the variable.
+    """
+    # 1. Model: required, no default, no transcription fallback.
+    if not config.model.strip():
+        raise ValueError(
+            "POST_PROCESS_MODEL is required but not set. Set it to a chat model "
+            "your provider supports (for example 'gpt-4o-mini' for OpenAI). "
+            "Note: 'whisper-1' is a transcription model and cannot be used for "
+            "chat processing; WHISPER_MODEL is never reused here."
+        )
+
+    # 2. Provider resolution (unknown values become custom).
+    provider = _resolve_provider_enum(config.provider)
+
+    # 3. Base URL: explicit override wins, else the provider default.
+    defaults = PROVIDER_DEFAULTS[provider]
+    effective_base_url = config.base_url or defaults["base_url"]
+    if provider == WhisperProvider.CUSTOM and not effective_base_url:
+        raise ValueError(
+            "POST_PROCESS_BASE_URL is required for the 'custom' provider. "
+            "Set it to your OpenAI-compatible chat endpoint (e.g. "
+            "https://your-api.example.com/v1)."
+        )
+
+    # 4. API key: explicit wins, else the provider env var. local/custom are keyless.
+    env_var = defaults["env_var"]
+    effective_key = config.api_key
+    if not effective_key and env_var:
+        effective_key = os.getenv(env_var, "")
+    if not effective_key and env_var:
+        raise ValueError(
+            f"Chat API key not found. Set POST_PROCESS_API_KEY or the provider's environment variable ({env_var})."
         )
 
 

@@ -143,7 +143,7 @@ class TestSchemaCreation:
         assert "updated_at" not in columns
 
     def test_transcripts_table_columns(self, real_db):
-        """transcripts has 9 columns including updated_at."""
+        """transcripts has 13 columns including updated_at and processed_*."""
         columns = [row[1] for row in real_db.fetchall("PRAGMA table_info(transcripts)")]
         assert columns == [
             "id",
@@ -155,6 +155,10 @@ class TestSchemaCreation:
             "timestamp",
             "created_at",
             "updated_at",
+            "processed_text",
+            "processed_prompt",
+            "processed_model",
+            "processed_at",
         ]
 
     def test_transcripts_fk_references_recordings(self, real_db):
