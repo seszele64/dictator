@@ -81,6 +81,11 @@ WHISPER_PROVIDER=deepinfra
 WHISPER_API_KEY="your-deepinfra-api-key"
 WHISPER_MODEL=Whisper/whisper-large-v3
 WHISPER_BASE_URL=https://api.deepinfra.com/v1/openai
+
+# Example: OpenRouter
+WHISPER_PROVIDER=openrouter
+WHISPER_API_KEY="your-openrouter-api-key"
+WHISPER_MODEL=microsoft/mai-transcribe-2
 ```
 
 See `.env.example` for all supported providers and configuration options.
@@ -97,8 +102,8 @@ Run the setup script to configure i3:
 Or manually add to your i3 config (`~/.config/i3/config`):
 
 ```bash
-# Bind whisper dictate (using mod+z)
-bindsym $mod+z exec whisper-dictate dictate
+# Bind whisper dictate toggle (using mod+t)
+bindsym $mod+t exec whisper-dictate-toggle
 ```
 
 ### 4. Test the CLI
@@ -447,7 +452,7 @@ All Whisper settings are configurable via environment variables. Switch provider
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `WHISPER_PROVIDER` | Provider: `openai`, `groq`, `together`, `deepinfra`, `local`, `custom` | `openai` |
+| `WHISPER_PROVIDER` | Provider: `openai`, `groq`, `together`, `deepinfra`, `openrouter`, `local`, `custom` | `openai` |
 | `WHISPER_API_KEY` | API key for the selected provider | (required for cloud providers; not needed for `local`/`custom`) |
 | `WHISPER_BASE_URL` | Custom API base URL (for `custom` provider) | Provider default |
 | `WHISPER_MODEL` | Model name to use | `whisper-1` |
@@ -464,6 +469,7 @@ All Whisper settings are configurable via environment variables. Switch provider
 | Groq | `groq` | `whisper-1` (set `WHISPER_MODEL` to a model your provider supports, e.g. `whisper-large-v3-turbo`) | Fast inference; requires `GROQ_API_KEY` |
 | Together AI | `together` | `whisper-1` (set `WHISPER_MODEL` to a model your provider supports, e.g. `whisper-large-v3`) | Requires `TOGETHER_API_KEY` |
 | DeepInfra | `deepinfra` | `whisper-1` (set `WHISPER_MODEL` to a model your provider supports, e.g. `Whisper/whisper-large-v3`) | Requires `DEEPINFRA_API_KEY` |
+| OpenRouter | `openrouter` | `openai/whisper-1` (you must set `WHISPER_MODEL` to a model your provider supports, e.g. `microsoft/mai-transcribe-2` for transcription-only STT) | Aggregator of OpenAI-compatible models; requires `OPENROUTER_API_KEY` (default base URL `https://openrouter.ai/api/v1`) |
 | Local server | `local` | `whisper-1` (set `WHISPER_MODEL` to a model your server supports) | No API key required; set `WHISPER_BASE_URL` (default `http://localhost:8000/v1`) |
 | Custom endpoint | `custom` | `whisper-1` (set `WHISPER_MODEL` to a model your server supports) | No API key required unless your endpoint needs auth; set `WHISPER_BASE_URL` |
 | whisper.cpp | `local` or `custom` | `whisper-1` (`whisper-large-v3` recommended) | Keyless; set `WHISPER_BASE_URL` to your server |
@@ -476,6 +482,7 @@ If `WHISPER_API_KEY` is not set, the system falls back to provider-specific env 
 - `GROQ_API_KEY` (for `groq`)
 - `TOGETHER_API_KEY` (for `together`)
 - `DEEPINFRA_API_KEY` (for `deepinfra`)
+- `OPENROUTER_API_KEY` (for `openrouter`)
 
 #### Other Configuration
 

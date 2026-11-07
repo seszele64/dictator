@@ -24,7 +24,7 @@ The system **SHALL** resolve the API key from the provider's declared environmen
 ---
 
 ### Requirement: Keyless local and custom providers load without an API key
-The system **SHALL** accept configurations for providers that do not require authentication (`local`, `custom`) even when no API key is present, and **MUST** raise a configuration error for authentication-requiring providers (`openai`, `groq`, `together`, `deepinfra`) only when no key is available.
+The system **SHALL** accept configurations for providers that do not require authentication (`local`, `custom`) even when no API key is present, and **MUST** raise a configuration error for authentication-requiring providers (`openai`, `groq`, `together`, `deepinfra`, `openrouter`) only when no key is available.
 
 #### Scenario: Local provider runs without any API key
 - Given: `WHISPER_PROVIDER=local` and no API key is set in the environment
@@ -57,6 +57,6 @@ The system **SHALL** treat an unrecognized provider string as the `custom` provi
 The system **SHALL** include automated regression tests that exercise `load_config()` for every provider with and without API keys, including keyless `local`/`custom` and invalid provider strings.
 
 #### Scenario: Parameterized load_config tests run
-- Given: a test suite covering `openai`, `groq`, `together`, `deepinfra`, `local`, `custom`, and an invalid provider string with controlled environment variables
+- Given: a test suite covering `openai`, `groq`, `together`, `deepinfra`, `openrouter`, `local`, `custom`, and an invalid provider string with controlled environment variables
 - When: the test suite is executed
 - Then: keyless local/custom and invalid-provider cases pass without exceptions, and key-requiring providers without keys still raise `ValueError`

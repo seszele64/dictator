@@ -5,7 +5,7 @@ With database integration for persistence and state management.
 WHY THIS EXISTS: the toggle owns the background-recording lifecycle that no
 other entry point has - spawning and killing the ``arecord`` subprocess, the
 legacy PID/state dotfiles, and the start/stop state machine behind one
-Super+Z keypress. The transcription half is delegated: ``transcribe_audio``
+Super+T keypress. The transcription half is delegated: ``transcribe_audio``
 hands the recorded file to ``DictationService.transcribe_existing()``
 (claim-first save, duration update, transcript rows, clipboard copy) instead
 of duplicating that stack; the toggle's own raw SQL and its second

@@ -9,7 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class WhisperProvider(StrEnum):
     """WHY THIS EXISTS: Users need to select from known Whisper API providers
-    (OpenAI, Groq, Together AI, local servers) with sensible defaults.
+    (OpenAI, Groq, Together AI, OpenRouter, local servers) with sensible
+    defaults.
 
     RESPONSIBILITY: Enumerate known Whisper provider types.
     BOUNDARIES:
@@ -21,6 +22,7 @@ class WhisperProvider(StrEnum):
     GROQ = "groq"
     TOGETHER = "together"
     DEEPINFRA = "deepinfra"
+    OPENROUTER = "openrouter"
     LOCAL = "local"
     CUSTOM = "custom"
 
@@ -42,6 +44,10 @@ PROVIDER_DEFAULTS: dict[WhisperProvider, dict[str, str | None]] = {
     WhisperProvider.DEEPINFRA: {
         "base_url": "https://api.deepinfra.com/v1/openai",
         "env_var": "DEEPINFRA_API_KEY",
+    },
+    WhisperProvider.OPENROUTER: {
+        "base_url": "https://openrouter.ai/api/v1",
+        "env_var": "OPENROUTER_API_KEY",
     },
     WhisperProvider.LOCAL: {
         "base_url": "http://localhost:8000/v1",
@@ -233,7 +239,8 @@ class AudioConfig(BaseModel):
 
 class WhisperConfig(BaseModel):
     """WHY THIS EXISTS: Whisper API configuration needs to support any
-    OpenAI-compatible provider (OpenAI, Groq, Together AI, local servers).
+    OpenAI-compatible provider (OpenAI, Groq, Together AI, DeepInfra,
+    OpenRouter, local servers).
 
     RESPONSIBILITY: Manage Whisper API settings for any provider.
     BOUNDARIES:
@@ -247,7 +254,7 @@ class WhisperConfig(BaseModel):
 
     provider: str = Field(
         default="openai",
-        description="Provider type: openai, groq, together, deepinfra, local, custom",
+        description="Provider type: openai, groq, together, deepinfra, openrouter, local, custom",
     )
     api_key: str = Field(
         default="",
@@ -296,7 +303,7 @@ def _load_whisper_config_from_env() -> WhisperConfig:
     """Load WhisperConfig from WHISPER_* environment variables.
 
     Env vars supported:
-    - WHISPER_PROVIDER: Provider type (openai, groq, together, deepinfra, local, custom). Default: "openai"
+    - WHISPER_PROVIDER: Provider type (openai, groq, together, deepinfra, openrouter, local, custom). Default: "openai"
     - WHISPER_API_KEY: Explicit API key. Default: "" (falls back to provider-specific env var)
     - WHISPER_BASE_URL: Custom API base URL. Default: None (uses provider default)
     - WHISPER_MODEL: Model name. Default: "whisper-1"
@@ -391,8 +398,8 @@ def validate_api_key(config: AppConfig) -> None:
 
     Raises:
         ValueError: If the provider declares an auth env var (openai, groq,
-            together, deepinfra) but no API key is configured. Keyless
-            providers (local, custom) never raise.
+            together, deepinfra, openrouter) but no API key is configured.
+            Keyless providers (local, custom) never raise.
     """
     env_var = _provider_auth_env_var(config.openai.provider)
     api_key = config.openai.api_key
@@ -418,10 +425,10 @@ def load_config(require_api_key: bool = True) -> AppConfig:
     Args:
         require_api_key: When True (default), raise ValueError if the
             configured provider declares an auth env var (openai, groq,
-            together, deepinfra) but no key is available. Keyless providers
-            (local, custom) never raise. Pass False for non-transcription
-            callers (e.g. database-only CLI commands) that must work without
-            any key configured.
+            together, deepinfra, openrouter) but no key is available.
+            Keyless providers (local, custom) never raise. Pass False for
+            non-transcription callers (e.g. database-only CLI commands) that
+            must work without any key configured.
 
     Returns:
         AppConfig: Validated application configuration

@@ -1,7 +1,7 @@
 """WHY THIS EXISTS: Most Whisper API providers (OpenAI, Groq, Together AI,
-local whisper.cpp servers) expose an OpenAI-compatible /v1/audio/transcriptions
-endpoint. This single implementation works with all of them by accepting
-configurable base_url and api_key parameters.
+OpenRouter, local whisper.cpp servers) expose an OpenAI-compatible
+/v1/audio/transcriptions endpoint. This single implementation works with all
+of them by accepting configurable base_url and api_key parameters.
 
 RESPONSIBILITY: Transcribe audio files using any OpenAI-compatible Whisper API.
 BOUNDARIES:
@@ -11,7 +11,7 @@ BOUNDARIES:
 RELATIONSHIPS:
 - IMPLEMENTS: TranscriptionProvider ABC from whisper_dictate.transcription
 - USED BY: create_transcriber() factory function
-- SUPPORTS: OpenAI, Groq, Together AI, local whisper.cpp, faster-whisper-server
+- SUPPORTS: OpenAI, Groq, Together AI, OpenRouter, local whisper.cpp, faster-whisper-server
 """
 
 import logging
@@ -31,7 +31,8 @@ logger = logging.getLogger(__name__)
 class OpenAICompatibleProvider(TranscriptionProvider):
     """WHY THIS EXISTS: Users need a single provider implementation that works
     with any OpenAI-compatible Whisper API endpoint, whether cloud-hosted
-    (OpenAI, Groq, Together AI) or local (whisper.cpp, faster-whisper-server).
+    (OpenAI, Groq, Together AI, OpenRouter) or local (whisper.cpp,
+    faster-whisper-server).
 
     RESPONSIBILITY: Transcribe audio files using the OpenAI Python SDK with
     configurable endpoint, authentication, and model parameters.
