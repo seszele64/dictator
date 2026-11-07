@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
 
+from whisper_dictate.config import AppConfig, AudioConfig, WhisperConfig
 from whisper_dictate.dictation import DictationService
 
 
@@ -279,6 +280,51 @@ class TestDictationService:
             # Verify the transcript is linked to the recording via recording_id
             call_args = mock_db.create_transcript.call_args
             assert call_args.kwargs["recording_id"] == 42
+
+    def test_transcript_records_resolved_provider_model(self, mock_transcription_result):
+        """History records the resolved model for an OpenRouter config.
+
+        With WHISPER_PROVIDER=openrouter and no WHISPER_MODEL, the config
+        resolves to the OpenRouter default and that value is what the history
+        writer persists as model_used.
+        """
+        config = AppConfig(
+            audio=AudioConfig(mp3_enabled=False, duration=1.0),
+            openai=WhisperConfig(provider="openrouter", api_key="test-key"),
+            copy_to_clipboard=True,
+        )
+        assert config.openai.model == "microsoft/mai-transcribe-2"
+
+        mock_db = MagicMock()
+        mock_db.path = Path("/tmp/test.db")
+        mock_db.initialize = Mock()
+        mock_db.create_recording = Mock(return_value=42)
+        mock_db.create_transcript = Mock(return_value=1)
+        mock_db.execute = Mock()
+        mock_db.create_log = Mock(return_value=1)
+        mock_db.connection = Mock()
+        mock_db.close = Mock()
+
+        mock_audio_storage = MagicMock()
+        mock_audio_storage.save_audio.return_value = (Path("/saved/test.wav"), "test.wav")
+        mock_audio_storage.recordings_path = Path("/recordings")
+        mock_audio_storage.check_disk_space.return_value = (True, 500)
+
+        with (
+            patch("whisper_dictate.dictation.Database", return_value=mock_db),
+            patch("whisper_dictate.dictation.AudioStorage", return_value=mock_audio_storage),
+            DictationService(config) as service,
+            patch.object(service.audio_recorder, "record_to_file") as mock_record,
+            patch.object(service.transcriber, "transcribe_audio") as mock_transcribe,
+            patch.object(service.clipboard, "copy_to_clipboard") as mock_copy,
+        ):
+            mock_record.return_value = Path("/tmp/test.wav")
+            mock_transcribe.return_value = mock_transcription_result
+            mock_copy.return_value = True
+
+            service.dictate()
+
+            assert mock_db.create_transcript.call_args.kwargs["model_used"] == "microsoft/mai-transcribe-2"
 
     def test_context_exit_closes_created_database(self, mock_config):
         """S2: leaving the service context closes the lazily created Database.

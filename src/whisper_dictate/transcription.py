@@ -108,24 +108,27 @@ def create_transcriber(config: "WhisperConfig") -> TranscriptionProvider:
     Returns:
         TranscriptionProvider: Configured provider instance.
     """
-    from whisper_dictate.config import PROVIDER_DEFAULTS, WhisperProvider
+    from whisper_dictate.config import (
+        PROVIDER_DEFAULTS,
+        WhisperProvider,
+        _resolve_provider_enum,
+        resolve_model,
+    )
     from whisper_dictate.providers.openai_compatible import OpenAICompatibleProvider
 
-    # Resolve provider enum
-    try:
-        provider_enum = WhisperProvider(config.provider)
-    except ValueError:
-        provider_enum = WhisperProvider.CUSTOM
+    # Resolve provider enum (unknown providers fall back to CUSTOM, matching
+    # resolve_model()/validate_model() via the shared helper).
+    provider_enum = _resolve_provider_enum(config.provider)
 
-    defaults = PROVIDER_DEFAULTS.get(provider_enum, {})
+    defaults = PROVIDER_DEFAULTS[provider_enum]
 
     # Resolve base_url: explicit config > provider default
-    base_url = config.base_url or defaults.get("base_url")
+    base_url = config.base_url or defaults["base_url"]
 
     # Resolve api_key: explicit config > provider env var > empty
     api_key = config.api_key
     if not api_key:
-        env_var = defaults.get("env_var")
+        env_var = defaults["env_var"]
         if env_var:
             api_key = os.getenv(env_var, "")
 
@@ -135,7 +138,7 @@ def create_transcriber(config: "WhisperConfig") -> TranscriptionProvider:
 
     return OpenAICompatibleProvider(
         api_key=api_key,
-        model=config.model,
+        model=resolve_model(config.provider, config.model),
         base_url=base_url,
         timeout=config.timeout,
         language=config.language,

@@ -237,3 +237,22 @@ class TestCreateTranscriber:
         assert provider._task == "translate"
         assert provider._client.timeout == 15.0
         assert str(provider._client.base_url).startswith("https://custom.example.com/v1")
+
+    def test_create_transcriber_resolves_bypassed_empty_model(self):
+        """A model_construct() config with an empty model is resolved at the factory.
+
+        Pydantic skips validators in model_construct(), so config.model stays
+        "" — the factory must still hand the provider the provider default.
+        """
+        config = WhisperConfig.model_construct(provider="openrouter", model="", api_key="test-key")
+        provider = create_transcriber(config)
+        assert provider.model == "microsoft/mai-transcribe-2"
+        # The factory does not mutate config.model (documented limitation).
+        assert config.model == ""
+
+    def test_create_transcriber_passes_through_resolved_model(self):
+        """An already-resolved config passes through unchanged (idempotent)."""
+        config = WhisperConfig(provider="openrouter", api_key="test-key")
+        assert config.model == "microsoft/mai-transcribe-2"
+        provider = create_transcriber(config)
+        assert provider.model == "microsoft/mai-transcribe-2"

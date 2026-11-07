@@ -18,6 +18,8 @@ from whisper_dictate.config import (
     WhisperProvider,
     _load_whisper_config_from_env,
     load_config,
+    resolve_model,
+    validate_model,
 )
 
 
@@ -51,12 +53,17 @@ class TestWhisperProvider:
         """PROVIDER_DEFAULTS has exactly the 7 providers as keys."""
         assert set(PROVIDER_DEFAULTS) == set(WhisperProvider)
         assert len(PROVIDER_DEFAULTS) == 7
+        for defaults in PROVIDER_DEFAULTS.values():
+            assert set(defaults) == {"base_url", "env_var", "default_model"}
 
     def test_provider_defaults_structure(self):
-        """Each provider default has base_url and env_var keys."""
+        """Each provider default has base_url, env_var and a non-empty model."""
         for defaults in PROVIDER_DEFAULTS.values():
             assert "base_url" in defaults
             assert "env_var" in defaults
+            assert "default_model" in defaults
+            assert isinstance(defaults["default_model"], str)
+            assert defaults["default_model"].strip() != ""
 
     def test_openai_defaults(self):
         """OpenAI uses the SDK default base_url and OPENAI_API_KEY."""
@@ -81,6 +88,7 @@ class TestWhisperProvider:
         defaults = PROVIDER_DEFAULTS[WhisperProvider.OPENROUTER]
         assert defaults["base_url"] == "https://openrouter.ai/api/v1"
         assert defaults["env_var"] == "OPENROUTER_API_KEY"
+        assert defaults["default_model"] == "microsoft/mai-transcribe-2"
 
     def test_custom_defaults(self):
         """Custom providers require explicit configuration."""
@@ -405,6 +413,208 @@ class TestLoadConfig:
         monkeypatch.setenv("WHISPER_API_KEY", "whisper-key")
         monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
         load_config()  # should not raise
+
+
+class TestResolveModel:
+    """Tests for the provider-aware resolve_model() helper."""
+
+    @pytest.mark.parametrize("provider", [p.value for p in WhisperProvider])
+    def test_provider_default_when_unset(self, provider):
+        """An empty explicit model resolves to the provider's default."""
+        assert resolve_model(provider, "") == PROVIDER_DEFAULTS[WhisperProvider(provider)]["default_model"]
+
+    def test_unknown_provider_uses_custom_default(self):
+        """Unknown provider strings resolve to the CUSTOM default."""
+        assert resolve_model("unknown", "") == PROVIDER_DEFAULTS[WhisperProvider.CUSTOM]["default_model"]
+
+    def test_explicit_model_wins(self):
+        """A non-empty explicit model overrides the provider default."""
+        assert resolve_model("openrouter", "openai/whisper-1") == "openai/whisper-1"
+
+    def test_explicit_model_is_trimmed(self):
+        """Leading/trailing whitespace is stripped from the explicit model."""
+        assert resolve_model("openai", "  whisper-large-v3  ") == "whisper-large-v3"
+
+    @pytest.mark.parametrize("blank", ["", "   ", "\t", "\n"])
+    def test_blank_falls_back_to_default(self, blank):
+        """Empty and whitespace-only values are treated as 'not configured'."""
+        assert resolve_model("openrouter", blank) == "microsoft/mai-transcribe-2"
+
+    def test_enum_member_is_valid_str_argument(self):
+        """WhisperProvider members (StrEnum) are accepted as plain str."""
+        assert resolve_model(WhisperProvider.GROQ, "") == "whisper-large-v3"
+
+
+class TestValidateModel:
+    """Tests for validate_model()."""
+
+    @pytest.mark.parametrize("provider", [p.value for p in WhisperProvider])
+    def test_empty_model_rejected_for_every_provider(self, provider):
+        """An empty effective model raises for any provider."""
+        with pytest.raises(ValueError, match="No transcription model configured"):
+            validate_model(provider, "")
+
+    def test_empty_model_message_is_actionable(self):
+        """The empty-model error names the provider and the remediation."""
+        with pytest.raises(ValueError) as excinfo:
+            validate_model("groq", "")
+        message = str(excinfo.value)
+        assert "groq" in message
+        assert "WHISPER_MODEL" in message
+        assert "provider default" in message
+
+    @pytest.mark.parametrize("blank", ["   ", "\t", "\n", "  \t\n "])
+    def test_whitespace_only_model_rejected(self, blank):
+        """A whitespace-only model is rejected just like an empty one."""
+        with pytest.raises(ValueError, match="No transcription model configured"):
+            validate_model("groq", blank)
+
+    def test_openrouter_unnamespaced_rejected(self):
+        """OpenRouter models without a '/' namespace raise with examples."""
+        with pytest.raises(ValueError) as excinfo:
+            validate_model("openrouter", "whisper-1")
+        message = str(excinfo.value)
+        assert "whisper-1" in message
+        assert "microsoft/mai-transcribe-2" in message
+        assert "openai/whisper-1" in message
+
+    def test_openrouter_namespaced_accepted(self):
+        """A namespaced OpenRouter model passes validation."""
+        validate_model("openrouter", "microsoft/mai-transcribe-2")
+        validate_model("openrouter", "openai/whisper-1")
+
+    @pytest.mark.parametrize("provider", ["groq", "together", "deepinfra", "local", "custom"])
+    def test_non_openrouter_not_namespace_validated(self, provider):
+        """Providers other than OpenRouter accept un-namespaced models."""
+        validate_model(provider, "whisper-large-v3")
+        validate_model(provider, "base.en")
+
+
+class TestWhisperConfigModelResolution:
+    """The WhisperConfig validator resolves and validates the model."""
+
+    def test_default_openai_model_unchanged(self, env_isolator):
+        """OpenAI still resolves to whisper-1 (unchanged behavior)."""
+        assert WhisperConfig().model == "whisper-1"
+
+    def test_direct_openrouter_construction_resolves_default(self, env_isolator):
+        """WhisperConfig(provider='openrouter') resolves without env reads."""
+        assert WhisperConfig(provider="openrouter").model == "microsoft/mai-transcribe-2"
+
+    def test_explicit_model_wins_and_is_trimmed(self, env_isolator):
+        """An explicit model overrides the default and is trimmed."""
+        assert WhisperConfig(provider="openai", model="  whisper-large-v3  ").model == "whisper-large-v3"
+
+    @pytest.mark.parametrize("blank", ["", "   "])
+    def test_blank_model_falls_back(self, env_isolator, blank):
+        """Blank/whitespace models fall back to the provider default."""
+        assert WhisperConfig(provider="openrouter", model=blank).model == "microsoft/mai-transcribe-2"
+
+    def test_openrouter_unnamespaced_raises(self, env_isolator):
+        """An un-namespaced OpenRouter override fails at construction."""
+        with pytest.raises(ValueError) as excinfo:
+            WhisperConfig(provider="openrouter", model="whisper-1")
+        message = str(excinfo.value)
+        assert "whisper-1" in message
+        assert "microsoft/mai-transcribe-2" in message
+
+    def test_groq_unnamespaced_accepted(self, env_isolator):
+        """Groq models without a slash are accepted."""
+        assert WhisperConfig(provider="groq", model="whisper-large-v3").model == "whisper-large-v3"
+
+    def test_custom_unnamespaced_accepted(self, env_isolator):
+        """Custom provider models without a slash are accepted."""
+        assert WhisperConfig(provider="custom", model="base.en").model == "base.en"
+
+    def test_unknown_provider_uses_custom_default(self, env_isolator):
+        """An unknown provider string resolves to the custom default model."""
+        assert WhisperConfig(provider="unknown").model == "whisper-1"
+
+    def test_validator_rejects_empty_effective_model(self, env_isolator, monkeypatch):
+        """The validator path rejects an empty effective model.
+
+        The resolve step normally substitutes a default, so this path is a
+        defense-in-depth guard reached by bypassing the table entry.
+        """
+        monkeypatch.setitem(
+            PROVIDER_DEFAULTS,
+            WhisperProvider.OPENAI,
+            {"base_url": None, "env_var": None, "default_model": ""},
+        )
+        with pytest.raises(ValueError, match="No transcription model configured"):
+            WhisperConfig(provider="openai", model="")
+
+
+class TestModelResolutionThroughEnv:
+    """load_config() resolves per-provider defaults and overrides."""
+
+    @staticmethod
+    def _clear_whisper_env(monkeypatch):
+        for key in list(os.environ):
+            if key.startswith("WHISPER_"):
+                monkeypatch.delenv(key, raising=False)
+
+    @pytest.mark.parametrize(
+        ("provider", "expected"),
+        [
+            ("openai", "whisper-1"),
+            ("groq", "whisper-large-v3"),
+            ("together", "whisper-1"),
+            ("deepinfra", "whisper-1"),
+            ("openrouter", "microsoft/mai-transcribe-2"),
+            ("local", "whisper-1"),
+            ("custom", "whisper-1"),
+            ("unknown", "whisper-1"),
+        ],
+    )
+    def test_per_provider_default(self, monkeypatch, provider, expected):
+        """load_config(require_api_key=False) resolves each provider's default."""
+        self._clear_whisper_env(monkeypatch)
+        monkeypatch.setenv("WHISPER_PROVIDER", provider)
+        config = load_config(require_api_key=False)
+        assert config.openai.model == expected
+
+    def test_explicit_model_wins(self, monkeypatch):
+        """An explicit WHISPER_MODEL overrides the provider default."""
+        self._clear_whisper_env(monkeypatch)
+        monkeypatch.setenv("WHISPER_PROVIDER", "openrouter")
+        monkeypatch.setenv("WHISPER_MODEL", "openai/whisper-1")
+        config = load_config(require_api_key=False)
+        assert config.openai.model == "openai/whisper-1"
+
+    @pytest.mark.parametrize("blank", ["", "   "])
+    def test_blank_model_falls_back(self, monkeypatch, blank):
+        """Empty/whitespace WHISPER_MODEL falls back to the provider default."""
+        self._clear_whisper_env(monkeypatch)
+        monkeypatch.setenv("WHISPER_PROVIDER", "openrouter")
+        monkeypatch.setenv("WHISPER_MODEL", blank)
+        config = load_config(require_api_key=False)
+        assert config.openai.model == "microsoft/mai-transcribe-2"
+
+    def test_absent_model_falls_back(self, monkeypatch):
+        """An absent WHISPER_MODEL falls back to the provider default."""
+        self._clear_whisper_env(monkeypatch)
+        monkeypatch.setenv("WHISPER_PROVIDER", "groq")
+        config = load_config(require_api_key=False)
+        assert config.openai.model == "whisper-large-v3"
+
+    def test_openrouter_unnamespaced_raises(self, monkeypatch):
+        """WHISPER_PROVIDER=openrouter + un-namespaced model fails fast."""
+        self._clear_whisper_env(monkeypatch)
+        monkeypatch.setenv("WHISPER_PROVIDER", "openrouter")
+        monkeypatch.setenv("WHISPER_MODEL", "whisper-1")
+        with pytest.raises(ValueError) as excinfo:
+            load_config(require_api_key=False)
+        message = str(excinfo.value)
+        assert "whisper-1" in message
+        assert "microsoft/mai-transcribe-2" in message
+
+    def test_resolved_model_reaches_appconfig(self, monkeypatch):
+        """The resolved model reaches AppConfig.openai via the factory chain."""
+        self._clear_whisper_env(monkeypatch)
+        monkeypatch.setenv("WHISPER_PROVIDER", "openrouter")
+        app = AppConfig()
+        assert app.openai.model == "microsoft/mai-transcribe-2"
 
 
 class TestDotenvImportPurity:

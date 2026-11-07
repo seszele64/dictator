@@ -3,8 +3,9 @@
 import os
 from enum import StrEnum
 from pathlib import Path
+from typing import TypedDict
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class WhisperProvider(StrEnum):
@@ -27,35 +28,61 @@ class WhisperProvider(StrEnum):
     CUSTOM = "custom"
 
 
-# Maps provider enum to default base_url and environment variable for API key
-PROVIDER_DEFAULTS: dict[WhisperProvider, dict[str, str | None]] = {
+class ProviderDefaults(TypedDict):
+    """Per-provider configuration facts.
+
+    - ``base_url``: default API base URL, or None when the provider has no
+      sensible default (OpenAI uses the SDK default; custom must be set by the
+      user).
+    - ``env_var``: environment variable holding the provider's API key, or None
+      for keyless providers (local, custom).
+    - ``default_model``: transcription model used when ``WHISPER_MODEL`` is
+      unset, empty, or whitespace-only. Always a concrete string.
+    """
+
+    base_url: str | None
+    env_var: str | None
+    default_model: str
+
+
+# Maps provider enum to default base_url, API-key environment variable, and
+# default transcription model. ``default_model`` is the fallback used by
+# resolve_model() whenever no explicit WHISPER_MODEL is configured.
+PROVIDER_DEFAULTS: dict[WhisperProvider, ProviderDefaults] = {
     WhisperProvider.OPENAI: {
         "base_url": None,  # OpenAI SDK default
         "env_var": "OPENAI_API_KEY",
+        "default_model": "whisper-1",
     },
     WhisperProvider.GROQ: {
         "base_url": "https://api.groq.com/openai/v1",
         "env_var": "GROQ_API_KEY",
+        "default_model": "whisper-large-v3",
     },
     WhisperProvider.TOGETHER: {
         "base_url": "https://api.together.xyz/v1",
         "env_var": "TOGETHER_API_KEY",
+        "default_model": "whisper-1",
     },
     WhisperProvider.DEEPINFRA: {
         "base_url": "https://api.deepinfra.com/v1/openai",
         "env_var": "DEEPINFRA_API_KEY",
+        "default_model": "whisper-1",
     },
     WhisperProvider.OPENROUTER: {
         "base_url": "https://openrouter.ai/api/v1",
         "env_var": "OPENROUTER_API_KEY",
+        "default_model": "microsoft/mai-transcribe-2",
     },
     WhisperProvider.LOCAL: {
         "base_url": "http://localhost:8000/v1",
         "env_var": None,  # No auth needed for local servers
+        "default_model": "whisper-1",
     },
     WhisperProvider.CUSTOM: {
         "base_url": None,  # Must be set explicitly by user
         "env_var": None,
+        "default_model": "whisper-1",
     },
 }
 
@@ -265,8 +292,9 @@ class WhisperConfig(BaseModel):
         description="Custom API base URL. Overrides provider default.",
     )
     model: str = Field(
-        default="whisper-1",
-        description="Model name (may differ per provider, e.g. 'whisper-large-v3' for Groq)",
+        default="",
+        description="Model name (may differ per provider, e.g. 'whisper-large-v3' for Groq). "
+        "Empty means 'use the provider default' and is resolved at validation time.",
     )
     timeout: float = Field(
         default=30.0,
@@ -294,6 +322,27 @@ class WhisperConfig(BaseModel):
         "this parameter (e.g., DeepInfra).",
     )
 
+    @model_validator(mode="after")
+    def _resolve_model(self) -> "WhisperConfig":
+        """Resolve the provider-specific model and validate it in place.
+
+        WHY the resolution is stored on the model instead of exposed as a
+        computed property: transcript history records the effective model
+        verbatim (`model_used` / `openai_model` read `config.openai.model`),
+        so the resolved value must persist on the instance rather than be
+        recomputed by each consumer.
+
+        WHY `return self` is required: a `mode="after"` model validator must
+        return the model instance; returning None is a validation error.
+
+        Because this lives on the model, both real entry points — direct
+        `WhisperConfig(...)` construction and `_load_whisper_config_from_env()`
+        — resolve and validate identically.
+        """
+        self.model = resolve_model(self.provider, self.model)
+        validate_model(self.provider, self.model)
+        return self
+
 
 # Backward compatibility: OpenAIConfig is now an alias for WhisperConfig
 OpenAIConfig = WhisperConfig
@@ -306,7 +355,7 @@ def _load_whisper_config_from_env() -> WhisperConfig:
     - WHISPER_PROVIDER: Provider type (openai, groq, together, deepinfra, openrouter, local, custom). Default: "openai"
     - WHISPER_API_KEY: Explicit API key. Default: "" (falls back to provider-specific env var)
     - WHISPER_BASE_URL: Custom API base URL. Default: None (uses provider default)
-    - WHISPER_MODEL: Model name. Default: "whisper-1"
+    - WHISPER_MODEL: Model name. Default: empty → provider default
     - WHISPER_TIMEOUT: Request timeout in seconds. Default: 30.0
     - WHISPER_LANGUAGE: Language hint (ISO 639-1). Default: None (auto-detect)
     - WHISPER_TEMPERATURE: Sampling temperature. Default: 0.0
@@ -322,7 +371,7 @@ def _load_whisper_config_from_env() -> WhisperConfig:
         provider=os.getenv("WHISPER_PROVIDER", "openai"),
         api_key=os.getenv("WHISPER_API_KEY", ""),
         base_url=os.getenv("WHISPER_BASE_URL") or None,
-        model=os.getenv("WHISPER_MODEL", "whisper-1"),
+        model=os.getenv("WHISPER_MODEL") or "",
         timeout=float(os.getenv("WHISPER_TIMEOUT", "30.0")),
         language=os.getenv("WHISPER_LANGUAGE") or None,
         temperature=float(os.getenv("WHISPER_TEMPERATURE", "0.0")),
@@ -373,13 +422,75 @@ def _resolve_provider_enum(provider: str) -> WhisperProvider:
         return WhisperProvider.CUSTOM
 
 
+def resolve_model(provider: str, explicit_model: str) -> str:
+    """Resolve the effective transcription model for a provider.
+
+    A non-empty ``explicit_model`` (leading/trailing whitespace stripped) wins;
+    otherwise the provider's declared ``default_model`` is returned. Unknown
+    provider strings resolve to CUSTOM, so they receive the custom default.
+
+    Both parameters are plain ``str``: ``WhisperProvider`` is a ``StrEnum`` (a
+    ``str`` subclass), so enum members are valid arguments. ``explicit_model``
+    is never ``None`` here — the only ``None`` originates from
+    ``os.getenv("WHISPER_MODEL")`` and is collapsed to ``""`` by ``or ""`` in
+    the env loader, and the field default is ``""``.
+
+    Args:
+        provider: Provider identifier (case-sensitive, unstripped).
+        explicit_model: Configured model, or ``""`` when not configured.
+
+    Returns:
+        str: The effective model identifier.
+
+    Raises:
+        KeyError: If the resolved provider has no ``PROVIDER_DEFAULTS`` entry —
+            a programming error (the table is incomplete), never user input.
+    """
+    provider_enum = _resolve_provider_enum(provider)
+    stripped = explicit_model.strip()
+    if stripped:
+        return stripped
+    return PROVIDER_DEFAULTS[provider_enum]["default_model"]
+
+
+def validate_model(provider: str, model: str) -> None:
+    """Validate an effective model for the selected provider.
+
+    OpenRouter requires namespaced ``vendor/model`` identifiers; every other
+    provider has no stable public grammar and is never namespace-validated.
+    An empty (or whitespace-only) effective model is rejected for any provider
+    as a defense against bypassed defaults.
+
+    Args:
+        provider: Provider identifier (case-sensitive, unstripped).
+        model: The effective model to validate.
+
+    Raises:
+        ValueError: If ``model`` is empty or whitespace-only, or the provider
+            is ``openrouter`` and ``model`` has no ``/`` namespace.
+    """
+    if not model.strip():
+        raise ValueError(
+            f"No transcription model configured for provider '{provider}'. "
+            "Set WHISPER_MODEL to a model your provider supports, or rely on "
+            "the provider default."
+        )
+
+    if _resolve_provider_enum(provider) == WhisperProvider.OPENROUTER and "/" not in model:
+        raise ValueError(
+            f"Invalid OpenRouter model '{model}': OpenRouter requires a namespaced "
+            "'vendor/model' identifier (e.g. 'microsoft/mai-transcribe-2' or "
+            "'openai/whisper-1')."
+        )
+
+
 def _provider_auth_env_var(provider: str) -> str | None:
     """Return the auth env var declared for a provider, if any.
 
     Providers with no declared env var (local, custom) are keyless by design.
     """
-    defaults = PROVIDER_DEFAULTS.get(_resolve_provider_enum(provider), {})
-    return defaults.get("env_var")
+    defaults = PROVIDER_DEFAULTS[_resolve_provider_enum(provider)]
+    return defaults["env_var"]
 
 
 def validate_api_key(config: AppConfig) -> None:
